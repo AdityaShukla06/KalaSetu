@@ -1,0 +1,128 @@
+@import "./variables.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-secondary);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  margin: 0;
+}
+
+h1 {
+  font-size: var(--text-h1-size);
+  line-height: var(--text-h1-line);
+  font-weight: 700;
+}
+
+h2 {
+  font-size: var(--text-h2-size);
+  line-height: var(--text-h2-line);
+  font-weight: 700;
+}
+
+h3 {
+  font-family: var(--font-body);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: 700;
+}
+
+p {
+  margin: 0;
+}
+
+.body-s {
+  font-size: var(--text-body-s-size);
+  line-height: var(--text-body-s-line);
+}
+
+.caption {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: 500;
+  color: var(--color-secondary-soft);
+}
+
+.price {
+  font-size: var(--text-price-size);
+  line-height: var(--text-price-line);
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font-family: var(--font-body);
+}
+
+a {
+  color: inherit;
+}
+
+/* Hindi content gets +2px line-height across the board; never letter-space Devanagari */
+[lang="hi"] {
+  letter-spacing: 0;
+}
+
+[lang="hi"] h1 {
+  line-height: 42px;
+}
+
+[lang="hi"] h2 {
+  line-height: 36px;
+}
+
+[lang="hi"] h3 {
+  line-height: 30px;
+}
+
+[lang="hi"] p,
+[lang="hi"] span,
+[lang="hi"] div {
+  line-height: 30px;
+}
+
+#root {
+  min-height: 100vh;
+  max-width: 390px;
+  margin: 0 auto;
+  background: var(--color-background);
+  position: relative;
+}
+
+.screen {
+  min-height: 100vh;
+  padding: 0 var(--space-5) calc(var(--tab-bar-height) + var(--safe-area-bottom));
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

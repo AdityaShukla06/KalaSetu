@@ -1,0 +1,77 @@
+/* KALASETU — MOBILE DESIGN SYSTEM v1 tokens */
+:root {
+  /* color */
+  --color-primary: #c1502e;
+  --color-primary-pressed: #9c3d20;
+  --color-primary-tint: #f7e4da;
+  --color-secondary: #1e2a44;
+  --color-secondary-soft: #46536f;
+  --color-accent: #e3a032;
+  --color-background: #fbf4ea;
+  --color-surface: #fffdf8;
+  --color-border: #e8dbc8;
+  --color-text-muted: #7a7267;
+  --color-success: #2e7d5b;
+  --color-warning-text: #8a6412;
+  --color-warning-bg: #fff4dc;
+  --color-error: #b3261e;
+  --color-error-bg: #fdecea;
+  --color-disabled-bg: #e9e1d5;
+  --color-disabled-text: #a79e92;
+  --color-camera-overlay: rgba(27, 23, 20, 0.6);
+
+  /* type */
+  --font-heading: "Martel", serif;
+  --font-body: "Mukta", sans-serif;
+
+  --text-h1-size: 32px;
+  --text-h1-line: 40px;
+  --text-h2-size: 26px;
+  --text-h2-line: 34px;
+  --text-h3-size: 20px;
+  --text-h3-line: 28px;
+  --text-body-size: 17px;
+  --text-body-line: 28px;
+  --text-body-s-size: 16px;
+  --text-body-s-line: 26px;
+  --text-button-size: 18px;
+  --text-button-line: 24px;
+  --text-caption-size: 14px;
+  --text-caption-line: 20px;
+  --text-price-size: 28px;
+  --text-price-line: 34px;
+
+  /* Hindi variants add +2px line-height (set via [lang="hi"] overrides in global.css) */
+
+  /* spacing (base 4) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --safe-area-bottom: 24px;
+  --tab-bar-height: 96px;
+
+  /* radius */
+  --radius-button: 16px;
+  --radius-input: 16px;
+  --radius-pill: 999px;
+  --radius-card: 20px;
+  --radius-sheet-top: 28px;
+  --radius-thumb: 16px;
+  --radius-avatar: 999px;
+  --radius-screen: 28px;
+
+  /* elevation */
+  --shadow-card: 0 2px 8px rgba(30, 42, 68, 0.06);
+  --shadow-cta: 0 6px 18px rgba(193, 80, 46, 0.28);
+  --shadow-fab: 0 6px 18px rgba(193, 80, 46, 0.4);
+  --shadow-sheet: 0 -8px 24px rgba(0, 0, 0, 0.18);
+
+  /* touch */
+  --hit-min: 48px;
+  --hit-preferred: 56px;
+}
