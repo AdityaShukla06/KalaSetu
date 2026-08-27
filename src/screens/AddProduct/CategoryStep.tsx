@@ -77,7 +77,7 @@ function OtherIcon() {
   );
 }
 
-const CATEGORIES = [
+export const CATEGORIES = [
   { id: "textiles", labelKey: "category.textiles", Icon: TextileIcon },
   { id: "pottery", labelKey: "category.pottery", Icon: PotteryIcon },
   { id: "jewelry", labelKey: "category.jewelry", Icon: JewelryIcon },

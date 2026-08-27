@@ -8,7 +8,7 @@ import { OtpVerificationScreen } from "./screens/Onboarding/OtpVerificationScree
 import { HomeScreen } from "./screens/Home/HomeScreen";
 import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
 import { VoiceDescribeScreen } from "./screens/AddProduct/VoiceDescribeScreen";
-import { PlaceholderStepScreen } from "./screens/AddProduct/PlaceholderStepScreen";
+import { PricingScreen } from "./screens/AddProduct/PricingScreen";
 import { ProfileScreen } from "./screens/Profile/ProfileScreen";
 
 function AppLayout() {
@@ -44,15 +44,7 @@ function App() {
           <Route element={<RequireAuth />}>
             <Route path="/add-product" element={<AddProductScreen />} />
             <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
-            <Route
-              path="/add-product/price"
-              element={
-                <PlaceholderStepScreen
-                  title="Pricing"
-                  message="This step is not built yet. Your description has been saved to the draft."
-                />
-              }
-            />
+            <Route path="/add-product/price" element={<PricingScreen />} />
 
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomeScreen />} />

@@ -73,6 +73,9 @@ export function suggestPrice(input: {
   imageUrl: string;
 }): Promise<{ suggestedMin: number; suggestedMax: number; reasoning: string }> {
   console.info(`[stub] suggestPrice -> ${input.category}`);
+  if (Math.random() < 0.3) {
+    return delayReject(new Error("Price suggestion failed"));
+  }
   const suggestedMin = Math.round(input.materialCost * 1.4);
   const suggestedMax = Math.round(input.materialCost * 2.1);
   return delay({
@@ -84,6 +87,9 @@ export function suggestPrice(input: {
 
 export function createProduct(product: ProductInput): Promise<{ productId: string }> {
   console.info(`[stub] createProduct -> ${product.titleEn}`);
+  if (Math.random() < 0.3) {
+    return delayReject(new Error("Publish failed"));
+  }
   return delay({ productId: `mock-product-${Date.now()}` });
 }
 
