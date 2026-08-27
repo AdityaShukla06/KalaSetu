@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { CategoryStep } from "./CategoryStep";
@@ -31,6 +31,16 @@ export function VoiceDescribeScreen() {
   const [descriptionEn, setDescriptionEn] = useState(draft.descriptionEn ?? "");
   const [descriptionHi, setDescriptionHi] = useState(draft.descriptionHi ?? "");
   const [fallbackNote, setFallbackNote] = useState(false);
+
+  const hasPhoto = Boolean(draft.imageUrl);
+
+  useEffect(() => {
+    if (!hasPhoto) {
+      navigate("/add-product/photo", { replace: true });
+    }
+  }, [hasPhoto, navigate]);
+
+  if (!hasPhoto) return null;
 
   function handleCategoryContinue(selected: string) {
     setCategory(selected);

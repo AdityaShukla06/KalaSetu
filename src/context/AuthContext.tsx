@@ -3,11 +3,12 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 interface AuthState {
   token: string | null;
   userId: string | null;
+  phoneNumber: string | null;
 }
 
 interface AuthContextValue extends AuthState {
   isAuthenticated: boolean;
-  login: (token: string, userId: string) => void;
+  login: (token: string, userId: string, phoneNumber: string) => void;
   logout: () => void;
 }
 
@@ -15,11 +16,13 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const TOKEN_KEY = "kalasetu.token";
 const USER_ID_KEY = "kalasetu.userId";
+const PHONE_NUMBER_KEY = "kalasetu.phoneNumber";
 
 function getInitialState(): AuthState {
   return {
     token: localStorage.getItem(TOKEN_KEY),
     userId: localStorage.getItem(USER_ID_KEY),
+    phoneNumber: localStorage.getItem(PHONE_NUMBER_KEY),
   };
 }
 
@@ -30,15 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       ...state,
       isAuthenticated: state.token !== null,
-      login: (token, userId) => {
+      login: (token, userId, phoneNumber) => {
         localStorage.setItem(TOKEN_KEY, token);
         localStorage.setItem(USER_ID_KEY, userId);
-        setState({ token, userId });
+        localStorage.setItem(PHONE_NUMBER_KEY, phoneNumber);
+        setState({ token, userId, phoneNumber });
       },
       logout: () => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_ID_KEY);
-        setState({ token: null, userId: null });
+        localStorage.removeItem(PHONE_NUMBER_KEY);
+        setState({ token: null, userId: null, phoneNumber: null });
       },
     }),
     [state],

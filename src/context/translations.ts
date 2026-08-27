@@ -91,6 +91,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "home.detailEdit": "Edit",
     "home.detailDelete": "Delete",
     "home.detailClose": "Close",
+    "profile.title": "Profile",
+    "profile.phoneLabel": "Phone number",
+    "profile.logout": "Log out",
   },
   hi: {
     "app.name": "KalaSetu",
@@ -182,5 +185,8 @@ export const translations: Record<Language, Record<string, string>> = {
     "home.detailEdit": "बदलें",
     "home.detailDelete": "हटाएं",
     "home.detailClose": "बंद करें",
+    "profile.title": "प्रोफ़ाइल",
+    "profile.phoneLabel": "फ़ोन नंबर",
+    "profile.logout": "लॉग आउट करें",
   },
 };

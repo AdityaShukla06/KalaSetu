@@ -50,7 +50,7 @@ export function BottomNav() {
       </NavLink>
 
       <NavLink
-        to="/add-product"
+        to="/add-product/photo"
         className="bottom-nav-center"
         aria-label="Add product"
       >

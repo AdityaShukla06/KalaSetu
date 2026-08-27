@@ -1,0 +1,16 @@
+.error-boundary {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+  padding: var(--space-5);
+  background: var(--color-background);
+}
+
+.error-boundary .btn {
+  width: auto;
+  padding: 0 var(--space-8);
+}

@@ -74,13 +74,18 @@ export function PricingScreen() {
   const [publishError, setPublishError] = useState(false);
   const [published, setPublished] = useState(false);
 
-  const hasRequiredDraft = Boolean(draft.imageUrl && draft.category && draft.descriptionEn);
+  const missingPhoto = !draft.imageUrl;
+  const missingDescription = !missingPhoto && !(draft.category && draft.descriptionEn);
+  const hasRequiredDraft = !missingPhoto && !missingDescription;
 
   useEffect(() => {
-    if (!hasRequiredDraft && !published) {
-      navigate("/add-product", { replace: true });
+    if (published) return;
+    if (missingPhoto) {
+      navigate("/add-product/photo", { replace: true });
+    } else if (missingDescription) {
+      navigate("/add-product/describe", { replace: true });
     }
-  }, [hasRequiredDraft, published, navigate]);
+  }, [missingPhoto, missingDescription, published, navigate]);
 
   async function handleGetSuggestion() {
     const cost = Number(materialCost);

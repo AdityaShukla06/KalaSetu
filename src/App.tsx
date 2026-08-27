@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom
 import { AppProviders } from "./context/AppProviders";
 import { useAuth } from "./context/AuthContext";
 import { BottomNav } from "./components/BottomNav";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { WelcomeScreen } from "./screens/Onboarding/WelcomeScreen";
 import { PhoneEntryScreen } from "./screens/Onboarding/PhoneEntryScreen";
 import { OtpVerificationScreen } from "./screens/Onboarding/OtpVerificationScreen";
@@ -22,7 +23,7 @@ function AppLayout() {
 
 function RequireAuth() {
   const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <Outlet /> : <Navigate to="/welcome" replace />;
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 function RedirectIfAuthed() {
@@ -32,30 +33,32 @@ function RedirectIfAuthed() {
 
 function App() {
   return (
-    <AppProviders>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<RedirectIfAuthed />}>
-            <Route path="/welcome" element={<WelcomeScreen />} />
-            <Route path="/phone" element={<PhoneEntryScreen />} />
-            <Route path="/otp" element={<OtpVerificationScreen />} />
-          </Route>
-
-          <Route element={<RequireAuth />}>
-            <Route path="/add-product" element={<AddProductScreen />} />
-            <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
-            <Route path="/add-product/price" element={<PricingScreen />} />
-
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<HomeScreen />} />
-              <Route path="/profile" element={<ProfileScreen />} />
+    <ErrorBoundary>
+      <AppProviders>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<RedirectIfAuthed />}>
+              <Route path="/login" element={<WelcomeScreen />} />
+              <Route path="/phone" element={<PhoneEntryScreen />} />
+              <Route path="/otp" element={<OtpVerificationScreen />} />
             </Route>
-          </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AppProviders>
+            <Route element={<RequireAuth />}>
+              <Route path="/add-product/photo" element={<AddProductScreen />} />
+              <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
+              <Route path="/add-product/price" element={<PricingScreen />} />
+
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<HomeScreen />} />
+                <Route path="/profile" element={<ProfileScreen />} />
+              </Route>
+            </Route>
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AppProviders>
+    </ErrorBoundary>
   );
 }
 

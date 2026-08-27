@@ -109,7 +109,7 @@ export function HomeScreen() {
           <p className="body-s" style={{ color: "var(--color-text-muted)" }}>
             {t("home.emptyMessage")}
           </p>
-          <Button variant="primary" icon={<PlusIcon />} onClick={() => navigate("/add-product")}>
+          <Button variant="primary" icon={<PlusIcon />} onClick={() => navigate("/add-product/photo")}>
             {t("home.addFirstProduct")}
           </Button>
         </div>

@@ -17,6 +17,8 @@ export interface Product extends ProductInput {
   createdAt: string;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
 const MOCK_DELAY_MS = 600;
 
 function delay<T>(value: T, ms: number = MOCK_DELAY_MS): Promise<T> {
@@ -27,7 +29,29 @@ function delayReject(error: Error, ms: number = MOCK_DELAY_MS): Promise<never> {
   return new Promise((_, reject) => setTimeout(() => reject(error), ms));
 }
 
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem("kalasetu.token");
+  const headers = new Headers(options.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  if (!response.ok) {
+    throw new Error(`${path} failed with status ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
 export function sendOtp(phoneNumber: string): Promise<{ success: boolean }> {
+  if (API_BASE_URL) {
+    return apiFetch("/auth/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ phoneNumber }),
+    });
+  }
+
   console.info(`[stub] sendOtp -> ${phoneNumber}`);
   return delay({ success: true });
 }
@@ -36,6 +60,13 @@ export function verifyOtp(
   phoneNumber: string,
   otp: string,
 ): Promise<{ token: string; userId: string }> {
+  if (API_BASE_URL) {
+    return apiFetch("/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({ phoneNumber, otp }),
+    });
+  }
+
   console.info(`[stub] verifyOtp -> ${phoneNumber} / ${otp}`);
   if (otp === "000000") {
     return delayReject(new Error("Invalid OTP"));
@@ -44,6 +75,12 @@ export function verifyOtp(
 }
 
 export function enhanceImage(imageBlob: Blob): Promise<{ enhancedImageUrl: string }> {
+  if (API_BASE_URL) {
+    const formData = new FormData();
+    formData.append("image", imageBlob);
+    return apiFetch("/images/enhance", { method: "POST", body: formData });
+  }
+
   console.info(`[stub] enhanceImage -> ${imageBlob.size} bytes`);
   if (Math.random() < 0.3) {
     return delayReject(new Error("Enhancement failed"));
@@ -55,6 +92,13 @@ export function transcribeAndDescribe(
   audioBlob: Blob,
   category: string,
 ): Promise<{ transcript: string; descriptionEn: string; descriptionHi: string }> {
+  if (API_BASE_URL) {
+    const formData = new FormData();
+    formData.append("audio", audioBlob);
+    formData.append("category", category);
+    return apiFetch("/voice/transcribe", { method: "POST", body: formData });
+  }
+
   console.info(`[stub] transcribeAndDescribe -> ${category}, ${audioBlob.size} bytes`);
   if (Math.random() < 0.3) {
     return delayReject(new Error("Transcription failed"));
@@ -72,6 +116,13 @@ export function suggestPrice(input: {
   descriptionEn: string;
   imageUrl: string;
 }): Promise<{ suggestedMin: number; suggestedMax: number; reasoning: string }> {
+  if (API_BASE_URL) {
+    return apiFetch("/pricing/suggest", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
   console.info(`[stub] suggestPrice -> ${input.category}`);
   if (Math.random() < 0.3) {
     return delayReject(new Error("Price suggestion failed"));
@@ -88,6 +139,13 @@ export function suggestPrice(input: {
 const mockProducts: Product[] = [];
 
 export function createProduct(product: ProductInput): Promise<{ productId: string }> {
+  if (API_BASE_URL) {
+    return apiFetch("/products", {
+      method: "POST",
+      body: JSON.stringify(product),
+    });
+  }
+
   console.info(`[stub] createProduct -> ${product.titleEn}`);
   if (Math.random() < 0.3) {
     return delayReject(new Error("Publish failed"));
@@ -104,6 +162,10 @@ export function createProduct(product: ProductInput): Promise<{ productId: strin
 }
 
 export function listProducts(userId: string): Promise<Product[]> {
+  if (API_BASE_URL) {
+    return apiFetch(`/products?userId=${encodeURIComponent(userId)}`, { method: "GET" });
+  }
+
   console.info(`[stub] listProducts -> ${userId}`);
   if (Math.random() < 0.3) {
     return delayReject(new Error("Failed to load products"));

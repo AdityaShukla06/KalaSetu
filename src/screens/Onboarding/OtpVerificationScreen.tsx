@@ -69,7 +69,7 @@ export function OtpVerificationScreen() {
 
     try {
       const { token, userId } = await verifyOtp(phoneNumber, otp);
-      login(token, userId);
+      login(token, userId, phoneNumber);
       navigate("/", { replace: true });
     } catch {
       setOtp("");

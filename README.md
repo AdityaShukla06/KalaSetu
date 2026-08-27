@@ -39,7 +39,7 @@ public/
 - [x] Phase 4: Add Product, category selector, voice recording with playback, AI description with editable EN/HI review, text fallback when the mic is unavailable
 - [x] Phase 5: Add Product, pricing suggestion with an editable override, publish with retry, draft reset and success confirmation
 - [x] Phase 6: My Shop catalog grid, empty state, product detail sheet, GeM/ONDC roadmap banner
-- [ ] Phase 7: Full navigation and state integration
+- [x] Phase 7: Finalized routing and auth guards, sequential Add Product step guards, real Profile screen, top level error boundary, fetch ready API layer
 - [ ] Phase 8: Install prompt, offline handling, Lighthouse polish
 - [ ] Phase 9: Deploy to Firebase Hosting, device testing
 
@@ -49,17 +49,42 @@ Colors, type, spacing, radius, and component specs live as CSS variables in `src
 
 ## API contract
 
-`src/services/api.ts` defines every function the backend needs to implement: `sendOtp`, `verifyOtp`, `enhanceImage`, `transcribeAndDescribe`, `suggestPrice`, `createProduct`, `listProducts`. Each currently returns mock data with a short delay. Swap the implementation for real fetch calls once endpoints exist, nothing else in the app should need to change.
+`src/services/api.ts` defines every function the backend needs to implement: `sendOtp`, `verifyOtp`, `enhanceImage`, `transcribeAndDescribe`, `suggestPrice`, `createProduct`, `listProducts`. Every function checks `import.meta.env.VITE_API_BASE_URL` first: if it is set, it makes a real `fetch` call against that base URL, otherwise it falls back to the mock behavior described below. There is no backend yet, so today every environment runs on mocks, copy `.env.example` to `.env` and set `VITE_API_BASE_URL` once real endpoints exist, no code changes needed. Expected request/response shapes for whoever builds the backend:
+
+- `POST /auth/send-otp` `{ phoneNumber }` -> `{ success }`
+- `POST /auth/verify-otp` `{ phoneNumber, otp }` -> `{ token, userId }`
+- `POST /images/enhance` multipart `image` file -> `{ enhancedImageUrl }`
+- `POST /voice/transcribe` multipart `audio` file + `category` field -> `{ transcript, descriptionEn, descriptionHi }`
+- `POST /pricing/suggest` `{ category, materialCost, descriptionEn, imageUrl }` -> `{ suggestedMin, suggestedMax, reasoning }`
+- `POST /products` a `ProductInput` -> `{ productId }`
+- `GET /products?userId=...` -> `Product[]`
+
+All authenticated requests attach `Authorization: Bearer <token>` from the stored auth token automatically.
 
 `verifyOtp` rejects when the OTP is exactly `000000`, so the wrong OTP error state can be demoed without a real backend. Any other 6 digit code succeeds.
 
 ## Auth and language
 
-`AuthContext` persists `token` and `userId` to localStorage, so a logged in session survives a page refresh. `LanguageContext` persists the chosen language and exposes a small `t(key)` translation function backed by `src/context/translations.ts`, extend that dictionary as new screens add copy.
+`AuthContext` persists `token`, `userId`, and `phoneNumber` to localStorage, so a logged in session survives a page refresh. `LanguageContext` persists the chosen language and exposes a small `t(key)` translation function backed by `src/context/translations.ts`, extend that dictionary as new screens add copy.
+
+## Routing and guards
+
+- `/login`, `/phone`, `/otp`: the onboarding flow, only reachable when signed out (`RedirectIfAuthed` sends an already authenticated user to `/`)
+- `/`, `/profile`: wrapped in `AppLayout`, bottom tab bar visible
+- `/add-product/photo`, `/add-product/describe`, `/add-product/price`: the Add Product wizard, no bottom tab bar since it is a focused task, but the draft in `AddProductDraftContext` survives navigating away and back
+- Everything except `/login`, `/phone`, `/otp` requires `AuthContext.isAuthenticated`, enforced by `RequireAuth`, which redirects to `/login`
+
+The Add Product steps guard each other in order: `/add-product/describe` redirects to `/add-product/photo` if there is no captured image yet, and `/add-product/price` redirects to `/add-product/photo` or `/add-product/describe` depending on what is missing. Typing a later step's URL directly always bounces back to the right earlier step instead of rendering with missing data.
+
+A class based `ErrorBoundary` wraps the whole app and shows a bilingual "Something went wrong" screen with a reload button instead of a blank page if a render error escapes anywhere in the tree.
+
+## Profile
+
+`/profile` shows the signed in phone number, the same `LanguageToggle` used on the welcome screen, and a "Log out" button that clears `AuthContext` and redirects to `/login`.
 
 ## Add Product, photo capture
 
-`/add-product` is an immersive full screen route with no bottom tab bar, since it is the start of a multi step wizard (photo, voice, pricing). It uses `getUserMedia` with the rear camera by default. If the camera throws (permission denied, unsupported browser, no camera), it falls back to a native `<input type="file" accept="image/*" capture="environment">` styled to match the rest of the flow. The camera stream is stopped as soon as the live view unmounts, whether that is a successful capture or leaving the screen entirely.
+`/add-product/photo` is an immersive full screen route with no bottom tab bar, since it is the start of a multi step wizard (photo, voice, pricing). It uses `getUserMedia` with the rear camera by default. If the camera throws (permission denied, unsupported browser, no camera), it falls back to a native `<input type="file" accept="image/*" capture="environment">` styled to match the rest of the flow. The camera stream is stopped as soon as the live view unmounts, whether that is a successful capture or leaving the screen entirely.
 
 `enhanceImage` randomly rejects about 30 percent of the time so the retry UI can be exercised without a real backend. The captured blob and the enhanced image URL are stored in `AddProductDraftContext` so the voice and pricing steps can read them later without prop drilling.
 
@@ -71,7 +96,7 @@ Submitting a recording calls `transcribeAndDescribe`, which also randomly reject
 
 ## Add Product, pricing and publish
 
-`/add-product/price` redirects back to `/add-product` if the draft is missing an image, category, or description, so it cannot be reached with incomplete state. It shows a read-only recap (photo thumbnail, English description, an "Edit" link back to the description step), a required material cost field, and a "Get price suggestion" button that calls `suggestPrice`. The result shows the suggested range and reasoning plus an editable "Your selling price" field pre-filled with the midpoint, with copy making clear the number is a suggestion the artisan can override.
+`/add-product/price` redirects back to an earlier step if the draft is missing an image, category, or description, so it cannot be reached with incomplete state. It shows a read-only recap (photo thumbnail, English description, an "Edit" link back to the description step), a required material cost field, and a "Get price suggestion" button that calls `suggestPrice`. The result shows the suggested range and reasoning plus an editable "Your selling price" field pre-filled with the midpoint, with copy making clear the number is a suggestion the artisan can override.
 
 "Publish" calls `createProduct` with the assembled product, deriving `titleEn`/`titleHi` from the selected category since this flow has no separate title step. `suggestPrice` and `createProduct` both randomly reject about 30 percent of the time so their retry paths are exercisable, and a failed publish keeps all filled in form data intact. On success the screen shows a confirmation with "Your product is live!", clears `AddProductDraftContext` so the next "Add Product" starts fresh, and "View in My Shop" returns to the Home tab.
 

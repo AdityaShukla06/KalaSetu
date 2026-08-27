@@ -1,0 +1,35 @@
+.profile-screen {
+  padding-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.profile-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.profile-phone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--hit-preferred);
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+}
+
+.profile-phone-icon {
+  display: inline-flex;
+  color: var(--color-secondary-soft);
+}
+
+.profile-phone-value {
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  font-weight: 600;
+  color: var(--color-secondary);
+}
