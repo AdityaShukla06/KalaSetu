@@ -85,29 +85,28 @@ export function suggestPrice(input: {
   });
 }
 
+const mockProducts: Product[] = [];
+
 export function createProduct(product: ProductInput): Promise<{ productId: string }> {
   console.info(`[stub] createProduct -> ${product.titleEn}`);
   if (Math.random() < 0.3) {
     return delayReject(new Error("Publish failed"));
   }
-  return delay({ productId: `mock-product-${Date.now()}` });
+
+  const productId = `mock-product-${Date.now()}`;
+  mockProducts.unshift({
+    ...product,
+    productId,
+    status: "published",
+    createdAt: new Date().toISOString(),
+  });
+  return delay({ productId });
 }
 
 export function listProducts(userId: string): Promise<Product[]> {
   console.info(`[stub] listProducts -> ${userId}`);
-  return delay([
-    {
-      productId: "mock-product-1",
-      category: "pottery",
-      titleEn: "Terracotta Vase",
-      titleHi: "टेराकोटा फूलदान",
-      descriptionEn: "Handcrafted terracotta vase with traditional motifs.",
-      descriptionHi: "पारंपरिक डिज़ाइन के साथ हस्तनिर्मित टेराकोटा फूलदान।",
-      imageUrl: "/icons/icon-512.png",
-      price: 450,
-      materialCost: 200,
-      status: "published",
-      createdAt: new Date().toISOString(),
-    },
-  ]);
+  if (Math.random() < 0.3) {
+    return delayReject(new Error("Failed to load products"));
+  }
+  return delay([...mockProducts]);
 }

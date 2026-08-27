@@ -14,6 +14,7 @@ A bilingual (English / Hindi) mobile-first PWA that helps artisans photograph, d
 ```
 src/
   screens/       one folder per screen (Onboarding, Home, AddProduct, Profile)
+    Home/        My Shop catalog grid, product detail sheet, GeM/ONDC banner
     AddProduct/  camera capture, category, voice description, pricing and publish
   components/    shared UI: Button, Card, Input, OtpInput, LanguageToggle, BottomNav
   services/      api.ts, typed stub functions for the backend contract
@@ -37,7 +38,7 @@ public/
 - [x] Phase 3: Add Product, camera capture (live preview, freeze frame, retake), image enhancement with before/after compare, file picker fallback when the camera is unavailable
 - [x] Phase 4: Add Product, category selector, voice recording with playback, AI description with editable EN/HI review, text fallback when the mic is unavailable
 - [x] Phase 5: Add Product, pricing suggestion with an editable override, publish with retry, draft reset and success confirmation
-- [ ] Phase 6: My Shop catalog and GeM/ONDC roadmap banner
+- [x] Phase 6: My Shop catalog grid, empty state, product detail sheet, GeM/ONDC roadmap banner
 - [ ] Phase 7: Full navigation and state integration
 - [ ] Phase 8: Install prompt, offline handling, Lighthouse polish
 - [ ] Phase 9: Deploy to Firebase Hosting, device testing
@@ -73,3 +74,9 @@ Submitting a recording calls `transcribeAndDescribe`, which also randomly reject
 `/add-product/price` redirects back to `/add-product` if the draft is missing an image, category, or description, so it cannot be reached with incomplete state. It shows a read-only recap (photo thumbnail, English description, an "Edit" link back to the description step), a required material cost field, and a "Get price suggestion" button that calls `suggestPrice`. The result shows the suggested range and reasoning plus an editable "Your selling price" field pre-filled with the midpoint, with copy making clear the number is a suggestion the artisan can override.
 
 "Publish" calls `createProduct` with the assembled product, deriving `titleEn`/`titleHi` from the selected category since this flow has no separate title step. `suggestPrice` and `createProduct` both randomly reject about 30 percent of the time so their retry paths are exercisable, and a failed publish keeps all filled in form data intact. On success the screen shows a confirmation with "Your product is live!", clears `AddProductDraftContext` so the next "Add Product" starts fresh, and "View in My Shop" returns to the Home tab.
+
+## My Shop catalog
+
+`listProducts` and `createProduct` now share a small in-memory array in `api.ts`, so the stub behaves like a real backend would: a fresh session has zero products (the empty state is not a special test mode, it is just what a new account looks like), and publishing a product through the Add Product flow makes it actually appear in the grid. `listProducts` also randomly rejects about 30 percent of the time to exercise the error and retry state.
+
+Home shows a dashed, muted "Connect to GeM / ONDC, Coming soon" banner above the catalog, deliberately styled unlike the primary action buttons so it reads as a roadmap item, not a working feature. Tapping it reveals a plain "coming soon" note, there is no fake flow behind it. Products render as a 2 column grid with a status badge (published, draft, failed) using the design system's success/warning/error colors. Tapping a card opens a bottom sheet with the full image, an English/Hindi description toggle, category, and placeholder Edit/Delete buttons that log to the console for now.
