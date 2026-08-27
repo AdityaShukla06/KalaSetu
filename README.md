@@ -14,7 +14,7 @@ A bilingual (English / Hindi) mobile-first PWA that helps artisans photograph, d
 ```
 src/
   screens/       one folder per screen (Onboarding, Home, AddProduct, Profile)
-    AddProduct/  camera capture, review, enhancement, before/after compare
+    AddProduct/  camera capture, category, voice description, pricing placeholder
   components/    shared UI: Button, Card, Input, OtpInput, LanguageToggle, BottomNav
   services/      api.ts, typed stub functions for the backend contract
   context/       Auth, Language (with translations.ts), AddProductDraft state
@@ -35,7 +35,7 @@ public/
 - [x] Phase 1: PWA scaffold, routing shell (Home, Add Product, Profile), design system tokens, PWA manifest and service worker, typed API stub contract
 - [x] Phase 2: Onboarding (Welcome, phone entry, OTP verification), phone OTP auth with localStorage persistence, language toggle with a small translation dictionary
 - [x] Phase 3: Add Product, camera capture (live preview, freeze frame, retake), image enhancement with before/after compare, file picker fallback when the camera is unavailable
-- [ ] Phase 4: Add Product, voice note and description
+- [x] Phase 4: Add Product, category selector, voice recording with playback, AI description with editable EN/HI review, text fallback when the mic is unavailable
 - [ ] Phase 5: Add Product, pricing and publish
 - [ ] Phase 6: My Shop catalog and GeM/ONDC roadmap banner
 - [ ] Phase 7: Full navigation and state integration
@@ -60,4 +60,10 @@ Colors, type, spacing, radius, and component specs live as CSS variables in `src
 
 `/add-product` is an immersive full screen route with no bottom tab bar, since it is the start of a multi step wizard (photo, voice, pricing). It uses `getUserMedia` with the rear camera by default. If the camera throws (permission denied, unsupported browser, no camera), it falls back to a native `<input type="file" accept="image/*" capture="environment">` styled to match the rest of the flow. The camera stream is stopped as soon as the live view unmounts, whether that is a successful capture or leaving the screen entirely.
 
-`enhanceImage` randomly rejects about 30 percent of the time so the retry UI can be exercised without a real backend. The captured blob and the enhanced image URL are stored in `AddProductDraftContext` so the voice and pricing steps can read them later without prop drilling. The next step does not exist yet, so "Continue" logs `proceeding to next step` and lands on a placeholder route at `/add-product/describe`.
+`enhanceImage` randomly rejects about 30 percent of the time so the retry UI can be exercised without a real backend. The captured blob and the enhanced image URL are stored in `AddProductDraftContext` so the voice and pricing steps can read them later without prop drilling.
+
+## Add Product, voice description
+
+`/add-product/describe` starts with a category grid (single select, stored in the draft), then a `MediaRecorder` based voice recorder: tap to start, tap to stop, a live timer, an animated bar indicator while recording, and native playback with a re-record option before submitting. If `MediaRecorder` or `getUserMedia` is unavailable or the user denies the mic, it skips straight to the manual text entry screen instead of dead ending.
+
+Submitting a recording calls `transcribeAndDescribe`, which also randomly rejects about 30 percent of the time to exercise the retry path. The result lands on an editable review screen with independent English and Hindi tabs (`DescriptionEditor`), labeled "Review and edit if needed" so it is clear the AI text is a draft, not a final answer. "Continue" saves both descriptions into `AddProductDraftContext` and moves to a placeholder route at `/add-product/price`. The mic stream is released as soon as recording stops, or immediately on unmount if the screen is left mid-recording.

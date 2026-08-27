@@ -1,0 +1,210 @@
+.describe-screen {
+  min-height: 100dvh;
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
+}
+
+.describe-screen-center {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-6);
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin: var(--space-6) 0;
+}
+
+.category-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 108px;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  transition: border-color 0.1s ease, background-color 0.1s ease;
+}
+
+.category-tile-active {
+  border: 2px solid var(--color-primary);
+  background: var(--color-primary-tint);
+}
+
+.category-tile-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-tint);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.category-tile-active .category-tile-icon {
+  background: var(--color-surface);
+}
+
+.category-tile-label {
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 600;
+  color: var(--color-secondary);
+  text-align: center;
+}
+
+.voice-record-button {
+  width: 88px;
+  height: 88px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-surface);
+  border: none;
+  box-shadow: var(--shadow-fab);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+.voice-record-button:active {
+  transform: scale(0.96);
+}
+
+.voice-record-button-active {
+  background: var(--color-error);
+}
+
+.voice-instruction {
+  color: var(--color-text-muted);
+  max-width: 280px;
+}
+
+.voice-timer {
+  font-family: var(--font-body);
+  font-size: var(--text-price-size);
+  font-weight: 700;
+  color: var(--color-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 40px;
+}
+
+.voice-bars span {
+  width: 6px;
+  border-radius: 3px;
+  background: var(--color-primary);
+  animation: voice-bar-pulse 1s ease-in-out infinite;
+}
+
+.voice-bars span:nth-child(1) {
+  height: 14px;
+  animation-delay: 0s;
+}
+.voice-bars span:nth-child(2) {
+  height: 28px;
+  animation-delay: 0.1s;
+}
+.voice-bars span:nth-child(3) {
+  height: 40px;
+  animation-delay: 0.2s;
+}
+.voice-bars span:nth-child(4) {
+  height: 24px;
+  animation-delay: 0.3s;
+}
+.voice-bars span:nth-child(5) {
+  height: 16px;
+  animation-delay: 0.4s;
+}
+
+@keyframes voice-bar-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.voice-recorded-hint {
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.voice-player {
+  width: 100%;
+  accent-color: var(--color-primary);
+}
+
+.voice-recorded-actions {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.voice-recorded-actions .btn {
+  flex: 1;
+  width: auto;
+}
+
+.description-note {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.description-hint {
+  margin-bottom: var(--space-3);
+}
+
+.description-textarea {
+  width: 100%;
+  min-height: 180px;
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  border-radius: var(--radius-input);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  font-weight: 600;
+  color: var(--color-secondary);
+  resize: vertical;
+}
+
+.description-textarea:focus {
+  outline: none;
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(193, 80, 46, 0.14);
+}
+
+.describe-loading .btn {
+  width: auto;
+  padding: 0 var(--space-6);
+}
+
+.describe-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  border: 4px solid var(--color-primary-tint);
+  border-top-color: var(--color-primary);
+  animation: btn-spin 0.8s linear infinite;
+}

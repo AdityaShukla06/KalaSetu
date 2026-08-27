@@ -1,6 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 
+interface PlaceholderStepScreenProps {
+  title: string;
+  message: string;
+}
+
 function BackIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -9,15 +14,15 @@ function BackIcon() {
   );
 }
 
-export function VoiceDescribePlaceholderScreen() {
+export function PlaceholderStepScreen({ title, message }: PlaceholderStepScreenProps) {
   const navigate = useNavigate();
 
   return (
     <div className="screen">
       <div style={{ paddingTop: "var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-        <h1>Voice & Description</h1>
+        <h1>{title}</h1>
         <p className="body-s" style={{ color: "var(--color-text-muted)" }}>
-          This step is not built yet. Your photo has been saved to the draft.
+          {message}
         </p>
         <Button variant="secondary" icon={<BackIcon />} onClick={() => navigate("/")}>
           Back to My Shop

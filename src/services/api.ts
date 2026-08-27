@@ -56,6 +56,9 @@ export function transcribeAndDescribe(
   category: string,
 ): Promise<{ transcript: string; descriptionEn: string; descriptionHi: string }> {
   console.info(`[stub] transcribeAndDescribe -> ${category}, ${audioBlob.size} bytes`);
+  if (Math.random() < 0.3) {
+    return delayReject(new Error("Transcription failed"));
+  }
   return delay({
     transcript: "Mock transcript of the voice note.",
     descriptionEn: "Handcrafted item made with care.",

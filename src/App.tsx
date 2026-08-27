@@ -7,7 +7,8 @@ import { PhoneEntryScreen } from "./screens/Onboarding/PhoneEntryScreen";
 import { OtpVerificationScreen } from "./screens/Onboarding/OtpVerificationScreen";
 import { HomeScreen } from "./screens/Home/HomeScreen";
 import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
-import { VoiceDescribePlaceholderScreen } from "./screens/AddProduct/VoiceDescribePlaceholderScreen";
+import { VoiceDescribeScreen } from "./screens/AddProduct/VoiceDescribeScreen";
+import { PlaceholderStepScreen } from "./screens/AddProduct/PlaceholderStepScreen";
 import { ProfileScreen } from "./screens/Profile/ProfileScreen";
 
 function AppLayout() {
@@ -42,7 +43,16 @@ function App() {
 
           <Route element={<RequireAuth />}>
             <Route path="/add-product" element={<AddProductScreen />} />
-            <Route path="/add-product/describe" element={<VoiceDescribePlaceholderScreen />} />
+            <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
+            <Route
+              path="/add-product/price"
+              element={
+                <PlaceholderStepScreen
+                  title="Pricing"
+                  message="This step is not built yet. Your description has been saved to the draft."
+                />
+              }
+            />
 
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomeScreen />} />
