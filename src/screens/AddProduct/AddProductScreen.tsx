@@ -1,12 +1,24 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { LiveCameraCapture } from "./LiveCameraCapture";
+import { PhotoReviewFlow } from "./PhotoReviewFlow";
+
 export function AddProductScreen() {
-  return (
-    <div className="screen">
-      <div style={{ paddingTop: "var(--space-6)" }}>
-        <h1>Add Product</h1>
-        <p className="body-s" style={{ color: "var(--color-text-muted)", marginTop: "var(--space-2)" }}>
-          Camera capture, voice description, and pricing steps will live here.
-        </p>
-      </div>
-    </div>
-  );
+  const navigate = useNavigate();
+  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+
+  function handleRetake() {
+    setCapturedBlob(null);
+  }
+
+  function handleDone() {
+    console.info("proceeding to next step");
+    navigate("/add-product/describe");
+  }
+
+  if (!capturedBlob) {
+    return <LiveCameraCapture onCapture={setCapturedBlob} />;
+  }
+
+  return <PhotoReviewFlow blob={capturedBlob} onRetake={handleRetake} onDone={handleDone} />;
 }

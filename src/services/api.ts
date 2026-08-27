@@ -45,6 +45,9 @@ export function verifyOtp(
 
 export function enhanceImage(imageBlob: Blob): Promise<{ enhancedImageUrl: string }> {
   console.info(`[stub] enhanceImage -> ${imageBlob.size} bytes`);
+  if (Math.random() < 0.3) {
+    return delayReject(new Error("Enhancement failed"));
+  }
   return delay({ enhancedImageUrl: URL.createObjectURL(imageBlob) });
 }
 

@@ -7,6 +7,7 @@ import { PhoneEntryScreen } from "./screens/Onboarding/PhoneEntryScreen";
 import { OtpVerificationScreen } from "./screens/Onboarding/OtpVerificationScreen";
 import { HomeScreen } from "./screens/Home/HomeScreen";
 import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
+import { VoiceDescribePlaceholderScreen } from "./screens/AddProduct/VoiceDescribePlaceholderScreen";
 import { ProfileScreen } from "./screens/Profile/ProfileScreen";
 
 function AppLayout() {
@@ -40,9 +41,11 @@ function App() {
           </Route>
 
           <Route element={<RequireAuth />}>
+            <Route path="/add-product" element={<AddProductScreen />} />
+            <Route path="/add-product/describe" element={<VoiceDescribePlaceholderScreen />} />
+
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomeScreen />} />
-              <Route path="/add-product" element={<AddProductScreen />} />
               <Route path="/profile" element={<ProfileScreen />} />
             </Route>
           </Route>
