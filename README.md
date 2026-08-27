@@ -41,7 +41,11 @@ public/
 - [x] Phase 6: My Shop catalog grid, empty state, product detail sheet, GeM/ONDC roadmap banner
 - [x] Phase 7: Finalized routing and auth guards, sequential Add Product step guards, real Profile screen, top level error boundary, fetch ready API layer
 - [x] Phase 8: Real icon set, custom install prompt, offline banner and offline app shell, visual polish pass
-- [ ] Phase 9: Deploy to Firebase Hosting, device testing
+- [~] Phase 9: Firebase Hosting config and deploy script ready (`firebase.json`, `DEPLOY.md`), actual deploy and Android device test pass deferred, see `TESTING.md`
+
+## Deploy
+
+See `DEPLOY.md` for the one time Firebase setup and `npm run deploy`. See `TESTING.md` for the on-device test checklist and the live URL once deployed.
 
 ## Design system
 
