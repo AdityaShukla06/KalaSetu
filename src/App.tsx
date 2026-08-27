@@ -3,6 +3,7 @@ import { AppProviders } from "./context/AppProviders";
 import { useAuth } from "./context/AuthContext";
 import { BottomNav } from "./components/BottomNav";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AppBanners } from "./components/AppBanners";
 import { LoginScreen } from "./screens/Onboarding/LoginScreen";
 import { HomeScreen } from "./screens/Home/HomeScreen";
 import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
@@ -33,6 +34,7 @@ function App() {
   return (
     <ErrorBoundary>
       <AppProviders>
+        <AppBanners />
         <BrowserRouter>
           <Routes>
             <Route element={<RedirectIfAuthed />}>

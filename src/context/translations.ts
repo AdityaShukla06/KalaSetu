@@ -94,6 +94,10 @@ export const translations: Record<Language, Record<string, string>> = {
     "profile.title": "Profile",
     "profile.phoneLabel": "Phone number",
     "profile.logout": "Log out",
+    "install.message": "Install KalaSetu for quick access",
+    "install.action": "Install",
+    "install.dismiss": "Dismiss",
+    "offline.message": "You're offline, some features may not work",
   },
   hi: {
     "app.name": "KalaSetu",
@@ -188,5 +192,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "profile.title": "प्रोफ़ाइल",
     "profile.phoneLabel": "फ़ोन नंबर",
     "profile.logout": "लॉग आउट करें",
+    "install.message": "जल्दी पहुंच के लिए KalaSetu इंस्टॉल करें",
+    "install.action": "इंस्टॉल करें",
+    "install.dismiss": "बंद करें",
+    "offline.message": "आप ऑफ़लाइन हैं, कुछ सुविधाएं काम नहीं कर सकतीं",
   },
 };

@@ -21,7 +21,7 @@ src/
   context/       Auth, Language (with translations.ts), AddProductDraft state
   styles/        variables.css (design tokens), global.css
 public/
-  icons/         PWA icons (192x192, 512x512)
+  icons/         PWA icons (192x192, 512x512, 512x512 maskable)
 ```
 
 ## Scripts
@@ -40,7 +40,7 @@ public/
 - [x] Phase 5: Add Product, pricing suggestion with an editable override, publish with retry, draft reset and success confirmation
 - [x] Phase 6: My Shop catalog grid, empty state, product detail sheet, GeM/ONDC roadmap banner
 - [x] Phase 7: Finalized routing and auth guards, sequential Add Product step guards, real Profile screen, top level error boundary, fetch ready API layer
-- [ ] Phase 8: Install prompt, offline handling, Lighthouse polish
+- [x] Phase 8: Real icon set, custom install prompt, offline banner and offline app shell, visual polish pass
 - [ ] Phase 9: Deploy to Firebase Hosting, device testing
 
 ## Design system
@@ -96,7 +96,7 @@ Submitting a recording calls `transcribeAndDescribe`, which also randomly reject
 
 ## Add Product, pricing and publish
 
-`/add-product/price` redirects back to an earlier step if the draft is missing an image, category, or description, so it cannot be reached with incomplete state. It shows a read-only recap (photo thumbnail, English description, an "Edit" link back to the description step), a required material cost field, and a "Get price suggestion" button that calls `suggestPrice`. The result shows the suggested range and reasoning plus an editable "Your selling price" field pre-filled with the midpoint, with copy making clear the number is a suggestion the artisan can override.
+`/add-product/price` redirects back to an earlier step if the draft is missing an image, category, or description, so it cannot be reached with incomplete state. It shows a read-only recap (photo thumbnail, description in the current app language, an "Edit" link back to the description step), a required material cost field, and a "Get price suggestion" button that calls `suggestPrice`. The result shows the suggested range and reasoning plus an editable "Your selling price" field pre-filled with the midpoint, with copy making clear the number is a suggestion the artisan can override.
 
 "Publish" calls `createProduct` with the assembled product, deriving `titleEn`/`titleHi` from the selected category since this flow has no separate title step. `suggestPrice` and `createProduct` both randomly reject about 30 percent of the time so their retry paths are exercisable, and a failed publish keeps all filled in form data intact. On success the screen shows a confirmation with "Your product is live!", clears `AddProductDraftContext` so the next "Add Product" starts fresh, and "View in My Shop" returns to the Home tab.
 
@@ -105,3 +105,13 @@ Submitting a recording calls `transcribeAndDescribe`, which also randomly reject
 `listProducts` and `createProduct` now share a small in-memory array in `api.ts`, so the stub behaves like a real backend would: a fresh session has zero products (the empty state is not a special test mode, it is just what a new account looks like), and publishing a product through the Add Product flow makes it actually appear in the grid. `listProducts` also randomly rejects about 30 percent of the time to exercise the error and retry state.
 
 Home shows a dashed, muted "Connect to GeM / ONDC, Coming soon" banner above the catalog, deliberately styled unlike the primary action buttons so it reads as a roadmap item, not a working feature. Tapping it reveals a plain "coming soon" note, there is no fake flow behind it. Products render as a 2 column grid with a status badge (published, draft, failed) using the design system's success/warning/error colors. Tapping a card opens a bottom sheet with the full image, an English/Hindi description toggle, category, and placeholder Edit/Delete buttons that log to the console for now.
+
+## Installability, install prompt, and offline
+
+The app icon is a simple geometric mark, a dot ("Kala", art) above an arch ("Setu", bridge), in warm white on terracotta, generated at `public/icons/icon-192.png`, `icon-512.png`, and a `icon-512-maskable.png` with extra safe zone padding for masked home screen shapes.
+
+`npx lighthouse` no longer scores a standalone "PWA" category as of Lighthouse v11+, Google moved installability checks into Chrome DevTools directly. The equivalent, more authoritative check is Chrome's own `Page.getInstallabilityErrors` (what actually powers "Add to Home Screen"), verified directly via the Chrome DevTools Protocol against the production build: zero installability errors, valid manifest (name, icons at 192/512/maskable, `start_url`, `display: standalone`, `theme_color`, `background_color`), an active service worker, and matching `theme-color` and `viewport` meta tags.
+
+`InstallPrompt` listens for `beforeinstallprompt`, stores the event, and shows a dismissible banner ("Install KalaSetu for quick access") instead of relying on the browser's own install UI. Dismissing it is remembered in localStorage. `OfflineBanner` listens for `online`/`offline` and shows a persistent "You're offline, some features may not work" banner while offline. Both banners sit in normal document flow (not a fixed overlay) so they push page content down instead of covering it. The existing `CacheFirst` app shell strategy from `vite-plugin-pwa` means navigation and cached screens keep working, and a page reload succeeds, even with no network connection at all.
+
+Buttons use `min-height` rather than a fixed `height` so a button whose label wraps to two lines (routine for the longer Hindi strings) grows instead of clipping, and its sibling in the same row stretches to match via the flex container's default `align-items: stretch`, keeping button rows the same height in both languages.

@@ -60,8 +60,10 @@ interface Suggestion {
 
 export function PricingScreen() {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const { draft, resetDraft } = useAddProductDraft();
+
+  const summaryDescription = language === "hi" ? draft.descriptionHi || draft.descriptionEn : draft.descriptionEn;
 
   const [materialCost, setMaterialCost] = useState("");
   const [materialCostError, setMaterialCostError] = useState<string | null>(null);
@@ -173,7 +175,7 @@ export function PricingScreen() {
       <div className="pricing-summary">
         {draft.imageUrl && <img src={draft.imageUrl} alt="" className="pricing-summary-thumb" />}
         <div className="pricing-summary-text">
-          <p className="body-s pricing-summary-description">{draft.descriptionEn}</p>
+          <p className="body-s pricing-summary-description">{summaryDescription}</p>
           <button
             type="button"
             className="pricing-summary-edit"
