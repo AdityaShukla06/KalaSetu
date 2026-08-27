@@ -1,6 +1,4 @@
-/* KALASETU — MOBILE DESIGN SYSTEM v1 tokens */
 :root {
-  /* color */
   --color-primary: #c1502e;
   --color-primary-pressed: #9c3d20;
   --color-primary-tint: #f7e4da;
@@ -20,7 +18,6 @@
   --color-disabled-text: #a79e92;
   --color-camera-overlay: rgba(27, 23, 20, 0.6);
 
-  /* type */
   --font-heading: "Martel", serif;
   --font-body: "Mukta", sans-serif;
 
@@ -41,9 +38,6 @@
   --text-price-size: 28px;
   --text-price-line: 34px;
 
-  /* Hindi variants add +2px line-height (set via [lang="hi"] overrides in global.css) */
-
-  /* spacing (base 4) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -55,7 +49,6 @@
   --safe-area-bottom: 24px;
   --tab-bar-height: 96px;
 
-  /* radius */
   --radius-button: 16px;
   --radius-input: 16px;
   --radius-pill: 999px;
@@ -65,13 +58,11 @@
   --radius-avatar: 999px;
   --radius-screen: 28px;
 
-  /* elevation */
   --shadow-card: 0 2px 8px rgba(30, 42, 68, 0.06);
   --shadow-cta: 0 6px 18px rgba(193, 80, 46, 0.28);
   --shadow-fab: 0 6px 18px rgba(193, 80, 46, 0.4);
   --shadow-sheet: 0 -8px 24px rgba(0, 0, 0, 0.18);
 
-  /* touch */
   --hit-min: 48px;
   --hit-preferred: 56px;
 }

@@ -1,10 +1,3 @@
-/**
- * Stub API layer. Every function here mocks a real backend call with a
- * fake network delay and mock data. Swap the implementation for a real
- * `fetch` once endpoints exist — signatures are the contract, keep them
- * stable so screens never need to change.
- */
-
 export type ProductStatus = "draft" | "published" | "failed";
 
 export interface ProductInput {
@@ -30,6 +23,10 @@ function delay<T>(value: T, ms: number = MOCK_DELAY_MS): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
+function delayReject(error: Error, ms: number = MOCK_DELAY_MS): Promise<never> {
+  return new Promise((_, reject) => setTimeout(() => reject(error), ms));
+}
+
 export function sendOtp(phoneNumber: string): Promise<{ success: boolean }> {
   console.info(`[stub] sendOtp -> ${phoneNumber}`);
   return delay({ success: true });
@@ -40,6 +37,9 @@ export function verifyOtp(
   otp: string,
 ): Promise<{ token: string; userId: string }> {
   console.info(`[stub] verifyOtp -> ${phoneNumber} / ${otp}`);
+  if (otp === "000000") {
+    return delayReject(new Error("Invalid OTP"));
+  }
   return delay({ token: "mock-token", userId: "mock-user-id" });
 }
 

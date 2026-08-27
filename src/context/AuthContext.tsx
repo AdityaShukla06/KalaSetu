@@ -13,15 +13,33 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const TOKEN_KEY = "kalasetu.token";
+const USER_ID_KEY = "kalasetu.userId";
+
+function getInitialState(): AuthState {
+  return {
+    token: localStorage.getItem(TOKEN_KEY),
+    userId: localStorage.getItem(USER_ID_KEY),
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({ token: null, userId: null });
+  const [state, setState] = useState<AuthState>(getInitialState);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       ...state,
       isAuthenticated: state.token !== null,
-      login: (token, userId) => setState({ token, userId }),
-      logout: () => setState({ token: null, userId: null }),
+      login: (token, userId) => {
+        localStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(USER_ID_KEY, userId);
+        setState({ token, userId });
+      },
+      logout: () => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_ID_KEY);
+        setState({ token: null, userId: null });
+      },
     }),
     [state],
   );

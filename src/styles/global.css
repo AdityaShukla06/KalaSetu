@@ -79,7 +79,6 @@ a {
   color: inherit;
 }
 
-/* Hindi content gets +2px line-height across the board; never letter-space Devanagari */
 [lang="hi"] {
   letter-spacing: 0;
 }
