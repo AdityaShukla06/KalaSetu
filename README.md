@@ -59,7 +59,7 @@ Colors, type, spacing, radius, and component specs live as CSS variables in `src
 - `POST /products` a `ProductInput` -> `{ productId }`
 - `GET /products?userId=...` -> `Product[]`
 
-All authenticated requests attach `Authorization: Bearer <token>` from the stored auth token automatically.
+All authenticated requests attach `Authorization: Bearer <token>` from the stored auth token automatically. Each function also carries a `TODO: replace with real endpoint` comment with this same shape right above it, for whoever wires up the real backend.
 
 `verifyOtp` rejects when the OTP is exactly `000000`, so the wrong OTP error state can be demoed without a real backend. Any other 6 digit code succeeds.
 
@@ -69,10 +69,10 @@ All authenticated requests attach `Authorization: Bearer <token>` from the store
 
 ## Routing and guards
 
-- `/login`, `/phone`, `/otp`: the onboarding flow, only reachable when signed out (`RedirectIfAuthed` sends an already authenticated user to `/`)
+- `/login`: the entire onboarding flow (welcome and language, phone entry, OTP verification) lives in one route, `LoginScreen` switches between three sub-components by local state, only the URL changes when login actually succeeds and the app navigates to `/`. Only reachable when signed out (`RedirectIfAuthed` sends an already authenticated user to `/`)
 - `/`, `/profile`: wrapped in `AppLayout`, bottom tab bar visible
 - `/add-product/photo`, `/add-product/describe`, `/add-product/price`: the Add Product wizard, no bottom tab bar since it is a focused task, but the draft in `AddProductDraftContext` survives navigating away and back
-- Everything except `/login`, `/phone`, `/otp` requires `AuthContext.isAuthenticated`, enforced by `RequireAuth`, which redirects to `/login`
+- Everything except `/login` requires `AuthContext.isAuthenticated`, enforced by `RequireAuth`, which redirects to `/login`
 
 The Add Product steps guard each other in order: `/add-product/describe` redirects to `/add-product/photo` if there is no captured image yet, and `/add-product/price` redirects to `/add-product/photo` or `/add-product/describe` depending on what is missing. Typing a later step's URL directly always bounces back to the right earlier step instead of rendering with missing data.
 

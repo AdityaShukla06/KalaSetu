@@ -1,8 +1,11 @@
-import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { LanguageToggle } from "../../components/LanguageToggle";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
+
+interface WelcomeScreenProps {
+  onGetStarted: () => void;
+}
 
 function ArrowIcon() {
   return (
@@ -12,8 +15,7 @@ function ArrowIcon() {
   );
 }
 
-export function WelcomeScreen() {
-  const navigate = useNavigate();
+export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
   const { language, t } = useLanguage();
 
   return (
@@ -28,7 +30,7 @@ export function WelcomeScreen() {
         <LanguageToggle />
       </div>
 
-      <Button variant="primary" icon={<ArrowIcon />} onClick={() => navigate("/phone")}>
+      <Button variant="primary" icon={<ArrowIcon />} onClick={onGetStarted}>
         {t("welcome.getStarted")}
       </Button>
     </div>

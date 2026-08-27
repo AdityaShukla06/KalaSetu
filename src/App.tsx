@@ -3,9 +3,7 @@ import { AppProviders } from "./context/AppProviders";
 import { useAuth } from "./context/AuthContext";
 import { BottomNav } from "./components/BottomNav";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { WelcomeScreen } from "./screens/Onboarding/WelcomeScreen";
-import { PhoneEntryScreen } from "./screens/Onboarding/PhoneEntryScreen";
-import { OtpVerificationScreen } from "./screens/Onboarding/OtpVerificationScreen";
+import { LoginScreen } from "./screens/Onboarding/LoginScreen";
 import { HomeScreen } from "./screens/Home/HomeScreen";
 import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
 import { VoiceDescribeScreen } from "./screens/AddProduct/VoiceDescribeScreen";
@@ -38,9 +36,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<RedirectIfAuthed />}>
-              <Route path="/login" element={<WelcomeScreen />} />
-              <Route path="/phone" element={<PhoneEntryScreen />} />
-              <Route path="/otp" element={<OtpVerificationScreen />} />
+              <Route path="/login" element={<LoginScreen />} />
             </Route>
 
             <Route element={<RequireAuth />}>

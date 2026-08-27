@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { OtpInput } from "../../components/OtpInput";
 import { sendOtp, verifyOtp } from "../../services/api";
@@ -8,6 +8,11 @@ import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
 
 const RESEND_COOLDOWN_SECONDS = 30;
+
+interface OtpVerificationScreenProps {
+  phoneNumber: string;
+  onChangeNumber: () => void;
+}
 
 function ShieldIcon() {
   return (
@@ -23,13 +28,10 @@ function ShieldIcon() {
   );
 }
 
-export function OtpVerificationScreen() {
+export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerificationScreenProps) {
   const navigate = useNavigate();
-  const location = useLocation();
   const { login } = useAuth();
   const { language, t } = useLanguage();
-
-  const routedPhoneNumber = (location.state as { phoneNumber?: string } | null)?.phoneNumber;
 
   const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -38,20 +40,10 @@ export function OtpVerificationScreen() {
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
 
   useEffect(() => {
-    if (!routedPhoneNumber) {
-      navigate("/phone", { replace: true });
-    }
-  }, [routedPhoneNumber, navigate]);
-
-  useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setInterval(() => setCooldown((prev) => Math.max(prev - 1, 0)), 1000);
     return () => clearInterval(timer);
   }, [cooldown]);
-
-  if (!routedPhoneNumber) return null;
-
-  const phoneNumber: string = routedPhoneNumber;
 
   function handleOtpChange(value: string) {
     setOtp(value);
@@ -116,7 +108,7 @@ export function OtpVerificationScreen() {
       </Button>
 
       <div className="onboarding-otp-actions">
-        <button type="button" className="onboarding-link" onClick={() => navigate("/phone")}>
+        <button type="button" className="onboarding-link" onClick={onChangeNumber}>
           {t("otp.changeNumber")}
         </button>
         <button

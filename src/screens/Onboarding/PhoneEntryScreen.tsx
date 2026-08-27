@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { sendOtp } from "../../services/api";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
+
+interface PhoneEntryScreenProps {
+  onOtpSent: (phoneNumber: string) => void;
+}
 
 function PhoneIcon() {
   return (
@@ -33,8 +36,7 @@ function SendIcon() {
   );
 }
 
-export function PhoneEntryScreen() {
-  const navigate = useNavigate();
+export function PhoneEntryScreen({ onOtpSent }: PhoneEntryScreenProps) {
   const { language, t } = useLanguage();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export function PhoneEntryScreen() {
 
     try {
       await sendOtp(phoneNumber);
-      navigate("/otp", { state: { phoneNumber } });
+      onOtpSent(phoneNumber);
     } catch {
       setError(t("phone.error"));
     } finally {
