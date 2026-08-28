@@ -11,10 +11,18 @@ dist
 dist-ssr
 *.local
 
-.env
-
+# Firebase & Functions build output
 .firebase
-firebase-debug.log
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+functions/lib
+functions/.runtimeconfig.json
+.runtimeconfig.json
+
+# Environment & local files
+.env
+.env.*.local
 
 .vscode/*
 !.vscode/extensions.json
