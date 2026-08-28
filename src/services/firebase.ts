@@ -1,5 +1,5 @@
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -10,7 +10,19 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+let _app: FirebaseApp | null = null;
+let _auth: Auth | null = null;
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export function getFirebaseAuth(): Auth {
+  if (_auth) return _auth;
 
-export const auth = getAuth(app);
+  if (!firebaseConfig.apiKey) {
+    throw new Error(
+      "Firebase is not configured. Please add VITE_FIREBASE_API_KEY and related keys to your .env file."
+    );
+  }
+
+  _app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  _auth = getAuth(_app);
+  return _auth;
+}
