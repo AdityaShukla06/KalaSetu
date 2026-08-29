@@ -37,6 +37,7 @@ declare global {
   namespace Express {
     interface Request {
       uid: string;
+      phoneNumber: string | null;
     }
   }
 }

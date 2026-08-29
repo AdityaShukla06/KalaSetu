@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { verifyFirebaseToken } from "../middleware/auth";
+import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
 import { calculateSmartPrice, ComplexityLevel } from "../services/pricingEngine";
 
@@ -36,7 +37,7 @@ const PricingInputSchema = z
 router.post(
   "/suggest",
   verifyFirebaseToken,
-  async (req: Request, res: Response): Promise<void> => {
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const parsed = PricingInputSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -62,7 +63,7 @@ router.post(
         message: err?.message || "Calculation error",
       });
     }
-  },
+  }),
 );
 
 export default router;

@@ -18,10 +18,12 @@ const envSchema = z.object({
   BHASHINI_ULCA_API_KEY: z.string().optional(),
   BHASHINI_PIPELINE_ID: z.string().optional(),
 
-  // Optional model overrides, useful for pinning a model during eval runs
-  // without editing source. Fall back to the verified-current defaults.
-  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.5-transcribe"),
-  GEMINI_FLASH_MODEL: z.string().default("gemini-3.5-flash"),
+  // Optional model overrides, so a model can be pinned or upgraded without a
+  // code change. Defaults are GA models that support audio input, text
+  // generation, and structured JSON output. See "Model IDs" in
+  // `remaining tasks.md` before changing these.
+  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_FLASH_MODEL: z.string().default("gemini-2.5-flash"),
 });
 
 export type VoiceAiEnv = z.infer<typeof envSchema>;
