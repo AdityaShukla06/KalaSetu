@@ -1,4 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { onIdTokenChanged } from "firebase/auth";
+import { getFirebaseAuth } from "../services/firebase";
 
 interface AuthState {
   token: string | null;
@@ -29,6 +31,31 @@ function getInitialState(): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(getInitialState);
 
+  useEffect(() => {
+    let auth;
+    try {
+      auth = getFirebaseAuth();
+    } catch {
+      return;
+    }
+
+    return onIdTokenChanged(auth, async (user) => {
+      if (!user) {
+        if (localStorage.getItem(TOKEN_KEY) === null) return;
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_ID_KEY);
+        localStorage.removeItem(PHONE_NUMBER_KEY);
+        setState({ token: null, userId: null, phoneNumber: null });
+        return;
+      }
+
+      const token = await user.getIdToken();
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(USER_ID_KEY, user.uid);
+      setState((prev) => ({ ...prev, token, userId: user.uid }));
+    });
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       ...state,
@@ -44,6 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(USER_ID_KEY);
         localStorage.removeItem(PHONE_NUMBER_KEY);
         setState({ token: null, userId: null, phoneNumber: null });
+        try {
+          getFirebaseAuth().signOut();
+        } catch {
+          return;
+        }
       },
     }),
     [state],

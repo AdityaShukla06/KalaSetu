@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "../../components/Button";
-import type { Product } from "../../services/api";
+import { deleteProduct, updateProduct, type Product } from "../../services/api";
 import { useLanguage } from "../../context/LanguageContext";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
 import "./Home.css";
@@ -8,9 +8,11 @@ import "./Home.css";
 interface ProductDetailSheetProps {
   product: Product;
   onClose: () => void;
+  onChanged: () => void;
 }
 
 type DescriptionTab = "en" | "hi";
+type Mode = "view" | "edit" | "confirmDelete";
 
 function CloseIcon() {
   return (
@@ -47,19 +49,91 @@ function DeleteIcon() {
   );
 }
 
-export function ProductDetailSheet({ product, onClose }: ProductDetailSheetProps) {
+function SaveIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="m5 12 5 5L20 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetailSheetProps) {
   const { language, t } = useLanguage();
   const [descriptionTab, setDescriptionTab] = useState<DescriptionTab>(language);
+  const [mode, setMode] = useState<Mode>("view");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [price, setPrice] = useState(String(product.price));
+  const [descriptionEn, setDescriptionEn] = useState(product.descriptionEn);
+  const [descriptionHi, setDescriptionHi] = useState(product.descriptionHi);
 
   const title = language === "hi" ? product.titleHi : product.titleEn;
   const categoryEntry = CATEGORIES.find((category) => category.id === product.category);
   const categoryLabel = categoryEntry ? t(categoryEntry.labelKey) : product.category;
   const description = descriptionTab === "hi" ? product.descriptionHi : product.descriptionEn;
 
+  function startEdit() {
+    setPrice(String(product.price));
+    setDescriptionEn(product.descriptionEn);
+    setDescriptionHi(product.descriptionHi);
+    setError(null);
+    setMode("edit");
+  }
+
+  async function handleSave() {
+    const parsedPrice = Number(price);
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      setError(t("home.editPriceInvalid"));
+      return;
+    }
+    if (!descriptionEn.trim() || !descriptionHi.trim()) {
+      setError(t("home.editDescriptionRequired"));
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      await updateProduct(product.productId, {
+        price: parsedPrice,
+        descriptionEn: descriptionEn.trim(),
+        descriptionHi: descriptionHi.trim(),
+      });
+      onChanged();
+      onClose();
+    } catch {
+      setError(t("home.editError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteProduct(product.productId);
+      onChanged();
+      onClose();
+    } catch {
+      setError(t("home.deleteError"));
+      setMode("view");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="sheet-overlay" onClick={onClose}>
+    <div className="sheet-overlay" onClick={busy ? undefined : onClose}>
       <div className="sheet" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="sheet-close" onClick={onClose} aria-label={t("home.detailClose")}>
+        <button
+          type="button"
+          className="sheet-close"
+          onClick={onClose}
+          disabled={busy}
+          aria-label={t("home.detailClose")}
+        >
           <CloseIcon />
         </button>
 
@@ -67,7 +141,23 @@ export function ProductDetailSheet({ product, onClose }: ProductDetailSheetProps
 
         <div className="sheet-body">
           <h2>{title}</h2>
-          <p className="price">₹{product.price}</p>
+
+          {mode === "edit" ? (
+            <label className="sheet-field">
+              <span className="caption">{t("home.editPriceLabel")}</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                value={price}
+                onChange={(event) => setPrice(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+          ) : (
+            <p className="price">₹{product.price}</p>
+          )}
+
           <p className="caption">
             {t("home.detailCategory")}: {categoryLabel}
           </p>
@@ -93,23 +183,76 @@ export function ProductDetailSheet({ product, onClose }: ProductDetailSheetProps
             </button>
           </div>
 
-          <p className="body-s sheet-description">{description}</p>
+          {mode === "edit" ? (
+            <label className="sheet-field">
+              <span className="caption">{t("home.editDescriptionLabel")}</span>
+              <textarea
+                rows={4}
+                value={descriptionTab === "hi" ? descriptionHi : descriptionEn}
+                onChange={(event) =>
+                  descriptionTab === "hi"
+                    ? setDescriptionHi(event.target.value)
+                    : setDescriptionEn(event.target.value)
+                }
+                disabled={busy}
+              />
+            </label>
+          ) : (
+            <p className="body-s sheet-description">{description}</p>
+          )}
+
+          {error && (
+            <p className="onboarding-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          {mode === "confirmDelete" && (
+            <p className="body-s sheet-confirm">{t("home.deleteConfirm")}</p>
+          )}
 
           <div className="sheet-actions">
-            <Button
-              variant="secondary"
-              icon={<EditIcon />}
-              onClick={() => console.info("edit product", product.productId)}
-            >
-              {t("home.detailEdit")}
-            </Button>
-            <Button
-              variant="destructive"
-              icon={<DeleteIcon />}
-              onClick={() => console.info("delete product", product.productId)}
-            >
-              {t("home.detailDelete")}
-            </Button>
+            {mode === "view" && (
+              <>
+                <Button variant="secondary" icon={<EditIcon />} onClick={startEdit}>
+                  {t("home.detailEdit")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  icon={<DeleteIcon />}
+                  onClick={() => setMode("confirmDelete")}
+                >
+                  {t("home.detailDelete")}
+                </Button>
+              </>
+            )}
+
+            {mode === "edit" && (
+              <>
+                <Button variant="primary" icon={<SaveIcon />} loading={busy} onClick={handleSave}>
+                  {t("home.editSave")}
+                </Button>
+                <Button variant="tertiary" onClick={() => setMode("view")} disabled={busy}>
+                  {t("home.editCancel")}
+                </Button>
+              </>
+            )}
+
+            {mode === "confirmDelete" && (
+              <>
+                <Button
+                  variant="destructive"
+                  icon={<DeleteIcon />}
+                  loading={busy}
+                  onClick={handleDelete}
+                >
+                  {t("home.deleteConfirmYes")}
+                </Button>
+                <Button variant="tertiary" onClick={() => setMode("view")} disabled={busy}>
+                  {t("home.editCancel")}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
