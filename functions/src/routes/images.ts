@@ -4,14 +4,17 @@ import multer from "multer";
 import { getStorage } from "firebase-admin/storage";
 import { verifyFirebaseToken } from "../middleware/auth";
 import { asyncRoute } from "../middleware/asyncRoute";
+import {
+  enhanceProductImage,
+  normaliseProductImage,
+  UnsupportedImageError,
+} from "../services/imageEnhancer";
 
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
-
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 async function saveImage(buffer: Buffer, mimeType: string, path: string): Promise<string> {
   const bucket = getStorage().bucket();
@@ -30,10 +33,16 @@ async function saveImage(buffer: Buffer, mimeType: string, path: string): Promis
   )}?alt=media&token=${downloadToken}`;
 }
 
-function extensionFor(mimeType: string): string {
-  if (mimeType === "image/png") return "png";
-  if (mimeType === "image/webp") return "webp";
-  return "jpg";
+function rejectNonImage(req: Request, res: Response): boolean {
+  if (!req.file) {
+    res.status(400).json({ error: "No image file provided" });
+    return true;
+  }
+  if (!req.file.mimetype.startsWith("image/")) {
+    res.status(400).json({ error: "Uploaded file is not an image" });
+    return true;
+  }
+  return false;
 }
 
 router.post(
@@ -41,18 +50,20 @@ router.post(
   verifyFirebaseToken,
   upload.single("image"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
-    if (!req.file) {
-      res.status(400).json({ error: "No image file provided" });
-      return;
-    }
-    if (!ALLOWED_IMAGE_TYPES.includes(req.file.mimetype)) {
-      res.status(400).json({ error: "Unsupported image type" });
-      return;
-    }
+    if (rejectNonImage(req, res)) return;
 
-    const path = `products/${req.uid}/raw/${Date.now()}.${extensionFor(req.file.mimetype)}`;
-    const imageUrl = await saveImage(req.file.buffer, req.file.mimetype, path);
-    res.json({ imageUrl });
+    try {
+      const processed = await normaliseProductImage(req.file!.buffer);
+      const path = `products/${req.uid}/raw/${Date.now()}.jpg`;
+      const imageUrl = await saveImage(processed.buffer, processed.mimeType, path);
+      res.json({ imageUrl, width: processed.width, height: processed.height });
+    } catch (err) {
+      if (err instanceof UnsupportedImageError) {
+        res.status(400).json({ error: "unsupported_image", message: err.message });
+        return;
+      }
+      throw err;
+    }
   }),
 );
 
@@ -61,18 +72,20 @@ router.post(
   verifyFirebaseToken,
   upload.single("image"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
-    if (!req.file) {
-      res.status(400).json({ error: "No image file provided" });
-      return;
-    }
-    if (!ALLOWED_IMAGE_TYPES.includes(req.file.mimetype)) {
-      res.status(400).json({ error: "Unsupported image type" });
-      return;
-    }
+    if (rejectNonImage(req, res)) return;
 
-    const path = `products/${req.uid}/enhanced/${Date.now()}.${extensionFor(req.file.mimetype)}`;
-    const enhancedImageUrl = await saveImage(req.file.buffer, req.file.mimetype, path);
-    res.json({ enhancedImageUrl });
+    try {
+      const processed = await enhanceProductImage(req.file!.buffer);
+      const path = `products/${req.uid}/enhanced/${Date.now()}.jpg`;
+      const enhancedImageUrl = await saveImage(processed.buffer, processed.mimeType, path);
+      res.json({ enhancedImageUrl, width: processed.width, height: processed.height });
+    } catch (err) {
+      if (err instanceof UnsupportedImageError) {
+        res.status(400).json({ error: "unsupported_image", message: err.message });
+        return;
+      }
+      throw err;
+    }
   }),
 );
 

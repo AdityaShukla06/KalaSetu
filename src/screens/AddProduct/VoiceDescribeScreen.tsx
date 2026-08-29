@@ -5,6 +5,7 @@ import { CategoryStep } from "./CategoryStep";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { DescriptionEditor } from "./DescriptionEditor";
 import { transcribeAndDescribe } from "../../services/api";
+import { toWavBlob } from "../../services/audio";
 import { useAddProductDraft } from "../../context/AddProductDraftContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./VoiceDescribe.css";
@@ -53,7 +54,8 @@ export function VoiceDescribeScreen() {
     setPhase("transcribing");
 
     try {
-      const result = await transcribeAndDescribe(blob, category ?? "other");
+      const audio = await toWavBlob(blob);
+      const result = await transcribeAndDescribe(audio, category ?? "other");
       setDescriptionEn(result.descriptionEn);
       setDescriptionHi(result.descriptionHi);
       setFallbackNote(false);
@@ -74,7 +76,6 @@ export function VoiceDescribeScreen() {
 
   function handleDescriptionContinue() {
     updateDraft({ descriptionEn, descriptionHi });
-    console.info("proceeding to next step");
     navigate("/add-product/price");
   }
 

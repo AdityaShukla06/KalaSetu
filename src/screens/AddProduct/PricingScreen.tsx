@@ -63,7 +63,10 @@ export function PricingScreen() {
   const { language, t } = useLanguage();
   const { draft, resetDraft } = useAddProductDraft();
 
-  const summaryDescription = language === "hi" ? draft.descriptionHi || draft.descriptionEn : draft.descriptionEn;
+  const summaryDescription =
+    language === "hi"
+      ? draft.descriptionHi || draft.descriptionEn
+      : draft.descriptionEn || draft.descriptionHi;
 
   const [materialCost, setMaterialCost] = useState("");
   const [materialCostError, setMaterialCostError] = useState<string | null>(null);
@@ -76,8 +79,9 @@ export function PricingScreen() {
   const [publishError, setPublishError] = useState(false);
   const [published, setPublished] = useState(false);
 
+  const hasDescription = Boolean(draft.descriptionEn?.trim() || draft.descriptionHi?.trim());
   const missingPhoto = !draft.imageUrl;
-  const missingDescription = !missingPhoto && !(draft.category && draft.descriptionEn);
+  const missingDescription = !missingPhoto && !(draft.category && hasDescription);
   const hasRequiredDraft = !missingPhoto && !missingDescription;
 
   useEffect(() => {
@@ -123,22 +127,30 @@ export function PricingScreen() {
       return;
     }
 
+    const cost = Number(materialCost);
+    if (!materialCost.trim() || !Number.isFinite(cost) || cost <= 0) {
+      setMaterialCostError(t("pricing.materialCostInvalid"));
+      return;
+    }
+
     setSellingPriceError(null);
     setPublishError(false);
     setPublishing(true);
 
     const titles = getCategoryTitles(draft.category ?? "other");
+    const en = draft.descriptionEn?.trim() || draft.descriptionHi?.trim() || "";
+    const hi = draft.descriptionHi?.trim() || draft.descriptionEn?.trim() || "";
 
     try {
       await createProduct({
         category: draft.category ?? "other",
         titleEn: titles.en,
         titleHi: titles.hi,
-        descriptionEn: draft.descriptionEn ?? "",
-        descriptionHi: draft.descriptionHi ?? "",
+        descriptionEn: en,
+        descriptionHi: hi,
         imageUrl: draft.imageUrl ?? "",
         price,
-        materialCost: Number(materialCost),
+        materialCost: cost,
       });
       resetDraft();
       setPublished(true);

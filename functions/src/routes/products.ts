@@ -7,6 +7,17 @@ import { z } from "zod";
 const router = Router();
 const db = getFirestore();
 
+function serialiseProduct(data: FirebaseFirestore.DocumentData): FirebaseFirestore.DocumentData {
+  const out: FirebaseFirestore.DocumentData = { ...data };
+  for (const key of ["createdAt", "updatedAt"]) {
+    const value = out[key];
+    if (value && typeof value.toDate === "function") {
+      out[key] = value.toDate().toISOString();
+    }
+  }
+  return out;
+}
+
 const ProductInputSchema = z.object({
   category: z.string().min(1),
   titleEn: z.string().min(1),
@@ -68,7 +79,7 @@ router.get(
       .orderBy("createdAt", "desc")
       .get();
 
-    res.json(snap.docs.map((doc) => doc.data()));
+    res.json(snap.docs.map((doc) => serialiseProduct(doc.data())));
   }),
 );
 
