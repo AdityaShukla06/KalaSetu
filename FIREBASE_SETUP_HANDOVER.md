@@ -1,4 +1,4 @@
-# KalaSetu — Complete Firebase Setup & Deployment Handover Guide
+# KalaSetu Complete Firebase Setup and Deployment Handover Guide
 
 This guide contains **everything your teammate needs** to set up, configure, wire, and deploy the KalaSetu Firebase backend and frontend from scratch.
 
@@ -138,9 +138,12 @@ In the **`functions/` directory**, create a `.env` file:
 # Google Gemini API Key (From Step 7)
 GEMINI_API_KEY=AIzaSy...
 
-# Optional model defaults
-GEMINI_TRANSCRIBE_MODEL=gemini-3.5-transcribe
-GEMINI_FLASH_MODEL=gemini-3.5-flash
+# Optional model overrides. Leave these out to use the defaults in
+# functions/src/voice-ai/config/env.ts. Both default to gemini-2.5-flash,
+# which handles audio input, text generation, and structured JSON output.
+# See "Confirm the Gemini model IDs" in `remaining tasks.md` before changing them.
+GEMINI_TRANSCRIBE_MODEL=
+GEMINI_FLASH_MODEL=
 
 # BHASHINI Translation (Phase 2 - Leave blank for automatic Gemini fallback)
 BHASHINI_ULCA_USER_ID=
@@ -205,6 +208,9 @@ npx firebase-tools deploy --only firestore
 npx firebase-tools deploy --only storage
 
 # 3. Set Backend Secret for Cloud Functions
+# The `api` function declares this secret in functions/src/index.ts, so it is
+# injected at runtime in production. The functions/.env value above is only
+# used by the local emulator.
 npx firebase-tools functions:secrets:set GEMINI_API_KEY
 
 # 4. Build and Deploy Cloud Functions Backend
@@ -247,4 +253,7 @@ Once deployed, verify each component:
 | `Missing Authorization header` (401) | User is not signed in with Firebase Auth | Sign in first with phone OTP. The client automatically passes the JWT token. |
 | `reCAPTCHA container not found` | Missing anchor element in DOM | Verify `<div id="recaptcha-container" />` exists in `PhoneEntryScreen.tsx`. |
 | `Index not found error in Firestore query` | Firestore composite index missing | Run `npx firebase-tools deploy --only firestore:indexes`. |
+| `Invalid voice-ai environment configuration: GEMINI_API_KEY is required` on `/api/voice/transcribe` | Secret not set, or not granted to the function | Run step 3 above, then redeploy functions so the secret is bound. Only the voice route fails, the rest of the API keeps working. |
+| Voice transcription returns 500 with `stage: "stt"` | Model ID rejected, or audio format unsupported | Check the function logs for the provider error. Try setting `GEMINI_TRANSCRIBE_MODEL` to a current model ID. |
+| Product images show a broken thumbnail | Upload succeeded but the download URL was rejected | Images are served via a tokenized `firebasestorage.googleapis.com` URL, which does not need public bucket ACLs. Confirm the file exists under `products/<userId>/` in the Storage console. |
 | `CORS Error in browser` | Frontend calling functions without `/api` rewrite | Ensure `VITE_API_BASE_URL=/api` in production `.env` so all calls route through Firebase Hosting. |
