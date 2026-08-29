@@ -3,10 +3,8 @@
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
+      { "source": "/api/**", "function": "api" },
+      { "source": "**",      "destination": "/index.html" }
     ],
     "headers": [
       {
@@ -18,5 +16,16 @@
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ]
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs20"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }
