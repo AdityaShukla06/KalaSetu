@@ -1494,63 +1494,18 @@ import { z as z7 } from "zod";
 
 // server/services/pricingEngine.ts
 var CATEGORY_DATASET = {
-  textiles: {
-    name: "Textiles",
-    materialShare: 0.2,
-    rangeDown: 0.1,
-    rangeUp: 0.2,
-    categoryReliabilityScore: 20
-  },
-  pottery: {
-    name: "Pottery",
-    materialShare: 0.25,
-    rangeDown: 0.15,
-    rangeUp: 0.2,
-    categoryReliabilityScore: 15
-  },
-  jewelry: {
-    name: "Jewelry",
-    materialShare: 0.16,
-    rangeDown: 0.15,
-    rangeUp: 0.25,
-    categoryReliabilityScore: 20
-  },
-  woodwork: {
-    name: "Woodwork",
-    materialShare: 0.16,
-    rangeDown: 0.15,
-    rangeUp: 0.25,
-    categoryReliabilityScore: 20
-  },
-  "bamboo-cane": {
-    name: "Bamboo & Cane",
-    materialShare: 0.2,
-    rangeDown: 0.15,
-    rangeUp: 0.25,
-    categoryReliabilityScore: 15
-  },
-  bamboo: {
-    name: "Bamboo & Cane",
-    materialShare: 0.2,
-    rangeDown: 0.15,
-    rangeUp: 0.25,
-    categoryReliabilityScore: 15
-  },
-  other: {
-    name: "Other Handcrafts",
-    materialShare: 0.2,
-    rangeDown: 0.15,
-    rangeUp: 0.2,
-    categoryReliabilityScore: 10
-  }
+  textiles: { name: "Textiles" },
+  pottery: { name: "Pottery" },
+  jewelry: { name: "Jewelry" },
+  woodwork: { name: "Woodwork" },
+  "bamboo-cane": { name: "Bamboo & Cane" },
+  bamboo: { name: "Bamboo & Cane" },
+  other: { name: "Other Handcrafts" }
 };
-var COMPLEXITY_FACTORS = {
-  simple: 0.9,
-  standard: 1,
-  detailed: 1.1,
-  complex: 1.2,
-  exceptional: 1.3
-};
+var COMPLEXITY_LEVELS = ["simple", "standard", "detailed", "complex", "exceptional"];
+function isValidComplexity(value) {
+  return typeof value === "string" && COMPLEXITY_LEVELS.includes(value);
+}
 var MARKET_REFERENCE = {
   textiles: {
     saree: { marketMin: 2015, marketMedian: 5499, marketMax: 16500, sampleCount: 26, sourceCount: 4 },
@@ -1577,6 +1532,31 @@ var MARKET_REFERENCE = {
     decorative: { marketMin: 90, marketMedian: 537, marketMax: 7400, sampleCount: 10, sourceCount: 2 }
   }
 };
+var PRICING_CONFIG = {
+  labourFactors: {
+    simple: 0.3,
+    standard: 0.5,
+    detailed: 0.8,
+    complex: 1.2,
+    exceptional: 1.6
+  },
+  overheadRate: 0.1,
+  fairMargin: 0.2,
+  marketWeights: {
+    high: 0.4,
+    medium: 0.25,
+    low: 0.1,
+    insufficient: 0
+  },
+  maximumMarkup: 0.2
+};
+function getMarketWeight(marketAvailable, sampleCount) {
+  if (!marketAvailable) return PRICING_CONFIG.marketWeights.insufficient;
+  if (sampleCount >= 20) return PRICING_CONFIG.marketWeights.high;
+  if (sampleCount >= 10) return PRICING_CONFIG.marketWeights.medium;
+  if (sampleCount >= 5) return PRICING_CONFIG.marketWeights.low;
+  return PRICING_CONFIG.marketWeights.insufficient;
+}
 function roundToSensibleInr(val) {
   if (!Number.isFinite(val) || val <= 0) return 0;
   if (val < 100) return Math.round(val);
@@ -1629,7 +1609,20 @@ function inferComplexity(text) {
   }
   return "standard";
 }
+function buildExplanation(params) {
+  const productionCostText = `Your estimated production cost is \u20B9${roundToSensibleInr(params.productionCost)}. This includes material cost, estimated labour, and overhead.`;
+  const fairFloorText = `A fair artisan margin gives a minimum fair price of \u20B9${roundToSensibleInr(params.fairPriceFloor)}.`;
+  if (!params.marketAvailable || params.marketMedian === null) {
+    return `${productionCostText} ${fairFloorText} No reliable market benchmark was available for this product segment. The recommendation is therefore based primarily on estimated production cost and the fair artisan margin.`;
+  }
+  const marketText = `Comparable products have a market median of \u20B9${roundToSensibleInr(params.marketMedian)} based on ${params.sampleCount} samples.`;
+  const recommendationText = `The recommended price of \u20B9${params.recommendedPrice} balances artisan protection with market competitiveness.`;
+  return `${productionCostText} ${fairFloorText} ${marketText} ${recommendationText}`;
+}
 function calculateSmartPrice(input) {
+  if (!input.category || !input.category.trim()) {
+    throw new Error("Category is required");
+  }
   let effectiveMaterialCost = 0;
   if (Array.isArray(input.rawMaterials) && input.rawMaterials.length > 0) {
     effectiveMaterialCost = input.rawMaterials.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
@@ -1639,19 +1632,32 @@ function calculateSmartPrice(input) {
   if (effectiveMaterialCost <= 0) {
     throw new Error("Material cost must be greater than 0");
   }
-  const normalizedCategory = (input.category || "other").toLowerCase();
-  const categoryConfig = CATEGORY_DATASET[normalizedCategory] || CATEGORY_DATASET["other"];
-  const { materialShare, rangeDown, rangeUp, categoryReliabilityScore, name: categoryName } = categoryConfig;
-  const fullText = `${input.category || ""} ${input.descriptionEn || ""} ${input.descriptionHi || ""}`.trim();
-  const complexity = input.complexity || inferComplexity(fullText);
-  const complexityFactor = COMPLEXITY_FACTORS[complexity] || 1;
-  const basePrice = effectiveMaterialCost / materialShare;
-  const rawRecommendedPrice = basePrice * complexityFactor;
-  const rawMinimumPrice = rawRecommendedPrice * (1 - rangeDown);
-  const rawMaximumPrice = rawRecommendedPrice * (1 + rangeUp);
-  const minimumPrice = roundToSensibleInr(rawMinimumPrice);
-  const recommendedPrice = roundToSensibleInr(rawRecommendedPrice);
-  const maximumPrice = roundToSensibleInr(rawMaximumPrice);
+  const normalizedCategory = input.category.toLowerCase();
+  const categoryConfig = CATEGORY_DATASET[normalizedCategory];
+  if (!categoryConfig) {
+    throw new Error("Unsupported category");
+  }
+  const categoryName = categoryConfig.name;
+  const fullText = `${input.category} ${input.descriptionEn || ""} ${input.descriptionHi || ""}`.trim();
+  let complexity;
+  let complexitySource;
+  if (input.complexity !== void 0) {
+    if (isValidComplexity(input.complexity)) {
+      complexity = input.complexity;
+      complexitySource = "explicit";
+    } else {
+      complexity = "standard";
+      complexitySource = "invalid-fallback";
+    }
+  } else {
+    complexity = inferComplexity(fullText);
+    complexitySource = "inferred";
+  }
+  const labourFactor = PRICING_CONFIG.labourFactors[complexity];
+  const estimatedLabourCost = effectiveMaterialCost * labourFactor;
+  const overhead = (effectiveMaterialCost + estimatedLabourCost) * PRICING_CONFIG.overheadRate;
+  const productionCost = effectiveMaterialCost + estimatedLabourCost + overhead;
+  const fairPriceFloor = productionCost * (1 + PRICING_CONFIG.fairMargin);
   const selectedSubcategory = input.subcategory || inferSubcategory(normalizedCategory, fullText);
   const catMarket = MARKET_REFERENCE[normalizedCategory];
   const marketData = selectedSubcategory && catMarket ? catMarket[selectedSubcategory] : void 0;
@@ -1661,95 +1667,64 @@ function calculateSmartPrice(input) {
   const marketMax = marketData ? marketData.marketMax : null;
   const sampleCount = marketData ? marketData.sampleCount : 0;
   const sourceCount = marketData ? marketData.sourceCount : 0;
-  let marketDeviation = null;
-  let marketAlignmentScore = 0;
-  if (marketAvailable && marketMedian && marketMedian > 0) {
-    marketDeviation = Math.abs(recommendedPrice - marketMedian) / marketMedian;
-    if (sampleCount < 5) {
-      marketAlignmentScore = 10;
-    } else if (marketMin !== null && marketMax !== null && recommendedPrice >= marketMin && recommendedPrice <= marketMax) {
-      marketAlignmentScore = 30;
-    } else if (marketDeviation <= 0.25) {
-      marketAlignmentScore = 20;
-    } else if (marketDeviation <= 0.5) {
-      marketAlignmentScore = 10;
-    } else {
-      marketAlignmentScore = 5;
-    }
-  } else {
-    marketAlignmentScore = 0;
-  }
-  let marketDataQualityScore = 0;
-  if (!marketAvailable) {
-    marketDataQualityScore = 0;
-  } else if (sampleCount >= 20 && sourceCount >= 3) {
-    marketDataQualityScore = 30;
-  } else if (sampleCount >= 10 && sourceCount >= 2) {
-    marketDataQualityScore = 25;
-  } else if (sampleCount >= 5 && sourceCount >= 2) {
-    marketDataQualityScore = 20;
-  } else if (sampleCount >= 5) {
-    marketDataQualityScore = 15;
-  } else {
-    marketDataQualityScore = 10;
-  }
-  const marketComponent = Math.min(marketAlignmentScore, marketDataQualityScore);
-  let inputScore = 0;
-  if (effectiveMaterialCost > 0) inputScore += 10;
-  if (CATEGORY_DATASET[normalizedCategory]) inputScore += 5;
-  if (input.descriptionEn && input.descriptionEn.trim().length > 0) inputScore += 3;
-  if (input.imageUrl && input.imageUrl.startsWith("http")) inputScore += 2;
-  let productInformationScore = 0;
-  const hasDesc = Boolean(input.descriptionEn && input.descriptionEn.trim());
-  const hasImg = Boolean(input.imageUrl && input.imageUrl.startsWith("http"));
-  if (hasDesc && hasImg) {
-    productInformationScore = 15;
-  } else if (hasDesc || hasImg) {
-    productInformationScore = 8;
-  }
-  let calculationValidityScore = 15;
-  if (materialShare <= 0 || complexityFactor <= 0 || !Number.isFinite(recommendedPrice) || recommendedPrice <= 0 || minimumPrice <= 0 || maximumPrice <= 0) {
-    calculationValidityScore = 0;
-  }
-  let rawConfidenceScore = inputScore + categoryReliabilityScore + marketComponent + productInformationScore + calculationValidityScore;
-  const confidenceScore = Math.max(0, Math.min(100, Math.round(rawConfidenceScore)));
-  let confidenceLabel = "Medium";
-  if (confidenceScore >= 90) confidenceLabel = "Very High";
-  else if (confidenceScore >= 75) confidenceLabel = "High";
-  else if (confidenceScore >= 60) confidenceLabel = "Medium";
-  else if (confidenceScore >= 40) confidenceLabel = "Low";
-  else confidenceLabel = "Very Low";
-  let marketExplanation = "";
-  if (!marketAvailable) {
-    marketExplanation = "Fair artisan value based on material costs and standard handcrafted labor markup.";
-  } else if (marketMin !== null && marketMax !== null && recommendedPrice >= marketMin && recommendedPrice <= marketMax) {
-    marketExplanation = `Aligns well with market benchmarks for ${selectedSubcategory ? selectedSubcategory : categoryName} (\u20B9${marketMin} - \u20B9${marketMax}).`;
-  } else if (marketDeviation !== null && marketDeviation <= 0.25) {
-    marketExplanation = `Within 25% of market median (\u20B9${marketMedian}) for similar artisanal items.`;
-  } else if (marketDeviation !== null && marketDeviation <= 0.5) {
-    marketExplanation = `Differs moderately from market median (\u20B9${marketMedian}) due to customized craft complexity.`;
-  } else {
-    marketExplanation = `Reflects premium handcrafted value based on material input and craftsmanship.`;
-  }
-  let materialNote = `\u20B9${effectiveMaterialCost} material cost`;
-  if (Array.isArray(input.rawMaterials) && input.rawMaterials.length > 1) {
-    materialNote = `\u20B9${effectiveMaterialCost} itemized materials (${input.rawMaterials.map((m) => m.name || "item").slice(0, 3).join(", ")})`;
-  }
-  const complexityNote = complexity === "simple" ? "simple artisan craft" : complexity === "complex" || complexity === "exceptional" ? "intricate artisanal craftsmanship" : "standard handcrafted technique";
-  const reason = `Based on ${materialNote}, ${categoryName} labor margin (${Math.round(
-    (1 - materialShare) * 100
-  )}%), and ${complexityNote}. ${marketExplanation}`;
+  const marketWeight = getMarketWeight(marketAvailable, sampleCount);
+  const costWeight = 1 - marketWeight;
+  const rawRecommendedPrice = marketAvailable && marketMedian !== null ? Math.max(fairPriceFloor, costWeight * fairPriceFloor + marketWeight * marketMedian) : fairPriceFloor;
+  const rawMinimumPrice = fairPriceFloor;
+  const rawMaximumCandidate = rawRecommendedPrice * (1 + PRICING_CONFIG.maximumMarkup);
+  const rawMaximumPrice = marketAvailable && marketMax !== null ? Math.max(rawRecommendedPrice, Math.min(marketMax, rawMaximumCandidate)) : rawMaximumCandidate;
+  const minimumPrice = roundToSensibleInr(rawMinimumPrice);
+  const recommendedPrice = roundToSensibleInr(rawRecommendedPrice);
+  const maximumPrice = roundToSensibleInr(rawMaximumPrice);
+  const marketEvidenceScore = !marketAvailable ? 0 : sampleCount >= 20 ? 40 : sampleCount >= 10 ? 30 : sampleCount >= 5 ? 20 : 10;
+  const hasImage = Boolean(input.imageUrl && input.imageUrl.startsWith("http"));
+  const descText = (input.descriptionEn || input.descriptionHi || "").trim();
+  const hasUsefulDescription = descText.length >= 15;
+  const hasAnyDescription = descText.length > 0;
+  const productIdentificationScore = hasImage && hasUsefulDescription ? 30 : hasImage || hasUsefulDescription ? 20 : hasAnyDescription ? 10 : 0;
+  const costEstimateScore = complexitySource === "explicit" ? 30 : complexitySource === "inferred" ? 20 : 10;
+  const recommendationReliability = Math.max(
+    0,
+    Math.min(100, marketEvidenceScore + productIdentificationScore + costEstimateScore)
+  );
+  let reliabilityLabel = "Medium";
+  if (recommendationReliability >= 90) reliabilityLabel = "Very High";
+  else if (recommendationReliability >= 75) reliabilityLabel = "High";
+  else if (recommendationReliability >= 60) reliabilityLabel = "Medium";
+  else if (recommendationReliability >= 40) reliabilityLabel = "Low";
+  else reliabilityLabel = "Very Low";
+  const reason = buildExplanation({
+    productionCost,
+    fairPriceFloor,
+    marketAvailable,
+    marketMedian,
+    sampleCount,
+    recommendedPrice
+  });
   return {
     success: true,
     suggestedMin: minimumPrice,
     suggestedMax: maximumPrice,
-    recommendedPrice,
     minimumPrice,
+    recommendedPrice,
     maximumPrice,
     reason,
     reasoning: reason,
-    confidenceScore,
-    confidenceLabel,
+    recommendationReliability,
+    reliabilityLabel,
+    pricingBreakdown: {
+      materialCost: effectiveMaterialCost,
+      estimatedLabourCost: roundToSensibleInr(estimatedLabourCost),
+      overhead: roundToSensibleInr(overhead),
+      productionCost: roundToSensibleInr(productionCost),
+      fairPriceFloor: roundToSensibleInr(fairPriceFloor),
+      marketMedian,
+      marketWeight,
+      costWeight,
+      complexity,
+      subcategory: selectedSubcategory,
+      categoryName
+    },
     marketReference: {
       available: marketAvailable,
       min: marketMin,
@@ -1758,15 +1733,10 @@ function calculateSmartPrice(input) {
       sampleCount,
       sourceCount
     },
-    breakdown: {
-      materialCost: effectiveMaterialCost,
-      rawMaterials: input.rawMaterials,
-      basePrice: roundToSensibleInr(basePrice),
-      complexity,
-      complexityFactor,
-      materialShare,
-      categoryName,
-      subcategory: selectedSubcategory
+    assumptions: {
+      labourFactor,
+      overheadRate: PRICING_CONFIG.overheadRate,
+      fairMargin: PRICING_CONFIG.fairMargin
     }
   };
 }

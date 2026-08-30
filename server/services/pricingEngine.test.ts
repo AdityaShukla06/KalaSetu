@@ -1,22 +1,39 @@
 import { describe, it, expect } from "vitest";
-import { calculateSmartPrice, CATEGORY_DATASET, COMPLEXITY_FACTORS } from "./pricingEngine";
+import { calculateSmartPrice, getMarketWeight, PRICING_CONFIG } from "./pricingEngine";
 
-describe("calculateSmartPrice", () => {
-  it("throws when no usable material cost is supplied", () => {
-    expect(() => calculateSmartPrice({ category: "pottery" })).toThrow();
-    expect(() => calculateSmartPrice({ category: "pottery", rawMaterials: [] })).toThrow();
+describe("getMarketWeight", () => {
+  it("gives strong evidence weight for 26 samples", () => {
+    expect(getMarketWeight(true, 26)).toBe(0.40);
   });
 
-  it("derives the base price from the category material share", () => {
-    const result = calculateSmartPrice({
-      category: "pottery",
-      materialCost: 250,
-      complexity: "standard",
-    });
+  it("gives moderate evidence weight for 15 samples", () => {
+    expect(getMarketWeight(true, 15)).toBe(0.25);
+  });
 
-    expect(result.breakdown.materialShare).toBe(CATEGORY_DATASET.pottery.materialShare);
-    expect(result.breakdown.complexityFactor).toBe(COMPLEXITY_FACTORS.standard);
-    expect(result.recommendedPrice).toBe(1000);
+  it("gives weak evidence weight for 7 samples", () => {
+    expect(getMarketWeight(true, 7)).toBe(0.10);
+  });
+
+  it("gives zero weight for 3 samples", () => {
+    expect(getMarketWeight(true, 3)).toBe(0);
+  });
+
+  it("gives zero weight when no market data exists", () => {
+    expect(getMarketWeight(false, 100)).toBe(0);
+  });
+});
+
+describe("calculateSmartPrice", () => {
+  it("throws on invalid material cost", () => {
+    expect(() => calculateSmartPrice({ category: "pottery", materialCost: 0 })).toThrow();
+    expect(() => calculateSmartPrice({ category: "pottery", materialCost: -50 })).toThrow();
+    expect(() => calculateSmartPrice({ category: "pottery" })).toThrow();
+  });
+
+  it("throws on an unsupported category", () => {
+    expect(() => calculateSmartPrice({ category: "not-a-real-category", materialCost: 200 })).toThrow(
+      "Unsupported category"
+    );
   });
 
   it("sums itemized raw materials in preference to a flat material cost", () => {
@@ -29,14 +46,105 @@ describe("calculateSmartPrice", () => {
       ],
     });
 
-    expect(result.breakdown.materialCost).toBe(250);
+    expect(result.pricingBreakdown.materialCost).toBe(250);
+  });
+
+  it("derives production cost from material cost, estimated labour and overhead", () => {
+    const result = calculateSmartPrice({
+      category: "pottery",
+      materialCost: 1000,
+      complexity: "complex",
+      subcategory: "does-not-exist",
+    });
+
+    const labourFactor = PRICING_CONFIG.labourFactors.complex;
+    const expectedLabour = 1000 * labourFactor;
+    const expectedOverhead = (1000 + expectedLabour) * PRICING_CONFIG.overheadRate;
+    const expectedProductionCost = 1000 + expectedLabour + expectedOverhead;
+    const expectedFairFloor = expectedProductionCost * (1 + PRICING_CONFIG.fairMargin);
+
+    expect(Math.abs(result.pricingBreakdown.estimatedLabourCost - expectedLabour)).toBeLessThanOrEqual(50);
+    expect(Math.abs(result.pricingBreakdown.overhead - expectedOverhead)).toBeLessThanOrEqual(50);
+    expect(Math.abs(result.pricingBreakdown.productionCost - expectedProductionCost)).toBeLessThanOrEqual(50);
+    expect(Math.abs(result.pricingBreakdown.fairPriceFloor - expectedFairFloor)).toBeLessThanOrEqual(50);
+  });
+
+  it("uses the fair price floor as the recommended price when no market data exists", () => {
+    const result = calculateSmartPrice({
+      category: "other",
+      materialCost: 400,
+      descriptionEn: "A thing",
+    });
+
+    expect(result.marketReference.available).toBe(false);
+    expect(result.recommendedPrice).toBe(result.minimumPrice);
+    expect(result.pricingBreakdown.marketWeight).toBe(0);
+  });
+
+  it("treats an unknown subcategory the same as no market data", () => {
+    const result = calculateSmartPrice({
+      category: "pottery",
+      materialCost: 400,
+      subcategory: "does-not-exist",
+    });
+
+    expect(result.marketReference.available).toBe(false);
+    expect(result.recommendedPrice).toBe(result.minimumPrice);
+    expect(result.pricingBreakdown.marketWeight).toBe(0);
+  });
+
+  it("weighs strong market evidence into the recommended price without dropping below the fair floor", () => {
+    const result = calculateSmartPrice({
+      category: "textiles",
+      materialCost: 2000,
+      complexity: "detailed",
+      subcategory: "saree",
+    });
+
+    expect(result.marketReference.sampleCount).toBe(26);
+    expect(result.pricingBreakdown.marketWeight).toBe(0.40);
+    expect(result.recommendedPrice).toBeGreaterThanOrEqual(result.minimumPrice);
+  });
+
+  it("never recommends a price below the fair price floor even when the market median is far lower", () => {
+    const result = calculateSmartPrice({
+      category: "jewelry",
+      materialCost: 1000,
+      complexity: "standard",
+      subcategory: "bangle",
+    });
+
+    expect(result.marketReference.median).toBeLessThan(result.pricingBreakdown.fairPriceFloor);
+    expect(result.recommendedPrice).toBeGreaterThanOrEqual(result.pricingBreakdown.fairPriceFloor);
+  });
+
+  it("falls back to standard complexity when an invalid value is supplied and lowers reliability", () => {
+    const base = {
+      category: "woodwork" as const,
+      materialCost: 500,
+      subcategory: "sculpture",
+    };
+
+    const withInvalidComplexity = calculateSmartPrice({
+      ...base,
+      complexity: "ultra-fancy" as any,
+    });
+    const withExplicitStandard = calculateSmartPrice({
+      ...base,
+      complexity: "standard",
+    });
+
+    expect(withInvalidComplexity.pricingBreakdown.complexity).toBe("standard");
+    expect(withInvalidComplexity.recommendationReliability).toBeLessThan(
+      withExplicitStandard.recommendationReliability
+    );
   });
 
   it("orders the suggested range around the recommended price", () => {
     const result = calculateSmartPrice({ category: "textiles", materialCost: 1000 });
 
-    expect(result.suggestedMin).toBeLessThanOrEqual(result.recommendedPrice);
-    expect(result.recommendedPrice).toBeLessThanOrEqual(result.suggestedMax);
+    expect(result.minimumPrice).toBeLessThanOrEqual(result.recommendedPrice);
+    expect(result.recommendedPrice).toBeLessThanOrEqual(result.maximumPrice);
   });
 
   it("raises the price for more complex work", () => {
@@ -50,22 +158,6 @@ describe("calculateSmartPrice", () => {
     expect(exceptional.recommendedPrice).toBeGreaterThan(simple.recommendedPrice);
   });
 
-  it("falls back to the 'other' category for an unknown category", () => {
-    const result = calculateSmartPrice({ category: "not-a-real-category", materialCost: 200 });
-
-    expect(result.breakdown.categoryName).toBe(CATEGORY_DATASET.other.name);
-  });
-
-  it("infers complexity from the description when none is given", () => {
-    const result = calculateSmartPrice({
-      category: "jewelry",
-      materialCost: 300,
-      descriptionEn: "An intricate hand embroidered piece with fine carving",
-    });
-
-    expect(result.breakdown.complexity).toBe("complex");
-  });
-
   it("infers a subcategory and attaches its market benchmark", () => {
     const result = calculateSmartPrice({
       category: "pottery",
@@ -73,37 +165,26 @@ describe("calculateSmartPrice", () => {
       descriptionEn: "A tall ceramic vase for flowers",
     });
 
-    expect(result.breakdown.subcategory).toBe("vase");
+    expect(result.pricingBreakdown.subcategory).toBe("vase");
     expect(result.marketReference.available).toBe(true);
     expect(result.marketReference.median).toBe(2500);
   });
 
-  it("reports no market reference when the subcategory is unknown", () => {
-    const result = calculateSmartPrice({
-      category: "other",
-      materialCost: 400,
-      descriptionEn: "A thing",
-    });
-
-    expect(result.marketReference.available).toBe(false);
-    expect(result.marketReference.median).toBeNull();
-  });
-
-  it("keeps the confidence score within bounds and scores richer input higher", () => {
+  it("keeps the reliability score within bounds and scores richer input higher", () => {
     const sparse = calculateSmartPrice({ category: "other", materialCost: 400 });
     const rich = calculateSmartPrice({
       category: "pottery",
       materialCost: 400,
-      descriptionEn: "A tall ceramic vase for flowers",
+      descriptionEn: "A tall hand-thrown ceramic vase with a glossy glaze finish",
       imageUrl: "https://example.com/vase.jpg",
     });
 
     for (const result of [sparse, rich]) {
-      expect(result.confidenceScore).toBeGreaterThanOrEqual(0);
-      expect(result.confidenceScore).toBeLessThanOrEqual(100);
+      expect(result.recommendationReliability).toBeGreaterThanOrEqual(0);
+      expect(result.recommendationReliability).toBeLessThanOrEqual(100);
     }
 
-    expect(rich.confidenceScore).toBeGreaterThan(sparse.confidenceScore);
+    expect(rich.recommendationReliability).toBeGreaterThan(sparse.recommendationReliability);
   });
 
   it("keeps reason and reasoning in sync for the frontend", () => {

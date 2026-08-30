@@ -26,8 +26,8 @@ export interface PricingSuggestionOutput {
   maximumPrice?: number;
   reasoning: string;
   reason?: string;
-  confidenceScore?: number;
-  confidenceLabel?: "Very High" | "High" | "Medium" | "Low" | "Very Low";
+  recommendationReliability?: number;
+  reliabilityLabel?: "Very High" | "High" | "Medium" | "Low" | "Very Low";
   marketReference?: {
     available: boolean;
     min: number | null;
@@ -36,15 +36,23 @@ export interface PricingSuggestionOutput {
     sampleCount: number;
     sourceCount: number;
   };
-  breakdown?: {
+  pricingBreakdown?: {
     materialCost: number;
-    rawMaterials?: RawMaterialItem[];
-    basePrice: number;
+    estimatedLabourCost: number;
+    overhead: number;
+    productionCost: number;
+    fairPriceFloor: number;
+    marketMedian: number | null;
+    marketWeight: number;
+    costWeight: number;
     complexity: string;
-    complexityFactor: number;
-    materialShare: number;
-    categoryName: string;
     subcategory: string | null;
+    categoryName: string;
+  };
+  assumptions?: {
+    labourFactor: number;
+    overheadRate: number;
+    fairMargin: number;
   };
 }
 
