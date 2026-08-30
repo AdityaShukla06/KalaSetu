@@ -83,7 +83,7 @@ router.get("/", (_req, res) => {
     config: {
       missing,
       provider,
-      present: [...required, ...OPTIONAL].filter(isSet),
+      present: [.../* @__PURE__ */ new Set([...required, ...OPTIONAL])].filter(isSet),
       valid: configValid,
       ...configError ? { error: configError } : {}
     }
