@@ -258,6 +258,38 @@
   color: var(--color-secondary);
 }
 
+.sheet-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sheet-field input,
+.sheet-field textarea {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-input);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  font-weight: 600;
+  color: var(--color-secondary);
+  resize: vertical;
+}
+
+.sheet-field input:focus,
+.sheet-field textarea:focus {
+  outline: none;
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(193, 80, 46, 0.14);
+}
+
+.sheet-confirm {
+  color: var(--color-secondary);
+  font-weight: 600;
+}
+
 .sheet-actions {
   display: flex;
   gap: var(--space-3);

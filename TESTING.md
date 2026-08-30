@@ -4,6 +4,8 @@ Run this on a real Android phone, using the live deployed URL (see `DEPLOY.md`),
 
 Fill in Pass/Fail and notes as you go. If something fails, note the issue and a plan to fix it before the demo rather than leaving it blank.
 
+Before starting, confirm `https://<project-id>.web.app/api/health` returns `{"status":"ok"}`. If it does not, the frontend will look broken in ways that have nothing to do with the checklist below.
+
 | # | Check | Result | Notes |
 |---|-------|--------|-------|
 | 1 | Login with OTP works | Not yet tested | |
@@ -19,6 +21,9 @@ Fill in Pass/Fail and notes as you go. If something fails, note the issue and a 
 | 11 | Installed app opens in standalone mode (no browser chrome) | Not yet tested | |
 | 12 | Offline banner appears when connection is dropped | Not yet tested | |
 | 13 | Full add-product flow (photo through publish) completed in under 2 minutes | Not yet tested | Time it with a stopwatch |
+| 14 | Edit a product (price and description) saves and the grid updates | Not yet tested | |
+| 15 | Delete a product asks for confirmation, then removes it from the grid | Not yet tested | |
+| 16 | A published product is still there after a full app restart | Not yet tested | Confirms Firestore persistence, not just in-memory state |
 
 ## Live URL
 

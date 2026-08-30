@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { verifyFirebaseToken } from "../middleware/auth";
+import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
 
 const router = Router();
@@ -20,7 +21,7 @@ const ProductInputSchema = z.object({
 router.post(
   "/",
   verifyFirebaseToken,
-  async (req: Request, res: Response): Promise<void> => {
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const parsed = ProductInputSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -40,18 +41,19 @@ router.post(
       updatedAt: now,
     });
 
-    await db.collection("users").doc(uid).update({
-      totalProducts: FieldValue.increment(1),
-    });
+    await db.collection("users").doc(uid).set(
+      { userId: uid, totalProducts: FieldValue.increment(1) },
+      { merge: true },
+    );
 
     res.status(201).json({ productId: ref.id });
-  },
+  }),
 );
 
 router.get(
   "/",
   verifyFirebaseToken,
-  async (req: Request, res: Response): Promise<void> => {
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const uid = req.uid;
     const requestedUserId = req.query.userId as string | undefined;
 
@@ -67,13 +69,13 @@ router.get(
       .get();
 
     res.json(snap.docs.map((doc) => doc.data()));
-  },
+  }),
 );
 
 router.patch(
   "/:id",
   verifyFirebaseToken,
-  async (req: Request, res: Response): Promise<void> => {
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const parsed = ProductInputSchema.partial().safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -94,13 +96,13 @@ router.patch(
 
     await ref.update({ ...parsed.data, updatedAt: FieldValue.serverTimestamp() });
     res.json({ success: true });
-  },
+  }),
 );
 
 router.delete(
   "/:id",
   verifyFirebaseToken,
-  async (req: Request, res: Response): Promise<void> => {
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const ref = db.collection("products").doc(req.params.id as string);
     const snap = await ref.get();
 
@@ -114,12 +116,13 @@ router.delete(
     }
 
     await ref.delete();
-    await db.collection("users").doc(req.uid).update({
-      totalProducts: FieldValue.increment(-1),
-    });
+    await db.collection("users").doc(req.uid).set(
+      { userId: req.uid, totalProducts: FieldValue.increment(-1) },
+      { merge: true },
+    );
 
     res.json({ success: true });
-  },
+  }),
 );
 
 export default router;

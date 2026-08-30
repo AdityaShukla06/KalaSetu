@@ -4,4 +4,4 @@ import app from "./app";
 
 initializeApp();
 
-export const api = onRequest(app);
+export const api = onRequest({ secrets: ["GEMINI_API_KEY"] }, app);

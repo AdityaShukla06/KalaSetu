@@ -1,8 +1,25 @@
+import { getFirebaseAuth } from "../firebase";
+
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
-//func to validate request from authorized user
+const TOKEN_KEY = "kalasetu.token";
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const user = getFirebaseAuth().currentUser;
+    if (user) {
+      const token = await user.getIdToken();
+      localStorage.setItem(TOKEN_KEY, token);
+      return token;
+    }
+  } catch {
+    return localStorage.getItem(TOKEN_KEY);
+  }
+  return localStorage.getItem(TOKEN_KEY);
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem("kalasetu.token");
+  const token = await getAuthToken();
   const headers = new Headers(options.headers);
 
   if (token) headers.set("Authorization", `Bearer ${token}`);

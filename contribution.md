@@ -22,6 +22,8 @@ Create a branch and open a pull request instead, even for small changes. This ke
 
 - `npm run build` passes (type checks and production build)
 - `npm run lint` is clean
+- If you touched `functions/`, `npm run build` and `npm test` pass in there too
+- CI runs all of the above on every pull request, but check locally first rather than using CI as your test runner
 - You tested the change in both English and Hindi if it touches UI, layout differences show up more in Hindi due to longer text
 - New user facing strings are added to both `en` and `hi` in `src/context/translations.ts`, not just one language
 - No comments in committed files, and no em dashes anywhere (code, docs, commit messages), see existing files for the house style

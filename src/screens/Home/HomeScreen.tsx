@@ -124,7 +124,11 @@ export function HomeScreen() {
       )}
 
       {selectedProduct && (
-        <ProductDetailSheet product={selectedProduct} onClose={() => setSelectedProduct(null)} />
+        <ProductDetailSheet
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+          onChanged={loadProducts}
+        />
       )}
     </div>
   );
