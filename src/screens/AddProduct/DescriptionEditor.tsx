@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "../../components/Button";
+import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
 import { useLanguage } from "../../context/LanguageContext";
 import "./VoiceDescribe.css";
 
@@ -12,7 +13,6 @@ interface DescriptionEditorProps {
   note?: ReactNode;
 }
 
-type Tab = "en" | "local";
 
 export function DescriptionEditor({
   descriptionEn,
@@ -23,8 +23,7 @@ export function DescriptionEditor({
   note,
 }: DescriptionEditorProps) {
   const { language, t } = useLanguage();
-  const [tab, setTab] = useState<Tab>("en");
-  const localLabel = language === "en" ? t("language.en") : t("describe.localTab");
+  const [tab, setTab] = useState<DescriptionTab>("en");
 
   const canContinue = descriptionEn.trim().length > 0 || descriptionLocal.trim().length > 0;
 
@@ -33,26 +32,7 @@ export function DescriptionEditor({
       {note && <p className="body-s description-note">{note}</p>}
       <p className="caption description-hint">{t("describe.reviewHint")}</p>
 
-      <div className="language-toggle" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "en"}
-          className={`language-option${tab === "en" ? " language-option-active" : ""}`}
-          onClick={() => setTab("en")}
-        >
-          {t("language.en")}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "local"}
-          className={`language-option${tab === "local" ? " language-option-active" : ""}`}
-          onClick={() => setTab("local")}
-        >
-          {localLabel}
-        </button>
-      </div>
+      <LanguageTabs value={tab} onChange={setTab} />
 
       {tab === "en" ? (
         <textarea

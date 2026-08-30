@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "../../components/Button";
+import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
 import { deleteProduct, updateProduct, type Product } from "../../services/api";
 import { useLanguage } from "../../context/LanguageContext";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
@@ -11,7 +12,6 @@ interface ProductDetailSheetProps {
   onChanged: () => void;
 }
 
-type DescriptionTab = "en" | "local";
 type Mode = "view" | "edit" | "confirmDelete";
 
 function CloseIcon() {
@@ -162,26 +162,7 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
             {t("home.detailCategory")}: {categoryLabel}
           </p>
 
-          <div className="language-toggle" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={descriptionTab === "en"}
-              className={`language-option${descriptionTab === "en" ? " language-option-active" : ""}`}
-              onClick={() => setDescriptionTab("en")}
-            >
-              {t("language.en")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={descriptionTab === "local"}
-              className={`language-option${descriptionTab === "local" ? " language-option-active" : ""}`}
-              onClick={() => setDescriptionTab("local")}
-            >
-              {t("describe.localTab")}
-            </button>
-          </div>
+          <LanguageTabs value={descriptionTab} onChange={setDescriptionTab} />
 
           {mode === "edit" ? (
             <label className="sheet-field">
