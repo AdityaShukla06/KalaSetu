@@ -62,6 +62,7 @@ Both are run on every pull request by `.github/workflows/ci.yml`.
 - [~] Phase 9: Firebase Hosting config and deploy script ready (`firebase.json`, `DEPLOY.md`), actual deploy and Android device test pass deferred, see `TESTING.md`
 - [x] Phase 10: Real backend, Firebase Functions API (users, products, images, voice, pricing), Firestore and Storage rules, smart pricing engine, Gemini voice pipeline, real Phone Auth, frontend wired off mocks onto real endpoints
 - [x] Phase 11: Backend integration fixes (working Gemini transcription, BHASHINI compute call, ID token refresh, first-publish crash), Edit and Delete wired up, backend test suite and CI
+- [x] Phase 12: Real image enhancement, browser side WAV conversion so voice works on Android, description fallback fixes, editable profile, timestamp serialisation
 
 ## Deploy
 
@@ -110,17 +111,19 @@ A class based `ErrorBoundary` wraps the whole app and shows a bilingual "Somethi
 
 ## Profile
 
-`/profile` shows the signed in phone number, the same `LanguageToggle` used on the welcome screen, and a "Log out" button that clears `AuthContext` and redirects to `/login`.
+`/profile` loads the artisan's profile from `GET /api/users/me`, which creates it on first call, and shows the phone number (filled in from the verified Firebase token, so it is correct even though the client never sends it). "Your name" and "Shop name" are editable and save through `PATCH /api/users/me`, with the save button disabled until something actually changes. The screen also carries the same `LanguageToggle` used on the welcome screen and a "Log out" button that clears `AuthContext`, signs out of Firebase, and redirects to `/login`.
 
 ## Add Product, photo capture
 
 `/add-product/photo` is an immersive full screen route with no bottom tab bar, since it is the start of a multi step wizard (photo, voice, pricing). It uses `getUserMedia` with the rear camera by default. If the camera throws (permission denied, unsupported browser, no camera), it falls back to a native `<input type="file" accept="image/*" capture="environment">` styled to match the rest of the flow. The camera stream is stopped as soon as the live view unmounts, whether that is a successful capture or leaving the screen entirely.
 
-`enhanceImage` uploads the captured photo to Cloud Storage under `products/<userId>/enhanced/` and returns a tokenized download URL. The captured blob and the enhanced image URL are stored in `AddProductDraftContext` so the voice and pricing steps can read them later without prop drilling. The enhancement itself is currently a passthrough, the image is stored as captured, see `remaining tasks.md`.
+`enhanceImage` runs the photo through a real sharp pipeline on the backend (EXIF auto rotation, resize to fit 1600px, contrast normalisation, a slight saturation lift, mild sharpening, mozjpeg encoding), stores it in Cloud Storage under `products/<userId>/enhanced/`, and returns a tokenized download URL. The auto rotation matters most in practice, phone photos routinely carry an EXIF orientation flag that would otherwise show the product sideways. Enhancement is deliberately deterministic rather than generative, a marketplace photo has to keep showing the artisan's actual product. The captured blob and the enhanced image URL are stored in `AddProductDraftContext` so the voice and pricing steps can read them later without prop drilling.
 
 ## Add Product, voice description
 
 `/add-product/describe` starts with a category grid (single select, stored in the draft), then a `MediaRecorder` based voice recorder: tap to start, tap to stop, a live timer, an animated bar indicator while recording, and native playback with a re-record option before submitting. If `MediaRecorder` or `getUserMedia` is unavailable or the user denies the mic, it skips straight to the manual text entry screen instead of dead ending.
+
+Recordings are converted to 16kHz mono WAV in the browser before upload (`src/services/audio.ts`). MediaRecorder produces `audio/webm` on Chrome for Android, which the transcription model does not accept, so this conversion is what makes voice work on the target device at all. If decoding fails the original blob is sent unchanged, and the backend then rejects an unsupported format with a clear error rather than a raw provider failure.
 
 Submitting a recording calls `transcribeAndDescribe`, which runs the backend voice pipeline: Gemini transcribes the audio in its original script and reports the spoken language, a regional transcript is translated to English, Gemini writes the English product description under a strict no-invention prompt, and that description is translated to Hindi rather than generated separately. The result lands on an editable review screen with independent English and Hindi tabs (`DescriptionEditor`), labeled "Review and edit if needed" so it is clear the AI text is a draft, not a final answer. "Continue" saves both descriptions into `AddProductDraftContext` and moves on to pricing. The mic stream is released as soon as recording stops, or immediately on unmount if the screen is left mid-recording.
 

@@ -96,7 +96,8 @@ export function VoiceRecorder({ onSubmit, onFallback }: VoiceRecorderProps) {
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const recordedType = recorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: recordedType });
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
         streamRef.current?.getTracks().forEach((track) => track.stop());

@@ -30,8 +30,12 @@ router.get(
       return;
     }
 
-    const existing = snap.data();
-    if (!existing?.phoneNumber && req.phoneNumber) {
+    const existing = { ...snap.data() };
+    if (existing.createdAt && typeof existing.createdAt.toDate === "function") {
+      existing.createdAt = existing.createdAt.toDate().toISOString();
+    }
+
+    if (!existing.phoneNumber && req.phoneNumber) {
       await ref.set({ phoneNumber: req.phoneNumber }, { merge: true });
       res.json({ ...existing, phoneNumber: req.phoneNumber });
       return;

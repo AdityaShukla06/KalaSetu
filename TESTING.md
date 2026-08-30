@@ -24,6 +24,10 @@ Before starting, confirm `https://<project-id>.web.app/api/health` returns `{"st
 | 14 | Edit a product (price and description) saves and the grid updates | Not yet tested | |
 | 15 | Delete a product asks for confirmation, then removes it from the grid | Not yet tested | |
 | 16 | A published product is still there after a full app restart | Not yet tested | Confirms Firestore persistence, not just in-memory state |
+| 17 | Enhanced photo is visibly cleaned up and correctly oriented | Not yet tested | Shoot one in portrait, phone photos carry an EXIF rotation flag |
+| 18 | Voice transcription returns real text from a real recording | Not yet tested | The highest risk item, exercises the WAV conversion and the model call end to end |
+| 19 | Mic denied, type in Hindi only, publish still succeeds | Not yet tested | This path used to dead end |
+| 20 | Profile name and shop name save and survive a reload | Not yet tested | |
 
 ## Live URL
 
