@@ -36,10 +36,10 @@
   "category.title": "நீங்கள் என்ன விற்கிறீர்கள்?",
   "category.continue": "தொடர்க",
   "category.textiles": "நெய்திகள்",
-  "category.pottery": "சுண்ணாம்பு",
+  "category.pottery": "மட்பாண்டம்",
   "category.jewelry": "நகைகள்",
   "category.woodwork": "மரக் கலை",
-  "category.bambooCane": "மூங்கில் & கோல்",
+  "category.bambooCane": "மூங்கில் மற்றும் பிரம்பு",
   "category.other": "மற்றவை",
   "voice.tapToRecord": "உங்கள் தயாரிப்பின் விளக்கத்தை பதிவு செய்யத் தட்டவும்",
   "voice.recording": "பதிவாகிறது...",
@@ -121,5 +121,8 @@
   "describe.syncing": "மற்ற மொழியைப் புதுப்பிக்கிறது...",
   "describe.syncFailed": "மற்ற மொழியைப் புதுப்பிக்க முடியவில்லை. தேவையெனில் அதைத் தானே திருத்தவும்.",
   "describe.syncHint": "திருத்தங்கள் மற்ற மொழிக்கு தானாக நகலெடுக்கப்படும்.",
-  "pricing.updating": "புதிய பொருள் செலவுக்காக புதுப்பிக்கிறது..."
+  "pricing.updating": "புதிய பொருள் செலவுக்காக புதுப்பிக்கிறது...",
+  "profile.relocalising": "உங்கள் தயாரிப்புகளை இந்த மொழிக்கு புதுப்பிக்கிறது...",
+  "profile.relocalised": "இந்த மொழிக்கு {n} தயாரிப்புகள் புதுப்பிக்கப்பட்டன.",
+  "profile.relocaliseFailed": "சில தயாரிப்புகளை புதுப்பிக்க முடியவில்லை. பின்னர் மீண்டும் முயற்சிக்கவும்."
 }

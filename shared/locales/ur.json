@@ -39,7 +39,7 @@
   "category.pottery": "مٹی کے برتن",
   "category.jewelry": "زیورات",
   "category.woodwork": "لکڑی کا کام",
-  "category.bambooCane": "بانس اور بانس",
+  "category.bambooCane": "بانس اور بید",
   "category.other": "دیگر",
   "voice.tapToRecord": "اپنے پروڈکٹ کی وضاحت ریکارڈ کرنے کے لیے ٹیپ کریں",
   "voice.recording": "ریکارڈنگ...",
@@ -121,5 +121,8 @@
   "describe.syncing": "دوسری زبان اپ ڈیٹ ہو رہی ہے...",
   "describe.syncFailed": "دوسری زبان اپ ڈیٹ نہیں ہو سکی۔ اگر ضرورت ہو تو خود ہی ایڈٹ کریں۔",
   "describe.syncHint": "تبدیلیاں خود بخود دوسری زبان میں نقل ہو جاتی ہیں۔",
-  "pricing.updating": "نئے مواد کے اخراجات کے لیے اپ ڈیٹ ہو رہا ہے..."
+  "pricing.updating": "نئے مواد کے اخراجات کے لیے اپ ڈیٹ ہو رہا ہے...",
+  "profile.relocalising": "آپ کے مصنوعات اس زبان میں اپ ڈیٹ ہو رہے ہیں...",
+  "profile.relocalised": "{n} مصنوعات اس زبان میں اپ ڈیٹ ہو چکی ہیں۔",
+  "profile.relocaliseFailed": "کچھ مصنوعات اپ ڈیٹ نہیں ہو سکیں۔ بعد میں دوبارہ کوشش کریں۔"
 }

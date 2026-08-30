@@ -53,3 +53,12 @@ export function deleteProduct(productId: string): Promise<{ success: boolean }> 
     method: "DELETE",
   });
 }
+
+export function relocaliseProducts(
+  language: string,
+): Promise<{ updated: number; failed: number; remaining: number }> {
+  return apiFetch("/products/relocalise", {
+    method: "POST",
+    body: JSON.stringify({ language }),
+  });
+}

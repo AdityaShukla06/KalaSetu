@@ -37,7 +37,7 @@
   "category.continue": "આગળ વધો",
   "category.textiles": "વસ્ત્રો",
   "category.pottery": "માટીનું કામ",
-  "category.jewelry": "ગહન",
+  "category.jewelry": "ઘરેણાં",
   "category.woodwork": "લાકડાનું કામ",
   "category.bambooCane": "બાંબુ અને કાંઠો",
   "category.other": "અન્ય",
@@ -121,5 +121,8 @@
   "describe.syncing": "બીજી ભાષા અપડેટ થઈ રહી છે...",
   "describe.syncFailed": "બીજી ભાષા અપડેટ કરી શક્યા નથી. જરૂર હોય તો જાતે સંપાદિત કરો.",
   "describe.syncHint": "સંપાદનો આપમેળે બીજી ભાષામાં નકલ થાય છે.",
-  "pricing.updating": "નવી સામગ્રી ખર્ચ માટે અપડેટ થઈ રહ્યું છે..."
+  "pricing.updating": "નવી સામગ્રી ખર્ચ માટે અપડેટ થઈ રહ્યું છે...",
+  "profile.relocalising": "તમારા ઉત્પાદનો આ ભાષામાં અપડેટ થઈ રહ્યા છે...",
+  "profile.relocalised": "આ ભાષામાં {n} ઉત્પાદનો અપડેટ થયા.",
+  "profile.relocaliseFailed": "કેટલાક ઉત્પાદનો અપડેટ કરી શક્યા નથી. પછી ફરી પ્રયાસ કરો."
 }

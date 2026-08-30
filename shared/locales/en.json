@@ -121,5 +121,8 @@
   "describe.syncing": "Updating the other language...",
   "describe.syncFailed": "Could not update the other language. Edit it yourself if needed.",
   "describe.syncHint": "Edits are copied to the other language automatically.",
-  "pricing.updating": "Updating for the new material cost..."
+  "pricing.updating": "Updating for the new material cost...",
+  "profile.relocalising": "Updating your products to this language...",
+  "profile.relocalised": "Updated {n} products to this language.",
+  "profile.relocaliseFailed": "Could not update some products. Try again later."
 }

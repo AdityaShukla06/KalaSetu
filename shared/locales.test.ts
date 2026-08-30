@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { APP_LANGUAGES } from "./languages";
 
-const DIR = "src/context/locales";
+const DIR = "shared/locales";
 
 function read(file: string): Record<string, string> {
   return JSON.parse(readFileSync(join(DIR, file), "utf8"));

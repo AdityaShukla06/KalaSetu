@@ -39,7 +39,7 @@
   "category.pottery": "मातीचे भांडी",
   "category.jewelry": "दागिने",
   "category.woodwork": "लाकडी काम",
-  "category.bambooCane": "बांबू व कॅन",
+  "category.bambooCane": "बांबू व वेत",
   "category.other": "इतर",
   "voice.tapToRecord": "उत्पादनाचे वर्णन रेकॉर्ड करण्यासाठी टॅप करा",
   "voice.recording": "रेकॉर्डिंग...",
@@ -121,5 +121,8 @@
   "describe.syncing": "इतर भाषा अद्ययावत करत आहे...",
   "describe.syncFailed": "इतर भाषा अद्ययावत करता आली नाही. आवश्यक असल्यास स्वतः संपादित करा.",
   "describe.syncHint": "संपादन आपोआप इतर भाषेत कॉपी केले जातात.",
-  "pricing.updating": "नवीन साहित्य खर्चासाठी अद्यतन चालू आहे..."
+  "pricing.updating": "नवीन साहित्य खर्चासाठी अद्यतन चालू आहे...",
+  "profile.relocalising": "आपल्या उत्पादनांना या भाषेत अद्ययावत करत आहे...",
+  "profile.relocalised": "{n} उत्पादनांना या भाषेत अद्ययावत केले.",
+  "profile.relocaliseFailed": "काही उत्पादनं अद्ययावत करता आली नाहीत. नंतर पुन्हा प्रयत्न करा."
 }

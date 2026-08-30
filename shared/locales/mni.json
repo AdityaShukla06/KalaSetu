@@ -121,5 +121,8 @@
   "describe.syncing": "ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯕ...",
   "describe.syncFailed": "ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯒꯤ꯫ ꯑꯃꯁꯨꯡ ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯒꯤ꯫",
   "describe.syncHint": "ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯒꯤ꯫",
-  "pricing.updating": "ꯅꯤꯟꯗꯤ ꯂꯤꯗꯤ ꯂꯤꯗꯤ ꯑ ꯑꯤ ꯑꯤꯕꯤ ꯑꯤꯕꯤ"
+  "pricing.updating": "ꯅꯤꯟꯗꯤ ꯂꯤꯗꯤ ꯂꯤꯗꯤ ꯑ ꯑꯤ ꯑꯤꯕꯤ ꯑꯤꯕꯤ",
+  "profile.relocalising": "ꯃꯅꯨꯡꯒꯤ ꯑꯃꯁꯨꯡꯅ ꯄꯥꯎꯅꯕ...",
+  "profile.relocalised": "{n} ꯑꯃꯁꯨꯡꯅ ꯄꯥꯎꯅꯕꯅꯤ꯫",
+  "profile.relocaliseFailed": "ꯑꯃꯁꯨꯡꯅ ꯄꯥꯎꯕꯒꯤ ꯑꯣꯏꯅꯕꯤ꯫ ꯀꯪꯂꯩ ꯑꯃꯁꯨꯡꯅ ꯄꯥꯎꯅꯕ꯫"
 }

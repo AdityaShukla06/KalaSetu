@@ -38,3 +38,22 @@
   color: var(--color-success);
   font-weight: 600;
 }
+
+.profile-relocalise {
+  margin-top: var(--space-2);
+}
+
+.profile-relocalise-working {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.profile-relocalise-done {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.profile-relocalise-failed {
+  color: var(--color-error, #b3261e);
+  font-weight: 600;
+}

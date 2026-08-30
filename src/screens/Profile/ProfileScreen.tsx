@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { LanguageSelect } from "../../components/LanguageSelect";
-import { getMyProfile, updateMyProfile, type UserProfile } from "../../services/api";
+import { getMyProfile, updateMyProfile, relocaliseProducts, type UserProfile } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Profile.css";
@@ -53,7 +53,7 @@ function RetryIcon() {
 export function ProfileScreen() {
   const navigate = useNavigate();
   const { email, logout } = useAuth();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   const [state, setState] = useState<LoadState>("loading");
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -62,6 +62,9 @@ export function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [relocaliseState, setRelocaliseState] = useState<"idle" | "working" | "done" | "failed">("idle");
+  const [relocalisedCount, setRelocalisedCount] = useState(0);
+  const syncedLanguage = useRef<string | null>(null);
 
   const loadProfile = useCallback(async () => {
     setState("loading");
@@ -79,6 +82,36 @@ export function ProfileScreen() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    if (state !== "loaded") return;
+
+    if (syncedLanguage.current === null) {
+      syncedLanguage.current = language;
+      return;
+    }
+    if (syncedLanguage.current === language) return;
+
+    syncedLanguage.current = language;
+    let cancelled = false;
+
+    (async () => {
+      setRelocaliseState("working");
+      try {
+        await updateMyProfile({ language });
+        const result = await relocaliseProducts(language);
+        if (cancelled) return;
+        setRelocalisedCount(result.updated);
+        setRelocaliseState(result.failed > 0 ? "failed" : "done");
+      } catch {
+        if (!cancelled) setRelocaliseState("failed");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [language, state]);
 
   const dirty =
     profile !== null &&
@@ -180,6 +213,16 @@ export function ProfileScreen() {
 
         <div className="profile-section">
           <LanguageSelect label={t("welcome.languageLabel")} />
+          {relocaliseState !== "idle" && (
+            <p
+              className={`body-s profile-relocalise profile-relocalise-${relocaliseState}`}
+              aria-live="polite"
+            >
+              {relocaliseState === "working" && t("profile.relocalising")}
+              {relocaliseState === "done" && t("profile.relocalised", { n: relocalisedCount })}
+              {relocaliseState === "failed" && t("profile.relocaliseFailed")}
+            </p>
+          )}
         </div>
 
         <Button variant="secondary" icon={<LogoutIcon />} onClick={handleLogout}>

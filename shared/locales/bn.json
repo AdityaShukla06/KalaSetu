@@ -39,7 +39,7 @@
   "category.pottery": "মৃৎশিল্প",
   "category.jewelry": "গহনা",
   "category.woodwork": "কাঠের কাজ",
-  "category.bambooCane": "বাঁশ ও ক্যান",
+  "category.bambooCane": "বাঁশ ও বেত",
   "category.other": "অন্যান্য",
   "voice.tapToRecord": "পণ্যের বর্ণনা রেকর্ড করতে ট্যাপ করুন",
   "voice.recording": "রেকর্ডিং চলছে...",
@@ -121,5 +121,8 @@
   "describe.syncing": "অন্য ভাষা আপডেট হচ্ছে...",
   "describe.syncFailed": "অন্য ভাষা আপডেট করা যায়নি। প্রয়োজন হলে নিজে সম্পাদনা করুন।",
   "describe.syncHint": "সম্পাদনাগুলি স্বয়ংক্রিয়ভাবে অন্য ভাষায় কপি হয়।",
-  "pricing.updating": "নতুন উপকরণ মূল্যের জন্য আপডেট হচ্ছে..."
+  "pricing.updating": "নতুন উপকরণ মূল্যের জন্য আপডেট হচ্ছে...",
+  "profile.relocalising": "আপনার পণ্যগুলোকে এই ভাষায় আপডেট করা হচ্ছে...",
+  "profile.relocalised": "এই ভাষায় {n}টি পণ্য আপডেট হয়েছে।",
+  "profile.relocaliseFailed": "কিছু পণ্য আপডেট করা যায়নি। পরে আবার চেষ্টা করুন।"
 }
