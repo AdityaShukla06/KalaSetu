@@ -337,6 +337,38 @@ function requireAuth(req, res, next) {
   }
 }
 
+// shared/languages.ts
+var APP_LANGUAGES = [
+  { code: "en", englishName: "English", nativeName: "English", script: "Latin", speechSupported: true },
+  { code: "hi", englishName: "Hindi", nativeName: "\u0939\u093F\u0902\u0926\u0940", script: "Devanagari", speechSupported: true },
+  { code: "bn", englishName: "Bengali", nativeName: "\u09AC\u09BE\u0982\u09B2\u09BE", script: "Bengali", speechSupported: true },
+  { code: "mr", englishName: "Marathi", nativeName: "\u092E\u0930\u093E\u0920\u0940", script: "Devanagari", speechSupported: true },
+  { code: "te", englishName: "Telugu", nativeName: "\u0C24\u0C46\u0C32\u0C41\u0C17\u0C41", script: "Telugu", speechSupported: true },
+  { code: "ta", englishName: "Tamil", nativeName: "\u0BA4\u0BAE\u0BBF\u0BB4\u0BCD", script: "Tamil", speechSupported: true },
+  { code: "gu", englishName: "Gujarati", nativeName: "\u0A97\u0AC1\u0A9C\u0AB0\u0ABE\u0AA4\u0AC0", script: "Gujarati", speechSupported: true },
+  { code: "ur", englishName: "Urdu", nativeName: "\u0627\u0631\u062F\u0648", script: "Arabic", speechSupported: true },
+  { code: "kn", englishName: "Kannada", nativeName: "\u0C95\u0CA8\u0CCD\u0CA8\u0CA1", script: "Kannada", speechSupported: true },
+  { code: "ml", englishName: "Malayalam", nativeName: "\u0D2E\u0D32\u0D2F\u0D3E\u0D33\u0D02", script: "Malayalam", speechSupported: true },
+  { code: "pa", englishName: "Punjabi", nativeName: "\u0A2A\u0A70\u0A1C\u0A3E\u0A2C\u0A40", script: "Gurmukhi", speechSupported: true },
+  { code: "as", englishName: "Assamese", nativeName: "\u0985\u09B8\u09AE\u09C0\u09AF\u09BC\u09BE", script: "Bengali", speechSupported: true },
+  { code: "ne", englishName: "Nepali", nativeName: "\u0928\u0947\u092A\u093E\u0932\u0940", script: "Devanagari", speechSupported: true },
+  { code: "sa", englishName: "Sanskrit", nativeName: "\u0938\u0902\u0938\u094D\u0915\u0943\u0924\u092E\u094D", script: "Devanagari", speechSupported: true },
+  { code: "sd", englishName: "Sindhi", nativeName: "\u0633\u0646\u068C\u064A", script: "Arabic", speechSupported: true },
+  { code: "or", englishName: "Odia", nativeName: "\u0B13\u0B21\u0B3C\u0B3F\u0B06", script: "Odia", speechSupported: false },
+  { code: "mai", englishName: "Maithili", nativeName: "\u092E\u0948\u0925\u093F\u0932\u0940", script: "Devanagari", speechSupported: false },
+  { code: "ks", englishName: "Kashmiri", nativeName: "\u06A9\u0672\u0634\u064F\u0631", script: "Arabic", speechSupported: false },
+  { code: "kok", englishName: "Konkani", nativeName: "\u0915\u094B\u0902\u0915\u0923\u0940", script: "Devanagari", speechSupported: false },
+  { code: "doi", englishName: "Dogri", nativeName: "\u0921\u094B\u0917\u0930\u0940", script: "Devanagari", speechSupported: false },
+  { code: "mni", englishName: "Manipuri", nativeName: "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF", script: "Meetei Mayek", speechSupported: false },
+  { code: "brx", englishName: "Bodo", nativeName: "\u092C\u0921\u093C\u094B", script: "Devanagari", speechSupported: false },
+  { code: "sat", englishName: "Santali", nativeName: "\u1C65\u1C5F\u1C71\u1C5B\u1C5F\u1C72\u1C64", script: "Ol Chiki", speechSupported: false }
+];
+var LANGUAGE_CODES = APP_LANGUAGES.map((l) => l.code);
+var BY_CODE = new Map(APP_LANGUAGES.map((l) => [l.code, l]));
+function isAppLanguage(value) {
+  return BY_CODE.has(value);
+}
+
 // server/routes/users.ts
 var router3 = Router3();
 function toUserProfile(row) {
@@ -345,7 +377,7 @@ function toUserProfile(row) {
     email: row.email,
     displayName: row.display_name,
     shopName: row.shop_name,
-    language: row.language === "hi" ? "hi" : "en",
+    language: isAppLanguage(row.language) ? row.language : "en",
     totalProducts: row.total_products,
     createdAt: row.created_at
   };
@@ -367,7 +399,7 @@ router3.get(
 var UpdateUserSchema = z3.object({
   displayName: z3.string().max(80).optional(),
   shopName: z3.string().max(120).optional(),
-  language: z3.enum(["en", "hi"]).optional()
+  language: z3.string().refine(isAppLanguage, "Unsupported language").optional()
 });
 router3.patch(
   "/me",
@@ -397,16 +429,17 @@ var users_default = router3;
 import { Router as Router4 } from "express";
 import { z as z4 } from "zod";
 var router4 = Router4();
-var PRODUCT_COLUMNS = "id, user_id, category, title_en, title_hi, description_en, description_hi, image_url, price, material_cost, status, created_at, updated_at";
+var PRODUCT_COLUMNS = "id, user_id, category, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, created_at, updated_at";
 function toProduct(row) {
   return {
     productId: row.id,
     userId: row.user_id,
     category: row.category,
     titleEn: row.title_en,
-    titleHi: row.title_hi,
+    titleLocal: row.title_local,
     descriptionEn: row.description_en,
-    descriptionHi: row.description_hi,
+    descriptionLocal: row.description_local,
+    localLanguage: row.local_language,
     imageUrl: row.image_url,
     price: Number(row.price),
     materialCost: Number(row.material_cost),
@@ -418,9 +451,10 @@ function toProduct(row) {
 var ProductInputSchema = z4.object({
   category: z4.string().min(1),
   titleEn: z4.string().min(1),
-  titleHi: z4.string().min(1),
+  titleLocal: z4.string().min(1),
   descriptionEn: z4.string().min(1),
-  descriptionHi: z4.string().min(1),
+  descriptionLocal: z4.string().min(1),
+  localLanguage: z4.string().min(2).max(8),
   imageUrl: z4.string().url(),
   price: z4.number().positive(),
   materialCost: z4.number().positive()
@@ -429,9 +463,10 @@ function toRow(input) {
   const row = {};
   if (input.category !== void 0) row.category = input.category;
   if (input.titleEn !== void 0) row.title_en = input.titleEn;
-  if (input.titleHi !== void 0) row.title_hi = input.titleHi;
+  if (input.titleLocal !== void 0) row.title_local = input.titleLocal;
   if (input.descriptionEn !== void 0) row.description_en = input.descriptionEn;
-  if (input.descriptionHi !== void 0) row.description_hi = input.descriptionHi;
+  if (input.descriptionLocal !== void 0) row.description_local = input.descriptionLocal;
+  if (input.localLanguage !== void 0) row.local_language = input.localLanguage;
   if (input.imageUrl !== void 0) row.image_url = input.imageUrl;
   if (input.price !== void 0) row.price = input.price;
   if (input.materialCost !== void 0) row.material_cost = input.materialCost;
@@ -631,17 +666,9 @@ var images_default = router5;
 import { Router as Router6 } from "express";
 
 // server/voice-ai/types/voice-ai.types.ts
-var SUPPORTED_LANGUAGES = [
-  { code: "hi", name: "Hindi", sttLanguageCode: "hi-IN" },
-  { code: "bn", name: "Bengali", sttLanguageCode: "bn-IN" },
-  { code: "or", name: "Odia", sttLanguageCode: "or-IN" },
-  { code: "mr", name: "Marathi", sttLanguageCode: "mr-IN" },
-  { code: "ta", name: "Tamil", sttLanguageCode: "ta-IN" },
-  { code: "te", name: "Telugu", sttLanguageCode: "te-IN" },
-  { code: "en", name: "English", sttLanguageCode: "en-IN" }
-];
+var SUPPORTED_LANGUAGES = APP_LANGUAGES;
 function isSupportedLanguageCode(value) {
-  return SUPPORTED_LANGUAGES.some((l) => l.code === value);
+  return isAppLanguage(value);
 }
 
 // server/voice-ai/errors/voice-ai.errors.ts
@@ -762,9 +789,12 @@ async function processVoiceDescription(input, deps) {
     }
     const descriptionEn = await deps.descriptionService.generateDescription(englishTranscript, input.category);
     logger.info("voice-ai: description generation complete");
-    const descriptionHi = await deps.translationService.translate(descriptionEn, "en", "hi");
-    logger.info("voice-ai: English -> Hindi translation complete");
-    return { transcript, descriptionEn, descriptionHi, detectedLanguage };
+    const localLanguage = input.targetLanguage || "en";
+    const descriptionLocal = localLanguage === "en" ? descriptionEn : await deps.translationService.translate(descriptionEn, "en", localLanguage);
+    if (localLanguage !== "en") {
+      logger.info("voice-ai: English -> local translation complete", { localLanguage });
+    }
+    return { transcript, descriptionEn, descriptionLocal, localLanguage, detectedLanguage };
   } catch (err) {
     if (err instanceof VoiceAiError) {
       logger.error(`voice-ai: pipeline failed at stage "${err.stage}"`, { message: err.message });
@@ -825,18 +855,18 @@ var GROQ_SUPPORTED_AUDIO_TYPES = [
 var NAME_TO_CODE = (() => {
   const map = {};
   for (const language of SUPPORTED_LANGUAGES) {
-    map[language.name.toLowerCase()] = language.code;
+    map[language.englishName.toLowerCase()] = language.code;
     map[language.code] = language.code;
   }
   map.oriya = "or";
+  map.meitei = "mni";
+  map.manipuri = "mni";
   return map;
 })();
 function toSupportedLanguage(reported) {
   const key = (reported ?? "").trim().toLowerCase();
-  const mapped = NAME_TO_CODE[key];
-  if (mapped) return mapped;
-  if (isSupportedLanguageCode(key)) return key;
-  throw new UnsupportedLanguageError(reported ?? "unknown");
+  if (!key) return "unknown";
+  return NAME_TO_CODE[key] ?? key;
 }
 var GroqSttService = class {
   apiKey;
@@ -934,8 +964,8 @@ var GroqTranslationService = class {
     if (sourceLanguage === targetLanguage || !text || text.trim().length === 0) {
       return text;
     }
-    const sourceName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLanguage)?.name ?? sourceLanguage;
-    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.name ?? targetLanguage;
+    const sourceName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLanguage)?.englishName ?? sourceLanguage;
+    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.englishName ?? targetLanguage;
     let raw;
     try {
       raw = await groqChat({
@@ -1155,8 +1185,8 @@ var GeminiTranslationService = class {
     if (sourceLanguage === targetLanguage || !text || text.trim().length === 0) {
       return text;
     }
-    const sourceName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLanguage)?.name || sourceLanguage;
-    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.name || targetLanguage;
+    const sourceName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLanguage)?.englishName || sourceLanguage;
+    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.englishName || targetLanguage;
     try {
       const response = await this.client.models.generateContent({
         model: this.model,
@@ -1325,6 +1355,8 @@ router6.post(
       res.status(400).json({ error: "category query parameter is required" });
       return;
     }
+    const requested = req.query.language?.trim();
+    const targetLanguage = requested && isAppLanguage(requested) ? requested : "en";
     let audio;
     try {
       audio = await readRawBody(req, MAX_AUDIO_BYTES);
@@ -1344,14 +1376,16 @@ router6.post(
         {
           audio,
           mimeType: requestedContentType(req, "audio/wav"),
-          category
+          category,
+          targetLanguage
         },
         getVoiceAiDeps()
       );
       res.json({
         transcript: result.transcript,
         descriptionEn: result.descriptionEn,
-        descriptionHi: result.descriptionHi,
+        descriptionLocal: result.descriptionLocal,
+        localLanguage: result.localLanguage,
         detectedLanguage: result.detectedLanguage
       });
     } catch (err) {

@@ -2,13 +2,10 @@ import {
   SpeechToTextService,
   SpeechToTextResult,
   SUPPORTED_LANGUAGES,
-  SupportedLanguageCode,
-  isSupportedLanguageCode,
 } from "../types/voice-ai.types";
 import {
   InvalidAudioError,
   EmptyTranscriptError,
-  UnsupportedLanguageError,
   MalformedModelResponseError,
 } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
@@ -27,24 +24,28 @@ export const GROQ_SUPPORTED_AUDIO_TYPES = [
   "audio/webm",
 ];
 
-const NAME_TO_CODE: Record<string, SupportedLanguageCode> = (() => {
-  const map: Record<string, SupportedLanguageCode> = {};
+const NAME_TO_CODE: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
   for (const language of SUPPORTED_LANGUAGES) {
-    map[language.name.toLowerCase()] = language.code;
+    map[language.englishName.toLowerCase()] = language.code;
     map[language.code] = language.code;
   }
   map.oriya = "or";
+  map.meitei = "mni";
+  map.manipuri = "mni";
   return map;
 })();
 
-export function toSupportedLanguage(reported: string | undefined): SupportedLanguageCode {
+/**
+ * Maps what the speech model reports onto an app language code where we
+ * recognise it, and otherwise returns the reported value unchanged. The
+ * detected language is informational, so an unfamiliar one must not fail the
+ * request: the artisan still gets their transcript translated.
+ */
+export function toSupportedLanguage(reported: string | undefined): string {
   const key = (reported ?? "").trim().toLowerCase();
-  const mapped = NAME_TO_CODE[key];
-
-  if (mapped) return mapped;
-  if (isSupportedLanguageCode(key)) return key;
-
-  throw new UnsupportedLanguageError(reported ?? "unknown");
+  if (!key) return "unknown";
+  return NAME_TO_CODE[key] ?? key;
 }
 
 export class GroqSttService implements SpeechToTextService {

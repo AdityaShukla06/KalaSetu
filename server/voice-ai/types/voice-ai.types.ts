@@ -1,3 +1,5 @@
+import { APP_LANGUAGES, isAppLanguage } from "../../../shared/languages";
+
 /**
  * Core types for the KalaSetu voice-product-description AI module.
  *
@@ -19,20 +21,12 @@
  * Adding a language means adding one entry here, nothing else in the pipeline
  * hardcodes a language list.
  */
-export const SUPPORTED_LANGUAGES = [
-  { code: "hi", name: "Hindi", sttLanguageCode: "hi-IN" },
-  { code: "bn", name: "Bengali", sttLanguageCode: "bn-IN" },
-  { code: "or", name: "Odia", sttLanguageCode: "or-IN" },
-  { code: "mr", name: "Marathi", sttLanguageCode: "mr-IN" },
-  { code: "ta", name: "Tamil", sttLanguageCode: "ta-IN" },
-  { code: "te", name: "Telugu", sttLanguageCode: "te-IN" },
-  { code: "en", name: "English", sttLanguageCode: "en-IN" },
-] as const;
+export const SUPPORTED_LANGUAGES = APP_LANGUAGES;
 
-export type SupportedLanguageCode = (typeof SUPPORTED_LANGUAGES)[number]["code"];
+export type SupportedLanguageCode = string;
 
-export function isSupportedLanguageCode(value: string): value is SupportedLanguageCode {
-  return SUPPORTED_LANGUAGES.some((l) => l.code === value);
+export function isSupportedLanguageCode(value: string): boolean {
+  return isAppLanguage(value);
 }
 
 // ---------------------------------------------------------------------------
@@ -44,8 +38,10 @@ export interface VoiceDescriptionInput {
   audio: Buffer;
   /** MIME type of the audio, e.g. "audio/webm" (the frontend's MediaRecorder output). */
   mimeType: string;
-  /** Product category selected by the artisan, passed straight to Gemini. */
+  /** Product category selected by the artisan. */
   category: string;
+  /** The app language the artisan chose. The description is returned in this too. */
+  targetLanguage: string;
 }
 
 export interface VoiceDescriptionOutput {
@@ -53,10 +49,15 @@ export interface VoiceDescriptionOutput {
   transcript: string;
   /** Final English product description. */
   descriptionEn: string;
-  /** Hindi translation of descriptionEn (not independently generated). */
-  descriptionHi: string;
-  /** Language detected in the artisan's speech, for logging/analytics only. */
-  detectedLanguage: SupportedLanguageCode;
+  /** descriptionEn translated into the artisan's chosen language. */
+  descriptionLocal: string;
+  /** The language descriptionLocal is written in. */
+  localLanguage: string;
+  /**
+   * Whatever the speech model reported. Informational only: it never gates the
+   * request, so an artisan can speak a language the model does not name.
+   */
+  detectedLanguage: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +66,7 @@ export interface VoiceDescriptionOutput {
 
 export interface SpeechToTextResult {
   text: string;
-  language: SupportedLanguageCode;
+  language: string;
   /** 0-1 confidence if the provider exposes one; not all providers do. */
   confidence?: number;
 }
@@ -79,11 +80,7 @@ export interface SpeechToTextService {
 // ---------------------------------------------------------------------------
 
 export interface TranslationService {
-  translate(
-    text: string,
-    sourceLanguage: SupportedLanguageCode,
-    targetLanguage: SupportedLanguageCode,
-  ): Promise<string>;
+  translate(text: string, sourceLanguage: string, targetLanguage: string): Promise<string>;
 }
 
 // ---------------------------------------------------------------------------

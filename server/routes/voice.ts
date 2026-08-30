@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { readRawBody, requestedContentType, PayloadTooLargeError } from "../middleware/rawBody";
 import { processVoiceDescription, buildVoiceAiDependencies } from "../voice-ai";
+import { isAppLanguage } from "../../shared/languages";
 
 const router = Router();
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
@@ -32,6 +33,9 @@ router.post(
       return;
     }
 
+    const requested = (req.query.language as string | undefined)?.trim();
+    const targetLanguage = requested && isAppLanguage(requested) ? requested : "en";
+
     let audio: Buffer;
     try {
       audio = await readRawBody(req, MAX_AUDIO_BYTES);
@@ -54,6 +58,7 @@ router.post(
           audio,
           mimeType: requestedContentType(req, "audio/wav"),
           category,
+          targetLanguage,
         },
         getVoiceAiDeps(),
       );
@@ -61,7 +66,8 @@ router.post(
       res.json({
         transcript: result.transcript,
         descriptionEn: result.descriptionEn,
-        descriptionHi: result.descriptionHi,
+        descriptionLocal: result.descriptionLocal,
+        localLanguage: result.localLanguage,
         detectedLanguage: result.detectedLanguage,
       });
     } catch (err: any) {

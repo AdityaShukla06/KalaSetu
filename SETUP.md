@@ -11,7 +11,9 @@ Work through the sections in order. Expect about 45 minutes the first time.
 1. Go to [supabase.com](https://supabase.com) and sign in with GitHub.
 2. **New project**. Name it `kalasetu`. Choose region **South Asia (Mumbai) ap-south-1** for latency. Set a database password and save it somewhere, you will not need it for this app but you cannot see it again.
 3. Wait for the project to finish provisioning, about two minutes.
-4. Open **SQL Editor** in the sidebar, click **New query**, paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. It creates the tables, the index, the counter function, row level security, and the storage bucket. It is safe to run more than once.
+4. Open **SQL Editor** in the sidebar, click **New query**, paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql), and click **Run**.
+
+   If your database was created before the multilingual change, also run [`supabase/migrations/001-multilingual.sql`](supabase/migrations/001-multilingual.sql). A fresh database does not need it. It creates the tables, the index, the counter function, row level security, and the storage bucket. It is safe to run more than once.
 5. Open **Project Settings -> API** and copy two values:
    - **Project URL** goes into `SUPABASE_URL`
    - **`service_role` secret** goes into `SUPABASE_SERVICE_ROLE_KEY`

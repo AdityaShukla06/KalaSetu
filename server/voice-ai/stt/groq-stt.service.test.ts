@@ -1,11 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { GroqSttService, GROQ_SUPPORTED_AUDIO_TYPES, toSupportedLanguage } from "./groq-stt.service";
 import { normaliseAudioMimeType } from "./audio-mime";
-import {
-  InvalidAudioError,
-  EmptyTranscriptError,
-  UnsupportedLanguageError,
-} from "../errors/voice-ai.errors";
+import { InvalidAudioError, EmptyTranscriptError } from "../errors/voice-ai.errors";
 
 const env = { GROQ_API_KEY: "gsk_test", GROQ_STT_MODEL: "whisper-large-v3" };
 const audio = Buffer.from("pretend this is audio");
@@ -36,9 +32,14 @@ describe("toSupportedLanguage", () => {
     expect(toSupportedLanguage("bn")).toBe("bn");
   });
 
-  it("rejects a language the pipeline does not support", () => {
-    expect(() => toSupportedLanguage("french")).toThrow(UnsupportedLanguageError);
-    expect(() => toSupportedLanguage(undefined)).toThrow(UnsupportedLanguageError);
+  it("passes through a language it does not recognise rather than failing", () => {
+    expect(toSupportedLanguage("french")).toBe("french");
+    expect(toSupportedLanguage("bodo")).toBe("brx");
+  });
+
+  it("reports unknown when the model says nothing", () => {
+    expect(toSupportedLanguage(undefined)).toBe("unknown");
+    expect(toSupportedLanguage("  ")).toBe("unknown");
   });
 });
 

@@ -9,7 +9,7 @@ create table if not exists users (
   email          text not null unique,
   display_name   text,
   shop_name      text,
-  language       text not null default 'en' check (language in ('en', 'hi')),
+  language       text not null default 'en',
   total_products integer not null default 0,
   created_at     timestamptz not null default now()
 );
@@ -19,9 +19,10 @@ create table if not exists products (
   user_id         uuid not null references users(id) on delete cascade,
   category        text not null,
   title_en        text not null,
-  title_hi        text not null,
+  title_local     text not null,
   description_en  text not null,
-  description_hi  text not null,
+  description_local text not null,
+  local_language  text not null default 'en',
   image_url       text not null,
   price           numeric(12, 2) not null check (price > 0),
   material_cost   numeric(12, 2) not null check (material_cost > 0),

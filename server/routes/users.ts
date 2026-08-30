@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
+import { isAppLanguage } from "../../shared/languages";
 import { UserProfile } from "../types";
 
 const router = Router();
@@ -23,7 +24,7 @@ export function toUserProfile(row: UserRow): UserProfile {
     email: row.email,
     displayName: row.display_name,
     shopName: row.shop_name,
-    language: row.language === "hi" ? "hi" : "en",
+    language: isAppLanguage(row.language) ? row.language : "en",
     totalProducts: row.total_products,
     createdAt: row.created_at,
   };
@@ -53,7 +54,7 @@ router.get(
 const UpdateUserSchema = z.object({
   displayName: z.string().max(80).optional(),
   shopName: z.string().max(120).optional(),
-  language: z.enum(["en", "hi"]).optional(),
+  language: z.string().refine(isAppLanguage, "Unsupported language").optional(),
 });
 
 router.patch(

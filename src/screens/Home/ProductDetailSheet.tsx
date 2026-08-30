@@ -11,7 +11,7 @@ interface ProductDetailSheetProps {
   onChanged: () => void;
 }
 
-type DescriptionTab = "en" | "hi";
+type DescriptionTab = "en" | "local";
 type Mode = "view" | "edit" | "confirmDelete";
 
 function CloseIcon() {
@@ -59,24 +59,24 @@ function SaveIcon() {
 
 export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetailSheetProps) {
   const { language, t } = useLanguage();
-  const [descriptionTab, setDescriptionTab] = useState<DescriptionTab>(language);
+  const [descriptionTab, setDescriptionTab] = useState<DescriptionTab>(language === "en" ? "en" : "local");
   const [mode, setMode] = useState<Mode>("view");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [price, setPrice] = useState(String(product.price));
   const [descriptionEn, setDescriptionEn] = useState(product.descriptionEn);
-  const [descriptionHi, setDescriptionHi] = useState(product.descriptionHi);
+  const [descriptionLocal, setDescriptionLocal] = useState(product.descriptionLocal);
 
-  const title = language === "hi" ? product.titleHi : product.titleEn;
+  const title = language === product.localLanguage ? product.titleLocal : product.titleEn;
   const categoryEntry = CATEGORIES.find((category) => category.id === product.category);
   const categoryLabel = categoryEntry ? t(categoryEntry.labelKey) : product.category;
-  const description = descriptionTab === "hi" ? product.descriptionHi : product.descriptionEn;
+  const description = descriptionTab === "local" ? product.descriptionLocal : product.descriptionEn;
 
   function startEdit() {
     setPrice(String(product.price));
     setDescriptionEn(product.descriptionEn);
-    setDescriptionHi(product.descriptionHi);
+    setDescriptionLocal(product.descriptionLocal);
     setError(null);
     setMode("edit");
   }
@@ -87,7 +87,7 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
       setError(t("home.editPriceInvalid"));
       return;
     }
-    if (!descriptionEn.trim() || !descriptionHi.trim()) {
+    if (!descriptionEn.trim() || !descriptionLocal.trim()) {
       setError(t("home.editDescriptionRequired"));
       return;
     }
@@ -98,7 +98,7 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
       await updateProduct(product.productId, {
         price: parsedPrice,
         descriptionEn: descriptionEn.trim(),
-        descriptionHi: descriptionHi.trim(),
+        descriptionLocal: descriptionLocal.trim(),
       });
       onChanged();
       onClose();
@@ -175,11 +175,11 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
             <button
               type="button"
               role="tab"
-              aria-selected={descriptionTab === "hi"}
-              className={`language-option${descriptionTab === "hi" ? " language-option-active" : ""}`}
-              onClick={() => setDescriptionTab("hi")}
+              aria-selected={descriptionTab === "local"}
+              className={`language-option${descriptionTab === "local" ? " language-option-active" : ""}`}
+              onClick={() => setDescriptionTab("local")}
             >
-              {t("language.hi")}
+              {t("describe.localTab")}
             </button>
           </div>
 
@@ -188,10 +188,10 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
               <span className="caption">{t("home.editDescriptionLabel")}</span>
               <textarea
                 rows={4}
-                value={descriptionTab === "hi" ? descriptionHi : descriptionEn}
+                value={descriptionTab === "local" ? descriptionLocal : descriptionEn}
                 onChange={(event) =>
-                  descriptionTab === "hi"
-                    ? setDescriptionHi(event.target.value)
+                  descriptionTab === "local"
+                    ? setDescriptionLocal(event.target.value)
                     : setDescriptionEn(event.target.value)
                 }
                 disabled={busy}

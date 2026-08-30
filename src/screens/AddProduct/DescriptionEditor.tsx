@@ -5,27 +5,28 @@ import "./VoiceDescribe.css";
 
 interface DescriptionEditorProps {
   descriptionEn: string;
-  descriptionHi: string;
+  descriptionLocal: string;
   onChangeEn: (value: string) => void;
-  onChangeHi: (value: string) => void;
+  onChangeLocal: (value: string) => void;
   onContinue: () => void;
   note?: ReactNode;
 }
 
-type Tab = "en" | "hi";
+type Tab = "en" | "local";
 
 export function DescriptionEditor({
   descriptionEn,
-  descriptionHi,
+  descriptionLocal,
   onChangeEn,
-  onChangeHi,
+  onChangeLocal,
   onContinue,
   note,
 }: DescriptionEditorProps) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [tab, setTab] = useState<Tab>("en");
+  const localLabel = language === "en" ? t("language.en") : t("describe.localTab");
 
-  const canContinue = descriptionEn.trim().length > 0 || descriptionHi.trim().length > 0;
+  const canContinue = descriptionEn.trim().length > 0 || descriptionLocal.trim().length > 0;
 
   return (
     <div className="describe-screen">
@@ -45,11 +46,11 @@ export function DescriptionEditor({
         <button
           type="button"
           role="tab"
-          aria-selected={tab === "hi"}
-          className={`language-option${tab === "hi" ? " language-option-active" : ""}`}
-          onClick={() => setTab("hi")}
+          aria-selected={tab === "local"}
+          className={`language-option${tab === "local" ? " language-option-active" : ""}`}
+          onClick={() => setTab("local")}
         >
-          {t("language.hi")}
+          {localLabel}
         </button>
       </div>
 
@@ -65,10 +66,10 @@ export function DescriptionEditor({
       ) : (
         <textarea
           className="description-textarea"
-          value={descriptionHi}
-          onChange={(event) => onChangeHi(event.target.value)}
-          placeholder={t("describe.placeholderHi")}
-          lang="hi"
+          value={descriptionLocal}
+          onChange={(event) => onChangeLocal(event.target.value)}
+          placeholder={t("describe.placeholderLocal")}
+          lang={language}
           rows={8}
         />
       )}

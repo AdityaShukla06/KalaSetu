@@ -43,12 +43,12 @@ function CheckCircleIcon() {
   );
 }
 
-function getCategoryTitles(categoryId: string): { en: string; hi: string } {
+function getCategoryTitles(categoryId: string, language: string): { en: string; local: string } {
   const entry = CATEGORIES.find((category) => category.id === categoryId);
   const key = entry?.labelKey ?? "category.other";
   return {
-    en: translations.en[key] ?? categoryId,
-    hi: translations.hi[key] ?? categoryId,
+    en: translations.en?.[key] ?? categoryId,
+    local: translations[language]?.[key] ?? translations.en?.[key] ?? categoryId,
   };
 }
 
@@ -64,9 +64,9 @@ export function PricingScreen() {
   const { draft, resetDraft } = useAddProductDraft();
 
   const summaryDescription =
-    language === "hi"
-      ? draft.descriptionHi || draft.descriptionEn
-      : draft.descriptionEn || draft.descriptionHi;
+    language === "en"
+      ? draft.descriptionEn || draft.descriptionLocal
+      : draft.descriptionLocal || draft.descriptionEn;
 
   const [materialCost, setMaterialCost] = useState("");
   const [materialCostError, setMaterialCostError] = useState<string | null>(null);
@@ -79,7 +79,7 @@ export function PricingScreen() {
   const [publishError, setPublishError] = useState(false);
   const [published, setPublished] = useState(false);
 
-  const hasDescription = Boolean(draft.descriptionEn?.trim() || draft.descriptionHi?.trim());
+  const hasDescription = Boolean(draft.descriptionEn?.trim() || draft.descriptionLocal?.trim());
   const missingPhoto = !draft.imageUrl;
   const missingDescription = !missingPhoto && !(draft.category && hasDescription);
   const hasRequiredDraft = !missingPhoto && !missingDescription;
@@ -137,17 +137,18 @@ export function PricingScreen() {
     setPublishError(false);
     setPublishing(true);
 
-    const titles = getCategoryTitles(draft.category ?? "other");
-    const en = draft.descriptionEn?.trim() || draft.descriptionHi?.trim() || "";
-    const hi = draft.descriptionHi?.trim() || draft.descriptionEn?.trim() || "";
+    const titles = getCategoryTitles(draft.category ?? "other", language);
+    const en = draft.descriptionEn?.trim() || draft.descriptionLocal?.trim() || "";
+    const local = draft.descriptionLocal?.trim() || draft.descriptionEn?.trim() || "";
 
     try {
       await createProduct({
         category: draft.category ?? "other",
         titleEn: titles.en,
-        titleHi: titles.hi,
+        titleLocal: titles.local,
         descriptionEn: en,
-        descriptionHi: hi,
+        descriptionLocal: local,
+        localLanguage: language,
         imageUrl: draft.imageUrl ?? "",
         price,
         materialCost: cost,
