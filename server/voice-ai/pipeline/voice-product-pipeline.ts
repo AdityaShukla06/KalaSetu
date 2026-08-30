@@ -15,13 +15,12 @@ const noopLogger = {
  * The single function the backend developer needs to call:
  *
  *   const result = await processVoiceDescription(
- *     { audio: req.file.buffer, mimeType: req.file.mimetype, category: req.body.category },
+ *     { audio, mimeType, category },
  *     dependencies,
  *   );
  *
- * See voice_ai_integration.md for the full integration guide, and
- * pipeline/factory.ts for how to build `dependencies` from environment
- * variables (real providers, or mocks while BHASHINI is pending).
+ * See pipeline/factory.ts for how to build `dependencies` from environment
+ * variables.
  *
  * Pipeline:
  *   audio -> STT (+ automatic language detection)

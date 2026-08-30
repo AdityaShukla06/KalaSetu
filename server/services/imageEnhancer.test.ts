@@ -1,11 +1,6 @@
 import { describe, it, expect } from "vitest";
 import sharp from "sharp";
-import {
-  enhanceProductImage,
-  normaliseProductImage,
-  UnsupportedImageError,
-  MAX_IMAGE_DIMENSION,
-} from "./imageEnhancer";
+import { enhanceProductImage, UnsupportedImageError, MAX_IMAGE_DIMENSION } from "./imageEnhancer";
 
 async function makePng(width: number, height: number): Promise<Buffer> {
   return sharp({
@@ -58,21 +53,6 @@ describe("enhanceProductImage", () => {
 
   it("rejects a buffer that is not an image", async () => {
     await expect(enhanceProductImage(Buffer.from("this is not an image"))).rejects.toBeInstanceOf(
-      UnsupportedImageError,
-    );
-  });
-});
-
-describe("normaliseProductImage", () => {
-  it("converts and caps dimensions without the enhancement pass", async () => {
-    const result = await normaliseProductImage(await makePng(4000, 3000));
-
-    expect(result.mimeType).toBe("image/jpeg");
-    expect(result.width).toBe(MAX_IMAGE_DIMENSION);
-  });
-
-  it("rejects a buffer that is not an image", async () => {
-    await expect(normaliseProductImage(Buffer.from("nope"))).rejects.toBeInstanceOf(
       UnsupportedImageError,
     );
   });

@@ -2,9 +2,9 @@
  * Core types for the KalaSetu voice-product-description AI module.
  *
  * This module is a standalone, framework-agnostic TypeScript service.
- * It has NO dependency on Express, and does not know about HTTP at all —
- * the backend developer is responsible for wiring `processVoiceDescription`
- * (see pipeline/voice-product-pipeline.ts) into a route.
+ * It has no dependency on Express and does not know about HTTP at all.
+ * Routes wire `processVoiceDescription` (see
+ * pipeline/voice-product-pipeline.ts) into the API.
  */
 
 // ---------------------------------------------------------------------------
@@ -12,17 +12,12 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Languages this module is designed/tested against (per project requirements).
- * `code` is the short ISO-639-1-ish code used internally and sent to BHASHINI
- * (BHASHINI's ULCA APIs use these short codes, e.g. "hi", "en", "or" — see
- * translation/bhashini.service.ts for the verified source).
+ * Languages this module is designed against. `code` is the short code used
+ * internally and reported as the detected language. `sttLanguageCode` is the
+ * BCP-47 form, kept for providers that want a locale hint.
  *
- * `sttLanguageCode` is the BCP-47 code Gemini 3.5 Transcribe expects in
- * `transcription_config.language_codes` (verified against the official
- * "Audio transcription" Gemini API docs, languages table, Aug 2026).
- *
- * Adding a new Indian language later means adding one entry here — nothing
- * else in the pipeline hardcodes a language list.
+ * Adding a language means adding one entry here, nothing else in the pipeline
+ * hardcodes a language list.
  */
 export const SUPPORTED_LANGUAGES = [
   { code: "hi", name: "Hindi", sttLanguageCode: "hi-IN" },

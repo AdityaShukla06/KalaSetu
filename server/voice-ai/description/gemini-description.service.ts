@@ -4,11 +4,8 @@ import { DescriptionGenerationError, MalformedModelResponseError } from "../erro
 import { VoiceAiEnv } from "../config/env";
 
 /**
- * Generates the final English product description from the English
- * transcript + category, using gemini-3.5-flash (Flash tier — this is plain
- * text generation, not agentic/coding work, so the cheaper 3.5 tier is
- * appropriate; gemini-2.5-flash is scheduled for shutdown Oct 16 2026, and
- * 3.6/3.7 Flash are priced for heavier agentic workloads this task doesn't need).
+ * Generates the final English product description from the English transcript
+ * and the selected category, using the configured Gemini Flash model.
  *
  * Uses structured JSON output (`responseSchema`) so the result is always a
  * single, predictable field rather than free-form text that needs parsing.
@@ -88,14 +85,14 @@ You will be given:
 
 Your task: write ONE concise, natural-sounding English product description (1-3 sentences) for this listing.
 
-STRICT RULES — follow every one of these:
+STRICT RULES, follow every one of these:
 1. Use ONLY information explicitly present in the transcript. Do not add anything the artisan did not say.
 2. Do NOT invent or assume: materials, dimensions/size, price, location/region, certifications, historical or cultural claims (e.g. "traditional", "passed down through generations"), quality claims (e.g. "premium", "finest"), or environmental claims (e.g. "eco-friendly", "sustainable", "100% natural") unless the transcript states them directly.
 3. Do NOT assume properties just because of the category (e.g. do not assume a "basket" category item is bamboo, or that a "textile" is cotton, unless the artisan said so).
 4. If the transcript is vague or sparse, write a short, honest, equally sparse description rather than padding it with invented detail.
 5. Preserve the specific details the artisan DID give (materials, use, technique, color, etc. if mentioned).
-6. Write in natural e-commerce language — not a literal translation, not a list of keywords, not overly flowery.
-7. Do not mention the artisan speaking, transcripts, translation, or the AI process — write only the product description itself.
+6. Write in natural e-commerce language, not a literal translation, not a list of keywords, not overly flowery.
+7. Do not mention the artisan speaking, transcripts, translation, or the AI process. Write only the product description itself.
 
 category: ${category}
 transcript: """${englishTranscript}"""

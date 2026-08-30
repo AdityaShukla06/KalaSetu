@@ -47,28 +47,3 @@ export async function enhanceProductImage(input: Buffer): Promise<EnhancedImage>
     throw new UnsupportedImageError(err);
   }
 }
-
-export async function normaliseProductImage(input: Buffer): Promise<EnhancedImage> {
-  try {
-    const pipeline = sharp(input, { failOn: "none" })
-      .rotate()
-      .resize({
-        width: MAX_IMAGE_DIMENSION,
-        height: MAX_IMAGE_DIMENSION,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true });
-
-    const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
-
-    return {
-      buffer: data,
-      mimeType: "image/jpeg",
-      width: info.width,
-      height: info.height,
-    };
-  } catch (err) {
-    throw new UnsupportedImageError(err);
-  }
-}

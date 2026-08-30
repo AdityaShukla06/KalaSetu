@@ -4,11 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { readRawBody, PayloadTooLargeError } from "../middleware/rawBody";
 import { getSupabase, getStorageBucket } from "../lib/supabase";
-import {
-  enhanceProductImage,
-  normaliseProductImage,
-  UnsupportedImageError,
-} from "../services/imageEnhancer";
+import { enhanceProductImage, UnsupportedImageError } from "../services/imageEnhancer";
 
 const router = Router();
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -40,29 +36,6 @@ function handleImageError(err: unknown, res: Response): boolean {
   }
   return false;
 }
-
-router.post(
-  "/upload",
-  requireAuth,
-  asyncRoute(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const raw = await readRawBody(req, MAX_IMAGE_BYTES);
-      if (raw.length === 0) {
-        res.status(400).json({ error: "No image data provided" });
-        return;
-      }
-
-      const processed = await normaliseProductImage(raw);
-      const path = `${req.uid}/raw/${Date.now()}-${randomUUID().slice(0, 8)}.jpg`;
-      const imageUrl = await storeImage(processed.buffer, path, processed.mimeType);
-
-      res.json({ imageUrl, width: processed.width, height: processed.height });
-    } catch (err) {
-      if (handleImageError(err, res)) return;
-      throw err;
-    }
-  }),
-);
 
 router.post(
   "/enhance",

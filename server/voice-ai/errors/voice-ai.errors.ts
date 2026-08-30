@@ -3,16 +3,15 @@
  *
  * Design goal (per project requirements): the backend should be able to log
  * exactly which AI stage failed, while the frontend only ever needs to show
- * one generic "could not understand your description" message. The backend
- * integration doc (voice_ai_integration.md) shows how to map `stage` to an
- * HTTP status without leaking provider details to the client.
+ * one generic "could not understand your description" message. Routes map
+ * `stage` to an HTTP status without leaking provider details to the client.
  */
 
 export type VoiceAiStage = "stt" | "language-detection" | "translation" | "generation";
 
 export class VoiceAiError extends Error {
   public readonly stage: VoiceAiStage;
-  /** The original error, kept for server-side logs only — never serialize this to the client. */
+  /** The original error, kept for server-side logs only, never serialize this to the client. */
   public readonly cause?: unknown;
 
   constructor(stage: VoiceAiStage, message: string, cause?: unknown) {

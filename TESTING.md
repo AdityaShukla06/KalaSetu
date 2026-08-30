@@ -6,6 +6,8 @@ Fill in Pass/Fail and notes as you go. If something fails, note the issue and a 
 
 Before starting, confirm `https://<your-app>.vercel.app/api/health` returns `{"status":"ok"}`. If it does not, the frontend will look broken in ways that have nothing to do with the checklist below.
 
+The API itself is covered by an automated end-to-end suite that runs against a real Supabase project (`npm test` with credentials present). What that suite cannot reach is the browser: camera, microphone, the WAV conversion, install, and offline. That is what this checklist is for, so start with items 17 and 18.
+
 | # | Check | Result | Notes |
 |---|-------|--------|-------|
 | 1 | Login with an email OTP works | Not yet tested | Use the demo code 5741 if no email arrives |
@@ -23,7 +25,7 @@ Before starting, confirm `https://<your-app>.vercel.app/api/health` returns `{"s
 | 13 | Full add-product flow (photo through publish) completed in under 2 minutes | Not yet tested | Time it with a stopwatch |
 | 14 | Edit a product (price and description) saves and the grid updates | Not yet tested | |
 | 15 | Delete a product asks for confirmation, then removes it from the grid | Not yet tested | |
-| 16 | A published product is still there after a full app restart | Not yet tested | Confirms Firestore persistence, not just in-memory state |
+| 16 | A published product is still there after a full app restart | Not yet tested | Confirms it persisted to Postgres, not just in-memory state |
 | 17 | Enhanced photo is visibly cleaned up and correctly oriented | Not yet tested | Shoot one in portrait, phone photos carry an EXIF rotation flag |
 | 18 | Voice transcription returns real text from a real recording | Not yet tested | The highest risk item, exercises the WAV conversion and the model call end to end |
 | 19 | Mic denied, type in Hindi only, publish still succeeds | Not yet tested | This path used to dead end |
