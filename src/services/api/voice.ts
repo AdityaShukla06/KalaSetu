@@ -8,7 +8,7 @@ export function transcribeAndDescribe(
   category: string,
 ): Promise<{ transcript: string; descriptionEn: string; descriptionHi: string }> {
   const formData = new FormData();
-  formData.append("audio", audioBlob);
+  formData.append("audio", audioBlob, "recording.wav");
   formData.append("category", category);
   return apiFetch("/voice/transcribe", { method: "POST", body: formData });
 }
