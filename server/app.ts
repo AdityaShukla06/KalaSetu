@@ -6,6 +6,7 @@ import usersRouter from "./routes/users";
 import productsRouter from "./routes/products";
 import imagesRouter from "./routes/images";
 import voiceRouter from "./routes/voice";
+import translateRouter from "./routes/translate";
 import pricingRouter from "./routes/pricing";
 import { PayloadTooLargeError } from "./middleware/rawBody";
 
@@ -20,6 +21,7 @@ app.use("/api/users", usersRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/images", imagesRouter);
 app.use("/api/voice", voiceRouter);
+app.use("/api/translate", translateRouter);
 app.use("/api/pricing", pricingRouter);
 
 app.use((_req, res) => {

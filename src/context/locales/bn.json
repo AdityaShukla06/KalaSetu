@@ -117,5 +117,8 @@
   "welcome.languageHint": "পুরো অ্যাপ এই ভাষায় হবে।",
   "welcome.regionalLanguages": "ভারতীয় ভাষা",
   "describe.localTab": "আপনার ভাষা",
-  "describe.placeholderLocal": "আপনার ভাষায় পণ্যটি বর্ণনা করুন"
+  "describe.placeholderLocal": "আপনার ভাষায় পণ্যটি বর্ণনা করুন",
+  "describe.syncing": "অন্য ভাষা আপডেট হচ্ছে...",
+  "describe.syncFailed": "অন্য ভাষা আপডেট করা যায়নি। প্রয়োজন হলে নিজে সম্পাদনা করুন।",
+  "describe.syncHint": "সম্পাদনাগুলি স্বয়ংক্রিয়ভাবে অন্য ভাষায় কপি হয়।"
 }

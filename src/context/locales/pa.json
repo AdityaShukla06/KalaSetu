@@ -117,5 +117,8 @@
   "welcome.languageHint": "ਸਾਰਾ ਐਪ ਇਸ ਭਾਸ਼ਾ ਵਿੱਚ ਹੋਵੇਗਾ।",
   "welcome.regionalLanguages": "ਭਾਰਤੀ ਭਾਸ਼ਾਵਾਂ",
   "describe.localTab": "ਤੁਹਾਡੀ ਭਾਸ਼ਾ",
-  "describe.placeholderLocal": "ਆਪਣੀ ਭਾਸ਼ਾ ਵਿੱਚ ਆਪਣੇ ਉਤਪਾਦ ਦਾ ਵਰਣਨ ਕਰੋ"
+  "describe.placeholderLocal": "ਆਪਣੀ ਭਾਸ਼ਾ ਵਿੱਚ ਆਪਣੇ ਉਤਪਾਦ ਦਾ ਵਰਣਨ ਕਰੋ",
+  "describe.syncing": "ਦੂਜੀ ਭਾਸ਼ਾ ਅਪਡੇਟ ਹੋ ਰਹੀ ਹੈ...",
+  "describe.syncFailed": "ਦੂਜੀ ਭਾਸ਼ਾ ਅਪਡੇਟ ਨਹੀਂ ਹੋ ਸਕੀ। ਲੋੜ ਹੋਵੇ ਤਾਂ ਆਪ ਹੀ ਸੋਧੋ।",
+  "describe.syncHint": "ਸੋਧਾਂ ਦੂਜੀ ਭਾਸ਼ਾ ਵਿੱਚ ਆਪੇ ਹੀ ਕਾਪੀ ਹੋ ਜਾਂਦੀਆਂ ਹਨ।"
 }

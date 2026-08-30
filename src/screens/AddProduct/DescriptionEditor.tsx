@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
 import { useLanguage } from "../../context/LanguageContext";
+import { useMirroredDescription } from "./useMirroredDescription";
 import "./VoiceDescribe.css";
 
 interface DescriptionEditorProps {
@@ -13,7 +14,6 @@ interface DescriptionEditorProps {
   note?: ReactNode;
 }
 
-
 export function DescriptionEditor({
   descriptionEn,
   descriptionLocal,
@@ -24,6 +24,14 @@ export function DescriptionEditor({
 }: DescriptionEditorProps) {
   const { language, t } = useLanguage();
   const [tab, setTab] = useState<DescriptionTab>("en");
+
+  const { status, editEn, editLocal, sameLanguage } = useMirroredDescription({
+    language,
+    descriptionEn,
+    descriptionLocal,
+    onChangeEn,
+    onChangeLocal,
+  });
 
   const canContinue = descriptionEn.trim().length > 0 || descriptionLocal.trim().length > 0;
 
@@ -38,7 +46,7 @@ export function DescriptionEditor({
         <textarea
           className="description-textarea"
           value={descriptionEn}
-          onChange={(event) => onChangeEn(event.target.value)}
+          onChange={(event) => editEn(event.target.value)}
           placeholder={t("describe.placeholderEn")}
           lang="en"
           rows={8}
@@ -47,14 +55,22 @@ export function DescriptionEditor({
         <textarea
           className="description-textarea"
           value={descriptionLocal}
-          onChange={(event) => onChangeLocal(event.target.value)}
+          onChange={(event) => editLocal(event.target.value)}
           placeholder={t("describe.placeholderLocal")}
           lang={language}
           rows={8}
         />
       )}
 
-      <Button variant="primary" disabled={!canContinue} onClick={onContinue}>
+      {!sameLanguage && (
+        <p className={`body-s description-sync description-sync-${status}`} aria-live="polite">
+          {status === "syncing" && t("describe.syncing")}
+          {status === "failed" && t("describe.syncFailed")}
+          {status === "idle" && t("describe.syncHint")}
+        </p>
+      )}
+
+      <Button variant="primary" disabled={!canContinue || status === "syncing"} onClick={onContinue}>
         {t("describe.continue")}
       </Button>
     </div>

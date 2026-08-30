@@ -117,5 +117,8 @@
   "welcome.languageHint": "ᱢᱟᱨᱟᱝ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ ᱞᱟᱹᱜᱤᱫ ᱢᱟᱨᱟᱝ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ",
   "welcome.regionalLanguages": "ᱯᱟᱹᱨᱥᱤ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ",
   "describe.localTab": "ᱢᱟᱨᱟᱝ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ",
-  "describe.placeholderLocal": "ᱢᱟᱨᱟᱝ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ ᱞᱟᱹᱜᱤᱫ ᱢᱟᱨᱟᱝ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ"
+  "describe.placeholderLocal": "ᱢᱟᱨᱟᱝ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ ᱞᱟᱹᱜᱤᱫ ᱢᱟᱨᱟᱝ ᱞᱟᱹᱜᱤᱫ ᱥᱟᱨᱦᱟᱣ",
+  "describe.syncing": "ᱟᱨᱤ ᱪᱤᱠᱤ ᱢᱮᱱᱟᱜ ᱠᱟᱱᱟ...",
+  "describe.syncFailed": "ᱟᱨᱤ ᱪᱤᱠᱤ ᱢᱮᱱᱟᱜ ᱦᱩᱭᱩᱜ ᱠᱟᱱᱟ᱾ ᱢᱟᱨᱟᱝ ᱠᱟᱱᱟᱜ ᱠᱷᱚᱱ ᱟᱡᱟᱜ ᱪᱤᱠᱤ ᱢᱮᱱᱟᱜ ᱢᱮᱱᱟᱜᱼᱟ᱾",
+  "describe.syncHint": "ᱢᱮᱱᱟᱜ ᱢᱮᱱᱟᱜ ᱟᱨᱤ ᱪᱤᱠᱤ ᱫᱤᱥᱚᱢ ᱫᱟᱜ ᱢᱮᱱᱟᱜᱼᱟ᱾"
 }

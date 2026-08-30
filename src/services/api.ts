@@ -6,7 +6,7 @@ export type { RawMaterialItem, PricingSuggestionInput, PricingSuggestionOutput }
 // importing utility apis
 export { sendOtp, verifyOtp, OTP_LENGTH } from "./api/auth";
 export { enhanceImage } from "./api/images";
-export { transcribeAndDescribe } from "./api/voice";
+export { transcribeAndDescribe, translateText } from "./api/voice";
 export { suggestPrice } from "./api/pricing";
 export { createProduct, listProducts, updateProduct, deleteProduct } from "./api/products";
 export { getMyProfile, updateMyProfile } from "./api/users";

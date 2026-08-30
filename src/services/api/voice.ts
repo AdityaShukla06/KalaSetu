@@ -1,4 +1,4 @@
-import { apiUpload } from "./_helpers";
+import { apiFetch, apiUpload } from "./_helpers";
 
 export function transcribeAndDescribe(
   audioBlob: Blob,
@@ -16,4 +16,15 @@ export function transcribeAndDescribe(
     audioBlob,
     audioBlob.type || "audio/wav",
   );
+}
+
+export function translateText(
+  text: string,
+  from: string,
+  to: string,
+): Promise<{ translation: string }> {
+  return apiFetch("/translate", {
+    method: "POST",
+    body: JSON.stringify({ text, from, to }),
+  });
 }

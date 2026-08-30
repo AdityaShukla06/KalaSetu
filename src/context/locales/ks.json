@@ -117,5 +117,8 @@
   "welcome.languageHint": "سارٙی ایپ ایہٙ زبٙیٙ میں ہونٙیٙ",
   "welcome.regionalLanguages": "ہندوستانی زبٙیٙ",
   "describe.localTab": "تُہٙی زبٙیٙ",
-  "describe.placeholderLocal": "تُہٙی پراڈکٹ زبٙیٙ میں بیان کرنٙیٙ"
+  "describe.placeholderLocal": "تُہٙی پراڈکٹ زبٙیٙ میں بیان کرنٙیٙ",
+  "describe.syncing": "ٻی زبان اپ ڈیٹ کرنہ...",
+  "describe.syncFailed": "ٻی زبان اپ ڈیٹ نہ کر سڳی. اگر ضرورت ہو تو خود ایڈٹ کرنہ.",
+  "describe.syncHint": "تبدیلیاں ٻی زبان میں خود بخود نقل کرنہ."
 }

@@ -117,5 +117,8 @@
   "welcome.languageHint": "The whole app will be in this language.",
   "welcome.regionalLanguages": "Indian languages",
   "describe.localTab": "Your language",
-  "describe.placeholderLocal": "Describe your product in your own language"
+  "describe.placeholderLocal": "Describe your product in your own language",
+  "describe.syncing": "Updating the other language...",
+  "describe.syncFailed": "Could not update the other language. Edit it yourself if needed.",
+  "describe.syncHint": "Edits are copied to the other language automatically."
 }

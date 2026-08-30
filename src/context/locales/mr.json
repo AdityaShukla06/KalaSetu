@@ -117,5 +117,8 @@
   "welcome.languageHint": "संपूर्ण अॅप या भाषेत असेल.",
   "welcome.regionalLanguages": "भारतीय भाषा",
   "describe.localTab": "आपली भाषा",
-  "describe.placeholderLocal": "आपल्या स्वतःच्या भाषेत उत्पादनाचे वर्णन करा"
+  "describe.placeholderLocal": "आपल्या स्वतःच्या भाषेत उत्पादनाचे वर्णन करा",
+  "describe.syncing": "इतर भाषा अद्ययावत करत आहे...",
+  "describe.syncFailed": "इतर भाषा अद्ययावत करता आली नाही. आवश्यक असल्यास स्वतः संपादित करा.",
+  "describe.syncHint": "संपादन आपोआप इतर भाषेत कॉपी केले जातात."
 }

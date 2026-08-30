@@ -117,5 +117,8 @@
   "welcome.languageHint": "पूरा ऐप यै भाषांत होखे।",
   "welcome.regionalLanguages": "भारतीय भाषा",
   "describe.localTab": "तुं भाषा",
-  "describe.placeholderLocal": "तुं आपुन भाषांत उत्पादन विवरण यान"
+  "describe.placeholderLocal": "तुं आपुन भाषांत उत्पादन विवरण यान",
+  "describe.syncing": "अन्य भाषा अपडेट होत आ...",
+  "describe.syncFailed": "अन्य भाषा अपडेट नइखे। जर जरुरी हो, तं तंइयां बदल।",
+  "describe.syncHint": "बदलाइयां अन्य भाषाइयां आपैं नै खोपिज।"
 }

@@ -776,22 +776,22 @@ var noopLogger = {
   error: () => {
   }
 };
-async function processVoiceDescription(input, deps) {
-  const logger = deps.logger ?? noopLogger;
+async function processVoiceDescription(input, deps2) {
+  const logger = deps2.logger ?? noopLogger;
   logger.info("voice-ai: starting pipeline", { category: input.category, audioBytes: input.audio?.length });
   try {
-    const sttResult = await deps.sttService.transcribe(input.audio, input.mimeType);
+    const sttResult = await deps2.sttService.transcribe(input.audio, input.mimeType);
     logger.info("voice-ai: stt complete", { detectedLanguage: sttResult.language });
     const transcript = sttResult.text;
     const detectedLanguage = sttResult.language;
-    const englishTranscript = detectedLanguage === "en" ? transcript : await deps.translationService.translate(transcript, detectedLanguage, "en");
+    const englishTranscript = detectedLanguage === "en" ? transcript : await deps2.translationService.translate(transcript, detectedLanguage, "en");
     if (detectedLanguage !== "en") {
       logger.info("voice-ai: regional -> English translation complete");
     }
-    const descriptionEn = await deps.descriptionService.generateDescription(englishTranscript, input.category);
+    const descriptionEn = await deps2.descriptionService.generateDescription(englishTranscript, input.category);
     logger.info("voice-ai: description generation complete");
     const localLanguage = input.targetLanguage || "en";
-    const descriptionLocal = localLanguage === "en" ? descriptionEn : await deps.translationService.translate(descriptionEn, "en", localLanguage);
+    const descriptionLocal = localLanguage === "en" ? descriptionEn : await deps2.translationService.translate(descriptionEn, "en", localLanguage);
     if (localLanguage !== "en") {
       logger.info("voice-ai: English -> local translation complete", { localLanguage });
     }
@@ -1435,9 +1435,62 @@ router6.post(
 );
 var voice_default = router6;
 
-// server/routes/pricing.ts
+// server/routes/translate.ts
 import { Router as Router7 } from "express";
 import { z as z6 } from "zod";
+var router7 = Router7();
+var deps;
+function getDeps() {
+  if (!deps) {
+    deps = buildVoiceAiDependencies({
+      logger: {
+        info: () => {
+        },
+        warn: (message, meta) => console.warn("[translate]", message, meta || ""),
+        error: (message, meta) => console.error("[translate]", message, meta || "")
+      }
+    });
+  }
+  return deps;
+}
+var TranslateSchema = z6.object({
+  text: z6.string().min(1).max(4e3),
+  from: z6.string().refine(isAppLanguage, "Unsupported source language"),
+  to: z6.string().refine(isAppLanguage, "Unsupported target language")
+});
+router7.post(
+  "/",
+  requireAuth,
+  asyncRoute(async (req, res) => {
+    const parsed = TranslateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const { text, from, to } = parsed.data;
+    if (from === to) {
+      res.json({ translation: text });
+      return;
+    }
+    try {
+      const translation = await getDeps().translationService.translate(text, from, to);
+      res.json({ translation });
+    } catch (err) {
+      console.error("translate failed", {
+        from,
+        to,
+        message: err?.message,
+        cause: err?.cause?.message ?? String(err?.cause ?? "")
+      });
+      res.status(502).json({ error: "translation_failed" });
+    }
+  })
+);
+var translate_default = router7;
+
+// server/routes/pricing.ts
+import { Router as Router8 } from "express";
+import { z as z7 } from "zod";
 
 // server/services/pricingEngine.ts
 var CATEGORY_DATASET = {
@@ -1719,22 +1772,22 @@ function calculateSmartPrice(input) {
 }
 
 // server/routes/pricing.ts
-var router7 = Router7();
-var RawMaterialSchema = z6.object({
-  name: z6.string().min(1),
-  cost: z6.number().positive(),
-  quantity: z6.union([z6.number(), z6.string()]).optional(),
-  unit: z6.string().optional()
+var router8 = Router8();
+var RawMaterialSchema = z7.object({
+  name: z7.string().min(1),
+  cost: z7.number().positive(),
+  quantity: z7.union([z7.number(), z7.string()]).optional(),
+  unit: z7.string().optional()
 });
-var PricingInputSchema = z6.object({
-  category: z6.string().min(1),
-  materialCost: z6.number().positive().optional(),
-  rawMaterials: z6.array(RawMaterialSchema).optional(),
-  descriptionEn: z6.string().optional(),
-  descriptionHi: z6.string().optional(),
-  imageUrl: z6.string().url().optional().or(z6.literal("")),
-  complexity: z6.enum(["simple", "standard", "detailed", "complex", "exceptional"]).optional(),
-  subcategory: z6.string().optional()
+var PricingInputSchema = z7.object({
+  category: z7.string().min(1),
+  materialCost: z7.number().positive().optional(),
+  rawMaterials: z7.array(RawMaterialSchema).optional(),
+  descriptionEn: z7.string().optional(),
+  descriptionHi: z7.string().optional(),
+  imageUrl: z7.string().url().optional().or(z7.literal("")),
+  complexity: z7.enum(["simple", "standard", "detailed", "complex", "exceptional"]).optional(),
+  subcategory: z7.string().optional()
 }).refine(
   (data) => data.materialCost !== void 0 && data.materialCost > 0 || data.rawMaterials && data.rawMaterials.length > 0,
   {
@@ -1742,7 +1795,7 @@ var PricingInputSchema = z6.object({
     path: ["materialCost"]
   }
 );
-router7.post(
+router8.post(
   "/suggest",
   requireAuth,
   asyncRoute(async (req, res) => {
@@ -1771,7 +1824,7 @@ router7.post(
     }
   })
 );
-var pricing_default = router7;
+var pricing_default = router8;
 
 // server/app.ts
 var app = express();
@@ -1783,6 +1836,7 @@ app.use("/api/users", users_default);
 app.use("/api/products", products_default);
 app.use("/api/images", images_default);
 app.use("/api/voice", voice_default);
+app.use("/api/translate", translate_default);
 app.use("/api/pricing", pricing_default);
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });

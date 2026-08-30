@@ -117,5 +117,8 @@
   "welcome.languageHint": "ఈ భాషలో మొత్తం యాప్ ఉంటుంది.",
   "welcome.regionalLanguages": "భారతీయ భాషలు",
   "describe.localTab": "మీ భాష",
-  "describe.placeholderLocal": "మీ స్వంత భాషలో మీ ఉత్పత్తిని వివరించండి"
+  "describe.placeholderLocal": "మీ స్వంత భాషలో మీ ఉత్పత్తిని వివరించండి",
+  "describe.syncing": "ఇతర భాషను నవీకరిస్తున్నాం...",
+  "describe.syncFailed": "ఇతర భాషను నవీకరించలేకపోయాం. అవసరమైతే స్వయంగా సవరించండి.",
+  "describe.syncHint": "సవరణలు స్వయంచాలకంగా ఇతర భాషకు కాపీ అవుతాయి."
 }

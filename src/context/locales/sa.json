@@ -117,5 +117,8 @@
   "welcome.languageHint": "संपूर्ण अनुप्रयोग एषा भाषा मध्ये होयिष्यति",
   "welcome.regionalLanguages": "भारतीय भाषाः",
   "describe.localTab": "तव भाषा",
-  "describe.placeholderLocal": "तव स्वभाषायाम् उत्पादं वर्णय"
+  "describe.placeholderLocal": "तव स्वभाषायाम् उत्पादं वर्णय",
+  "describe.syncing": "अन्यभाषा अद्यतनं…",
+  "describe.syncFailed": "अन्यभाषा अद्यतनं न कर्तुं शक्यं। आवश्यकम् चेत् स्वयं सम्पादय।",
+  "describe.syncHint": "संपादनानि अन्यभाषायाम् स्वयमेव प्रतिलिप्यन्ते।"
 }

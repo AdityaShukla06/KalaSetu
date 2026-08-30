@@ -300,3 +300,13 @@
   flex: 1;
   width: auto;
 }
+
+.description-sync-syncing {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.description-sync-failed {
+  color: var(--color-error, #b3261e);
+  font-weight: 600;
+}

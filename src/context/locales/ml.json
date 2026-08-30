@@ -117,5 +117,8 @@
   "welcome.languageHint": "മുഴുവൻ ആപ്പ് ഈ ഭാഷയിൽ ആയിരിക്കും.",
   "welcome.regionalLanguages": "ഇന്ത്യൻ ഭാഷകൾ",
   "describe.localTab": "നിങ്ങളുടെ ഭാഷ",
-  "describe.placeholderLocal": "നിങ്ങളുടെ സ്വന്തം ഭാഷയിൽ ഉൽപ്പന്നം വിവരിക്കുക"
+  "describe.placeholderLocal": "നിങ്ങളുടെ സ്വന്തം ഭാഷയിൽ ഉൽപ്പന്നം വിവരിക്കുക",
+  "describe.syncing": "മറ്റൊരു ഭാഷ അപ്‌ഡേറ്റ് ചെയ്യുന്നു...",
+  "describe.syncFailed": "മറ്റൊരു ഭാഷ അപ്‌ഡേറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല. ആവശ്യമെങ്കിൽ സ്വയം തിരുത്തുക.",
+  "describe.syncHint": "തിരുത്തലുകൾ സ്വയം മറ്റൊരു ഭാഷയിലേക്ക് പകർത്തപ്പെടും."
 }

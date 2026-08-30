@@ -208,3 +208,20 @@
   border-top-color: var(--color-primary);
   animation: btn-spin 0.8s linear infinite;
 }
+
+.description-sync {
+  margin-top: calc(var(--space-3) * -1);
+  margin-bottom: var(--space-4);
+  min-height: 1.2em;
+  color: var(--color-text-muted);
+}
+
+.description-sync-syncing {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.description-sync-failed {
+  color: var(--color-error, #b3261e);
+  font-weight: 600;
+}

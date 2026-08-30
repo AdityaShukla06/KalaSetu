@@ -117,5 +117,8 @@
   "welcome.languageHint": "ସମଗ୍ର ଆପ୍ ଏହି ଭାଷାରେ ହେବ",
   "welcome.regionalLanguages": "ଭାରତୀୟ ଭାଷାଗୁଡ଼ିକ",
   "describe.localTab": "ଆପଣଙ୍କ ଭାଷା",
-  "describe.placeholderLocal": "ଆପଣଙ୍କ ଭାଷାରେ ଆପଣଙ୍କ ପ୍ରୋଡକ୍ଟ ବର୍ଣ୍ଣନା କରନ୍ତୁ"
+  "describe.placeholderLocal": "ଆପଣଙ୍କ ଭାଷାରେ ଆପଣଙ୍କ ପ୍ରୋଡକ୍ଟ ବର୍ଣ୍ଣନା କରନ୍ତୁ",
+  "describe.syncing": "ଅନ୍ୟ ଭାଷା ଅଦ୍ୟତନ ହେଉଛି...",
+  "describe.syncFailed": "ଅନ୍ୟ ଭାଷା ଅଦ୍ୟତନ ହେଲା ନାହିଁ। ଆବଶ୍ୟକ ହେଲେ ନିଜେ ଏଡିଟ୍ କରନ୍ତୁ।",
+  "describe.syncHint": "ସଂଶୋଧନଗୁଡ଼ିକ ଅନ୍ୟ ଭାଷାକୁ ଆପେ ଆପେ ନକଲ ହେଉଛି।"
 }

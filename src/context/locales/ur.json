@@ -117,5 +117,8 @@
   "welcome.languageHint": "پورا ایپ اس زبان میں ہوگا۔",
   "welcome.regionalLanguages": "بھارتی زبانیں",
   "describe.localTab": "آپ کی زبان",
-  "describe.placeholderLocal": "اپنے الفاظ میں پروڈکٹ کی تفصیل لکھیں"
+  "describe.placeholderLocal": "اپنے الفاظ میں پروڈکٹ کی تفصیل لکھیں",
+  "describe.syncing": "دوسری زبان اپ ڈیٹ ہو رہی ہے...",
+  "describe.syncFailed": "دوسری زبان اپ ڈیٹ نہیں ہو سکی۔ اگر ضرورت ہو تو خود ہی ایڈٹ کریں۔",
+  "describe.syncHint": "تبدیلیاں خود بخود دوسری زبان میں نقل ہو جاتی ہیں۔"
 }

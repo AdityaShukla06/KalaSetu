@@ -3,6 +3,7 @@ import { Button } from "../../components/Button";
 import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
 import { deleteProduct, updateProduct, type Product } from "../../services/api";
 import { useLanguage } from "../../context/LanguageContext";
+import { useMirroredDescription } from "../AddProduct/useMirroredDescription";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
 import "./Home.css";
 
@@ -67,6 +68,14 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
   const [price, setPrice] = useState(String(product.price));
   const [descriptionEn, setDescriptionEn] = useState(product.descriptionEn);
   const [descriptionLocal, setDescriptionLocal] = useState(product.descriptionLocal);
+
+  const { status: syncStatus, editEn, editLocal, sameLanguage } = useMirroredDescription({
+    language: product.localLanguage,
+    descriptionEn,
+    descriptionLocal,
+    onChangeEn: setDescriptionEn,
+    onChangeLocal: setDescriptionLocal,
+  });
 
   const title = language === product.localLanguage ? product.titleLocal : product.titleEn;
   const categoryEntry = CATEGORIES.find((category) => category.id === product.category);
@@ -172,11 +181,16 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
                 value={descriptionTab === "local" ? descriptionLocal : descriptionEn}
                 onChange={(event) =>
                   descriptionTab === "local"
-                    ? setDescriptionLocal(event.target.value)
-                    : setDescriptionEn(event.target.value)
+                    ? editLocal(event.target.value)
+                    : editEn(event.target.value)
                 }
                 disabled={busy}
               />
+              {!sameLanguage && syncStatus !== "idle" && (
+                <span className={`caption description-sync-${syncStatus}`} aria-live="polite">
+                  {syncStatus === "syncing" ? t("describe.syncing") : t("describe.syncFailed")}
+                </span>
+              )}
             </label>
           ) : (
             <p className="body-s sheet-description">{description}</p>
@@ -210,7 +224,13 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
 
             {mode === "edit" && (
               <>
-                <Button variant="primary" icon={<SaveIcon />} loading={busy} onClick={handleSave}>
+                <Button
+                  variant="primary"
+                  icon={<SaveIcon />}
+                  loading={busy}
+                  disabled={syncStatus === "syncing"}
+                  onClick={handleSave}
+                >
                   {t("home.editSave")}
                 </Button>
                 <Button variant="tertiary" onClick={() => setMode("view")} disabled={busy}>

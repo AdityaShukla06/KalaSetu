@@ -117,5 +117,8 @@
   "welcome.languageHint": "سڄو ايپ هن ٻوليءَ ۾ هوندو.",
   "welcome.regionalLanguages": "ڀارت جون ٻوليون",
   "describe.localTab": "توهان جي ٻولي",
-  "describe.placeholderLocal": "پنهنجي ٻوليءَ ۾ پنهنجي پراڊڪٽ جو بيان ڪريو"
+  "describe.placeholderLocal": "پنهنجي ٻوليءَ ۾ پنهنجي پراڊڪٽ جو بيان ڪريو",
+  "describe.syncing": "ٻي ٻولي اپڊيٽ ٿي رهي آهي...",
+  "describe.syncFailed": "ٻي ٻولي اپڊيٽ نه ٿي سگهي. ضرورت پوڻ تي پاڻ ئي ترميم ڪريو.",
+  "describe.syncHint": "ترميمون پاڻمرادو ٻي ٻوليءَ ۾ نقل ٿينديون."
 }
