@@ -4,39 +4,6 @@ import cors from "cors";
 
 // server/routes/health.ts
 import { Router } from "express";
-var REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET", "GEMINI_API_KEY"];
-var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED"];
-var router = Router();
-function isSet(name) {
-  const value = process.env[name];
-  return typeof value === "string" && value.trim() !== "";
-}
-router.get("/", (_req, res) => {
-  const missing = REQUIRED.filter((name) => !isSet(name));
-  res.json({
-    status: missing.length === 0 ? "ok" : "misconfigured",
-    version: "1.0.0",
-    config: {
-      missing,
-      present: [...REQUIRED, ...OPTIONAL].filter(isSet)
-    }
-  });
-});
-var health_default = router;
-
-// server/routes/auth.ts
-import { Router as Router2 } from "express";
-import { z as z2 } from "zod";
-
-// server/middleware/asyncRoute.ts
-function asyncRoute(handler2) {
-  return (req, res, next) => {
-    handler2(req, res, next).catch(next);
-  };
-}
-
-// server/lib/supabase.ts
-import { createClient } from "@supabase/supabase-js";
 
 // server/lib/env.ts
 import { z } from "zod";
@@ -73,7 +40,50 @@ function loadEnv() {
   return cached;
 }
 
+// server/routes/health.ts
+var REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET", "GEMINI_API_KEY"];
+var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED"];
+var router = Router();
+function isSet(name) {
+  const value = process.env[name];
+  return typeof value === "string" && value.trim() !== "";
+}
+router.get("/", (_req, res) => {
+  const missing = REQUIRED.filter((name) => !isSet(name));
+  let configValid = true;
+  let configError;
+  try {
+    loadEnv();
+  } catch (err) {
+    configValid = false;
+    configError = err.message;
+  }
+  res.json({
+    status: missing.length === 0 && configValid ? "ok" : "misconfigured",
+    version: "1.0.0",
+    config: {
+      missing,
+      present: [...REQUIRED, ...OPTIONAL].filter(isSet),
+      valid: configValid,
+      ...configError ? { error: configError } : {}
+    }
+  });
+});
+var health_default = router;
+
+// server/routes/auth.ts
+import { Router as Router2 } from "express";
+import { z as z2 } from "zod";
+
+// server/middleware/asyncRoute.ts
+function asyncRoute(handler2) {
+  return (req, res, next) => {
+    handler2(req, res, next).catch(next);
+  };
+}
+
 // server/lib/supabase.ts
+import { createClient } from "@supabase/supabase-js";
 var cached2;
 function getSupabase() {
   if (cached2) return cached2;
