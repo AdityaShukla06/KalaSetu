@@ -23,6 +23,7 @@ Create a branch and open a pull request instead, even for small changes. This ke
 - `npm run build` passes (type checks and production build)
 - `npm run lint` is clean
 - If you touched `server/` or `api/`, `npm run typecheck:server` and `npm test` pass too
+- `server/__smoke.test.ts` runs the whole API against a real Supabase project. It only runs when `.env` has credentials, and it skips itself in CI. It cleans up every row and file it creates, so it is safe to run repeatedly
 - CI runs all of the above on every pull request, but check locally first rather than using CI as your test runner
 - You tested the change in both English and Hindi if it touches UI, layout differences show up more in Hindi due to longer text
 - New user facing strings are added to both `en` and `hi` in `src/context/translations.ts`, not just one language
