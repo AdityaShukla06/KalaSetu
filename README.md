@@ -124,6 +124,8 @@ A product stores English plus the artisan's own language, with the language reco
 
 Groq is the default because its free tier is far more generous. Gemini's free tier allows 5 requests per minute, and one voice note costs up to four, so a second recording inside a minute fails.
 
+Groq's free tier caps tokens per day per model rather than per minute, and each model has its own allowance. When the primary model runs out, `groqChat` falls through to `GROQ_LLM_FALLBACK_MODEL` instead of failing the request, and logs that it did so. A heavy day on one model no longer takes the voice feature down.
+
 ## Data and ownership
 
 Two tables plus one for OTPs, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product read, update, and delete is scoped by `user_id` in the query itself, so knowing a product ID is not enough to touch someone else's listing. Row level security is enabled on every table with no public policies, so the anon key cannot read anything even if it ends up in the browser bundle. The API uses the service role key server side only.

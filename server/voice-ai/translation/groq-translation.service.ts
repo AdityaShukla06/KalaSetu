@@ -6,13 +6,15 @@ import { groqChat } from "../groq/chat";
 export class GroqTranslationService implements TranslationService {
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly fallbackModel: string;
 
-  constructor(env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_LLM_MODEL">) {
+  constructor(env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_LLM_MODEL" | "GROQ_LLM_FALLBACK_MODEL">) {
     if (!env.GROQ_API_KEY) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
     this.apiKey = env.GROQ_API_KEY;
     this.model = env.GROQ_LLM_MODEL;
+    this.fallbackModel = env.GROQ_LLM_FALLBACK_MODEL;
   }
 
   async translate(
@@ -32,6 +34,7 @@ export class GroqTranslationService implements TranslationService {
       raw = await groqChat({
         apiKey: this.apiKey,
         model: this.model,
+        fallbackModel: this.fallbackModel,
         json: true,
         prompt: buildPrompt(text, sourceName, targetName),
       });

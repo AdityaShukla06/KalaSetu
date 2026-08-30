@@ -7,7 +7,11 @@ import {
   MalformedModelResponseError,
 } from "../errors/voice-ai.errors";
 
-const env = { GROQ_API_KEY: "gsk_test", GROQ_LLM_MODEL: "openai/gpt-oss-120b" };
+const env = {
+  GROQ_API_KEY: "gsk_test",
+  GROQ_LLM_MODEL: "openai/gpt-oss-120b",
+  GROQ_LLM_FALLBACK_MODEL: "openai/gpt-oss-20b",
+};
 
 function completion(content: string) {
   return {
@@ -67,6 +71,45 @@ describe("GroqTranslationService", () => {
     await expect(new GroqTranslationService(env).translate("A clay pot", "en", "hi")).rejects.toBeInstanceOf(
       TranslationFailedError,
     );
+  });
+});
+
+describe("rate limit fallback", () => {
+  it("retries on a second model when the primary is out of daily tokens", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 429, ok: false, text: async () => "tokens per day (TPD)" } as Response)
+      .mockResolvedValueOnce(completion('{"descriptionEn":"A clay pot."}'));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await new GroqDescriptionService(env).generateDescription("a clay pot", "pottery");
+
+    expect(out).toBe("A clay pot.");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe("openai/gpt-oss-120b");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe("openai/gpt-oss-20b");
+  });
+
+  it("gives up when the fallback is rate limited too", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 429, ok: false, text: async () => "limited" } as Response),
+    );
+
+    await expect(
+      new GroqDescriptionService(env).generateDescription("a clay pot", "pottery"),
+    ).rejects.toBeInstanceOf(DescriptionGenerationError);
+  });
+
+  it("does not retry a non rate limit failure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ status: 500, ok: false, text: async () => "boom" } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      new GroqDescriptionService(env).generateDescription("a clay pot", "pottery"),
+    ).rejects.toBeInstanceOf(DescriptionGenerationError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

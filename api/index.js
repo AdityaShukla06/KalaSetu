@@ -728,6 +728,7 @@ var envSchema2 = z5.object({
   GROQ_API_KEY: z5.string().optional(),
   GROQ_STT_MODEL: z5.string().default("whisper-large-v3"),
   GROQ_LLM_MODEL: z5.string().default("openai/gpt-oss-120b"),
+  GROQ_LLM_FALLBACK_MODEL: z5.string().default("openai/gpt-oss-20b"),
   GEMINI_API_KEY: z5.string().optional(),
   GEMINI_TRANSCRIBE_MODEL: z5.string().default("gemini-3.6-flash"),
   GEMINI_FLASH_MODEL: z5.string().default("gemini-3.6-flash")
@@ -923,7 +924,13 @@ var GroqSttService = class {
 
 // server/voice-ai/groq/chat.ts
 var GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
-async function groqChat(options) {
+var GroqRateLimitError = class extends Error {
+  constructor(model, detail) {
+    super(`Groq rate limit reached for ${model}: ${detail}`);
+    this.name = "GroqRateLimitError";
+  }
+};
+async function callModel(options, model) {
   const response = await fetch(GROQ_CHAT_URL, {
     method: "POST",
     headers: {
@@ -931,12 +938,15 @@ async function groqChat(options) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: options.model,
+      model,
       temperature: 0.2,
       messages: [{ role: "user", content: options.prompt }],
       ...options.json ? { response_format: { type: "json_object" } } : {}
     })
   });
+  if (response.status === 429) {
+    throw new GroqRateLimitError(model, (await response.text()).slice(0, 300));
+  }
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Groq returned ${response.status}: ${detail.slice(0, 400)}`);
@@ -948,17 +958,34 @@ async function groqChat(options) {
   }
   return content.trim();
 }
+async function groqChat(options) {
+  try {
+    return await callModel(options, options.model);
+  } catch (err) {
+    const fallback = options.fallbackModel;
+    if (!(err instanceof GroqRateLimitError) || !fallback || fallback === options.model) {
+      throw err;
+    }
+    console.warn("[voice-ai] primary model rate limited, falling back", {
+      from: options.model,
+      to: fallback
+    });
+    return await callModel(options, fallback);
+  }
+}
 
 // server/voice-ai/translation/groq-translation.service.ts
 var GroqTranslationService = class {
   apiKey;
   model;
+  fallbackModel;
   constructor(env) {
     if (!env.GROQ_API_KEY) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
     this.apiKey = env.GROQ_API_KEY;
     this.model = env.GROQ_LLM_MODEL;
+    this.fallbackModel = env.GROQ_LLM_FALLBACK_MODEL;
   }
   async translate(text, sourceLanguage, targetLanguage) {
     if (sourceLanguage === targetLanguage || !text || text.trim().length === 0) {
@@ -971,6 +998,7 @@ var GroqTranslationService = class {
       raw = await groqChat({
         apiKey: this.apiKey,
         model: this.model,
+        fallbackModel: this.fallbackModel,
         json: true,
         prompt: buildPrompt(text, sourceName, targetName)
       });
@@ -1018,12 +1046,14 @@ Respond with a JSON object of the form {"translation": "..."}.`;
 var GroqDescriptionService = class {
   apiKey;
   model;
+  fallbackModel;
   constructor(env) {
     if (!env.GROQ_API_KEY) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
     this.apiKey = env.GROQ_API_KEY;
     this.model = env.GROQ_LLM_MODEL;
+    this.fallbackModel = env.GROQ_LLM_FALLBACK_MODEL;
   }
   async generateDescription(englishTranscript, category) {
     if (!englishTranscript || englishTranscript.trim().length === 0) {
@@ -1034,6 +1064,7 @@ var GroqDescriptionService = class {
       raw = await groqChat({
         apiKey: this.apiKey,
         model: this.model,
+        fallbackModel: this.fallbackModel,
         json: true,
         prompt: buildPrompt2(englishTranscript, category)
       });

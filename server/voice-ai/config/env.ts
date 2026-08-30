@@ -8,6 +8,7 @@ const envSchema = z
     GROQ_API_KEY: z.string().optional(),
     GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
     GROQ_LLM_MODEL: z.string().default("openai/gpt-oss-120b"),
+    GROQ_LLM_FALLBACK_MODEL: z.string().default("openai/gpt-oss-20b"),
 
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
