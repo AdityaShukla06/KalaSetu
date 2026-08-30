@@ -1,31 +1,34 @@
 import { useState } from "react";
 import { WelcomeScreen } from "./WelcomeScreen";
-import { PhoneEntryScreen } from "./PhoneEntryScreen";
+import { EmailEntryScreen } from "./EmailEntryScreen";
 import { OtpVerificationScreen } from "./OtpVerificationScreen";
 
-type Phase = "welcome" | "phone" | "otp";
+type Phase = "welcome" | "email" | "otp";
 
 export function LoginScreen() {
   const [phase, setPhase] = useState<Phase>("welcome");
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [emailDelivered, setEmailDelivered] = useState(true);
 
   if (phase === "welcome") {
-    return <WelcomeScreen onGetStarted={() => setPhase("phone")} />;
+    return <WelcomeScreen onGetStarted={() => setPhase("email")} />;
   }
 
-  if (phase === "otp" && phoneNumber) {
+  if (phase === "otp" && email) {
     return (
       <OtpVerificationScreen
-        phoneNumber={phoneNumber}
-        onChangeNumber={() => setPhase("phone")}
+        email={email}
+        emailDelivered={emailDelivered}
+        onChangeEmail={() => setPhase("email")}
       />
     );
   }
 
   return (
-    <PhoneEntryScreen
-      onOtpSent={(sentPhoneNumber) => {
-        setPhoneNumber(sentPhoneNumber);
+    <EmailEntryScreen
+      onOtpSent={(sentEmail, delivered) => {
+        setEmail(sentEmail);
+        setEmailDelivered(delivered);
         setPhase("otp");
       }}
     />

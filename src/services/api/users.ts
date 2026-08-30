@@ -1,9 +1,8 @@
 import { apiFetch } from "./_helpers";
 
-//types
 export interface UserProfile {
   userId: string;
-  phoneNumber: string;
+  email: string;
   displayName: string | null;
   shopName: string | null;
   language: "en" | "hi";
@@ -11,14 +10,12 @@ export interface UserProfile {
   createdAt: string;
 }
 
-//user profile
 export function getMyProfile(): Promise<UserProfile> {
   return apiFetch("/users/me", { method: "GET" });
 }
 
-//profile update
 export function updateMyProfile(
-  updates: Partial<Pick<UserProfile, "displayName" | "shopName" | "phoneNumber" | "language">>,
+  updates: Partial<Pick<UserProfile, "displayName" | "shopName" | "language">>,
 ): Promise<{ success: boolean }> {
   return apiFetch("/users/me", {
     method: "PATCH",

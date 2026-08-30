@@ -8,8 +8,8 @@ A bilingual (English / Hindi) mobile-first PWA that helps artisans photograph, d
 - react-router-dom for routing
 - vite-plugin-pwa for the service worker and web app manifest
 - Plain CSS with CSS variables for theming, no Tailwind or CSS-in-JS
-- Firebase Cloud Functions (v2) + Express for the backend API, Firestore for data, Cloud Storage for images
-- Firebase Phone Auth for login, Gemini for voice transcription, translation, and description generation
+- Express API deployed as a Vercel serverless function, Supabase Postgres for data, Supabase Storage for images
+- Email OTP sign in with app issued JWT sessions, Gemini for voice transcription, translation, and description generation
 
 ## Project structure
 
@@ -19,17 +19,21 @@ src/
     Home/        My Shop catalog grid, product detail sheet, GeM/ONDC banner
     AddProduct/  camera capture, category, voice description, pricing and publish
   components/    shared UI: Button, Card, Input, OtpInput, LanguageToggle, BottomNav
-  services/      firebase.ts, api.ts barrel, api/ one module per resource
+  services/      api.ts barrel, api/ one module per resource, audio.ts
   context/       Auth, Language (with translations.ts), AddProductDraft state
   styles/        variables.css (design tokens), global.css
 public/
   icons/         PWA icons (192x192, 512x512, 512x512 maskable)
-functions/
-  src/
-    routes/      one Express router per resource, all mounted under /api
-    middleware/  Firebase token verification, async route error forwarding
-    services/    pricingEngine.ts, the SIH26090 smart pricing formula
-    voice-ai/    provider-agnostic STT, translation, and description pipeline
+server/
+  routes/        one Express router per resource, all mounted under /api
+  middleware/    session verification, raw body reading, async error forwarding
+  lib/           supabase client, env schema, JWT, OTP, email delivery
+  services/      pricingEngine.ts and imageEnhancer.ts
+  voice-ai/      provider-agnostic STT, translation, and description pipeline
+api/
+  index.ts       Vercel entry point, exports the Express app
+supabase/
+  schema.sql     tables, index, counter function, RLS, storage bucket
 ```
 
 ## Scripts
@@ -41,13 +45,12 @@ Frontend, from the repo root:
 - `npm run preview` serves the production build locally
 - `npm run lint` runs oxlint
 
-Backend, from `functions/`:
+Backend, also from the repo root (it deploys with the frontend):
 
-- `npm run build` compiles TypeScript to `lib/`
-- `npm test` runs the vitest suite (pricing engine, voice pipeline, BHASHINI adapter)
-- `npm run serve` builds and starts the functions emulator
+- `npm run typecheck:server` type checks `server/` and `api/`
+- `npm test` runs the vitest suite
 
-Both are run on every pull request by `.github/workflows/ci.yml`.
+`npm run dev` serves both: Vite proxies nothing, the API runs on Vercel. All of the above run on every pull request via `.github/workflows/ci.yml`.
 
 ## Progress
 
@@ -59,14 +62,14 @@ Both are run on every pull request by `.github/workflows/ci.yml`.
 - [x] Phase 6: My Shop catalog grid, empty state, product detail sheet, GeM/ONDC roadmap banner
 - [x] Phase 7: Finalized routing and auth guards, sequential Add Product step guards, real Profile screen, top level error boundary, fetch ready API layer
 - [x] Phase 8: Real icon set, custom install prompt, offline banner and offline app shell, visual polish pass
-- [~] Phase 9: Firebase Hosting config and deploy script ready (`firebase.json`, `DEPLOY.md`), actual deploy and Android device test pass deferred, see `TESTING.md`
-- [x] Phase 10: Real backend, Firebase Functions API (users, products, images, voice, pricing), Firestore and Storage rules, smart pricing engine, Gemini voice pipeline, real Phone Auth, frontend wired off mocks onto real endpoints
+- [x] Phase 9: Hosting config and deploy docs, actual deploy and Android device test pass deferred, see `TESTING.md`
+- [x] Phase 10: Real backend API (users, products, images, voice, pricing), smart pricing engine, Gemini voice pipeline, frontend wired off mocks onto real endpoints
 - [x] Phase 11: Backend integration fixes (working Gemini transcription, BHASHINI compute call, ID token refresh, first-publish crash), Edit and Delete wired up, backend test suite and CI
 - [x] Phase 12: Real image enhancement, browser side WAV conversion so voice works on Android, description fallback fixes, editable profile, timestamp serialisation
 
 ## Deploy
 
-See `DEPLOY.md` for the one time Firebase setup and `npm run deploy`. See `TESTING.md` for the on-device test checklist and the live URL once deployed.
+See `SETUP.md` for Supabase and Vercel setup end to end. See `TESTING.md` for the on-device test checklist and the live URL once deployed.
 
 ## Design system
 
@@ -74,29 +77,33 @@ Colors, type, spacing, radius, and component specs live as CSS variables in `src
 
 ## API contract
 
-The mock layer is gone. `src/services/api/` now calls the real backend, one module per resource, re-exported through `src/services/api.ts`. Set `VITE_API_BASE_URL` in `.env`: use `/api` in production (Hosting rewrites `/api/**` to the `api` function), or the emulator's function URL locally. See `FIREBASE_SETUP_HANDOVER.md`.
+The mock layer is gone. `src/services/api/` calls the real backend, one module per resource, re-exported through `src/services/api.ts`. The API is served from the same origin at `/api`, so `VITE_API_BASE_URL` stays empty unless you host the API separately. See `SETUP.md`.
 
-Every route below is mounted under `/api` and, except for health, requires `Authorization: Bearer <Firebase ID token>`:
+Every route below is mounted under `/api` and, except for health and auth, requires `Authorization: Bearer <session token>`:
 
 - `GET /api/health` -> `{ status, version }`, unauthenticated
-- `GET /api/users/me` -> `UserProfile`, creates the profile on first call
-- `PATCH /api/users/me` `{ displayName?, shopName?, phoneNumber?, language? }` -> `{ success }`
-- `POST /api/images/upload` multipart `image` -> `{ imageUrl }`
-- `POST /api/images/enhance` multipart `image` -> `{ enhancedImageUrl }`
-- `POST /api/voice/transcribe` multipart `audio` + `category` -> `{ transcript, descriptionEn, descriptionHi, detectedLanguage }`
+- `POST /api/auth/request-otp` `{ email }` -> `{ success, emailDelivered, expiresInMinutes }`, unauthenticated
+- `POST /api/auth/verify-otp` `{ email, otp }` -> `{ token, userId, email }`, unauthenticated
+- `GET /api/users/me` -> `UserProfile`
+- `PATCH /api/users/me` `{ displayName?, shopName?, language? }` -> `{ success }`
+- `POST /api/images/upload` raw image bytes -> `{ imageUrl, width, height }`
+- `POST /api/images/enhance` raw image bytes -> `{ enhancedImageUrl, width, height }`
+- `POST /api/voice/transcribe?category=...` raw audio bytes -> `{ transcript, descriptionEn, descriptionHi, detectedLanguage }`
 - `POST /api/pricing/suggest` `{ category, materialCost | rawMaterials, ... }` -> suggested range, confidence, market reference, breakdown
 - `POST /api/products` a `ProductInput` -> `{ productId }`
 - `GET /api/products` -> `Product[]` for the signed in user
 - `PATCH /api/products/:id` a partial `ProductInput` -> `{ success }`
 - `DELETE /api/products/:id` -> `{ success }`
 
-Auth is Firebase Phone Auth, not a custom OTP endpoint: `sendOtp` calls `signInWithPhoneNumber` with an invisible reCAPTCHA, and `verifyOtp` exchanges the code for a Firebase ID token. `apiFetch` asks the Firebase SDK for the current ID token on every request, so tokens that expire (they last one hour) are refreshed transparently rather than leaving the session silently 401ing.
+Uploads send the file as the raw request body with the real type in an `X-File-Type` header, rather than as multipart. Serverless runtimes buffer and consume the request stream before the handler sees it, which breaks multipart parsers; reading a raw body works in both a normal Express server and on Vercel.
 
-Products are owned: every read, update, and delete checks `userId` against the caller both in the route and again in `firestore.rules`, so a stolen product ID is not enough to touch someone else's listing.
+Auth is email OTP. `POST /auth/request-otp` stores a hashed 4 digit code with a 10 minute expiry and emails it, `POST /auth/verify-otp` checks it and returns a signed JWT the client sends on every later request. Codes are single use, capped at 5 attempts, and compared with a timing safe comparison. See `SETUP.md` for the demo fallback code and how to disable it.
+
+Products are owned: every read, update, and delete is scoped by `user_id` in the query itself, so a stolen product ID cannot touch someone else's listing. Row level security is enabled on every table with no public policies, so the anon key cannot read anything even if it leaks.
 
 ## Auth and language
 
-`AuthContext` persists `token`, `userId`, and `phoneNumber` to localStorage, so a logged in session survives a page refresh, and subscribes to `onIdTokenChanged` so a refreshed Firebase ID token is written back to storage and a sign out elsewhere clears the session. `LanguageContext` persists the chosen language and exposes a small `t(key)` translation function backed by `src/context/translations.ts`, extend that dictionary as new screens add copy.
+`AuthContext` persists `token`, `userId`, and `email` to localStorage, so a logged in session survives a page refresh. Sessions last 7 days; changing `JWT_SECRET` invalidates every session at once, which is the intended way to revoke them all. `LanguageContext` persists the chosen language and exposes a small `t(key)` translation function backed by `src/context/translations.ts`, extend that dictionary as new screens add copy.
 
 ## Routing and guards
 
@@ -111,7 +118,7 @@ A class based `ErrorBoundary` wraps the whole app and shows a bilingual "Somethi
 
 ## Profile
 
-`/profile` loads the artisan's profile from `GET /api/users/me`, which creates it on first call, and shows the phone number (filled in from the verified Firebase token, so it is correct even though the client never sends it). "Your name" and "Shop name" are editable and save through `PATCH /api/users/me`, with the save button disabled until something actually changes. The screen also carries the same `LanguageToggle` used on the welcome screen and a "Log out" button that clears `AuthContext`, signs out of Firebase, and redirects to `/login`.
+`/profile` loads the artisan's profile from `GET /api/users/me` and shows the email address the account was created with. "Your name" and "Shop name" are editable and save through `PATCH /api/users/me`, with the save button disabled until something actually changes. The screen also carries the same `LanguageToggle` used on the welcome screen and a "Log out" button that clears `AuthContext` and redirects to `/login`.
 
 ## Add Product, photo capture
 

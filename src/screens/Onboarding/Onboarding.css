@@ -70,3 +70,8 @@
   color: var(--color-disabled-text);
   cursor: not-allowed;
 }
+
+.onboarding-notice {
+  color: var(--color-warning, #b26a00);
+  font-weight: 600;
+}
