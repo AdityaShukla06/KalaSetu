@@ -14,8 +14,8 @@ var envSchema = z.object({
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   JWT_EXPIRES_IN: z.string().default("7d"),
   GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
-  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-2.5-flash"),
-  GEMINI_FLASH_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
+  GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
   RESEND_API_KEY: z.string().optional(),
   OTP_FROM_EMAIL: z.string().default("KalaSetu <onboarding@resend.dev>"),
   DEMO_FALLBACK_OTP: z.string().default("5741"),
@@ -678,8 +678,8 @@ import "dotenv/config";
 import { z as z5 } from "zod";
 var envSchema2 = z5.object({
   GEMINI_API_KEY: z5.string().min(1, "GEMINI_API_KEY is required"),
-  GEMINI_TRANSCRIBE_MODEL: z5.string().default("gemini-2.5-flash"),
-  GEMINI_FLASH_MODEL: z5.string().default("gemini-2.5-flash")
+  GEMINI_TRANSCRIBE_MODEL: z5.string().default("gemini-3.6-flash"),
+  GEMINI_FLASH_MODEL: z5.string().default("gemini-3.6-flash")
 });
 var cached3;
 function withoutBlanks2(source) {
@@ -1050,7 +1050,11 @@ router6.post(
         detectedLanguage: result.detectedLanguage
       });
     } catch (err) {
-      console.error("voice/transcribe failed", { stage: err?.stage, message: err?.message });
+      console.error("voice/transcribe failed", {
+        stage: err?.stage,
+        message: err?.message,
+        cause: err?.cause?.message ?? String(err?.cause ?? "")
+      });
       res.status(500).json({
         error: "transcription_failed",
         stage: err?.stage,

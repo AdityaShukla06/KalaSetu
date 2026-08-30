@@ -42,7 +42,7 @@ describe("loadEnv", () => {
     const env = loadEnv();
 
     expect(env.SUPABASE_STORAGE_BUCKET).toBe("product-images");
-    expect(env.GEMINI_TRANSCRIBE_MODEL).toBe("gemini-2.5-flash");
+    expect(env.GEMINI_TRANSCRIBE_MODEL).toBe("gemini-3.6-flash");
     expect(env.JWT_EXPIRES_IN).toBe("7d");
     expect(env.DEMO_FALLBACK_OTP).toBe("5741");
   });
@@ -73,8 +73,8 @@ describe("loadEnv", () => {
     });
     const env = loadEnv();
 
-    expect(env.GEMINI_TRANSCRIBE_MODEL).toBe("gemini-2.5-flash");
-    expect(env.GEMINI_FLASH_MODEL).toBe("gemini-2.5-flash");
+    expect(env.GEMINI_TRANSCRIBE_MODEL).toBe("gemini-3.6-flash");
+    expect(env.GEMINI_FLASH_MODEL).toBe("gemini-3.6-flash");
     expect(env.SUPABASE_STORAGE_BUCKET).toBe("product-images");
     expect(env.OTP_FROM_EMAIL).toContain("@");
   });

@@ -3,8 +3,8 @@ import { z } from "zod";
 
 const envSchema = z.object({
   GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
-  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-2.5-flash"),
-  GEMINI_FLASH_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
+  GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
 });
 
 export type VoiceAiEnv = z.infer<typeof envSchema>;

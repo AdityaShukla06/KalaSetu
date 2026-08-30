@@ -9,8 +9,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
 
   GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
-  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-2.5-flash"),
-  GEMINI_FLASH_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
+  GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
 
   RESEND_API_KEY: z.string().optional(),
   OTP_FROM_EMAIL: z.string().default("KalaSetu <onboarding@resend.dev>"),

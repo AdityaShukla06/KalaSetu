@@ -65,7 +65,11 @@ router.post(
         detectedLanguage: result.detectedLanguage,
       });
     } catch (err: any) {
-      console.error("voice/transcribe failed", { stage: err?.stage, message: err?.message });
+      console.error("voice/transcribe failed", {
+        stage: err?.stage,
+        message: err?.message,
+        cause: err?.cause?.message ?? String(err?.cause ?? ""),
+      });
       res.status(500).json({
         error: "transcription_failed",
         stage: err?.stage,
