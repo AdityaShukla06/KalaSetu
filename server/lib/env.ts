@@ -26,10 +26,23 @@ export type ServerEnv = z.infer<typeof envSchema>;
 
 let cached: ServerEnv | undefined;
 
+/**
+ * A key left blank in a .env file arrives as an empty string, which would
+ * satisfy z.string() and defeat every .default(). Dropping blanks makes an
+ * unset key and a blank key behave the same way.
+ */
+export function withoutBlanks(source: NodeJS.ProcessEnv): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === "string" && value.trim() !== "") out[key] = value;
+  }
+  return out;
+}
+
 export function loadEnv(): ServerEnv {
   if (cached) return cached;
 
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse(withoutBlanks(process.env));
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     throw new Error(`Invalid server environment configuration: ${issues}`);

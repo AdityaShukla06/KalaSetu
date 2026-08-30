@@ -1,4 +1,9 @@
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api";
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+
+export const API_BASE_URL =
+  configuredBaseUrl && configuredBaseUrl.trim() !== ""
+    ? configuredBaseUrl.replace(/\/+$/, "")
+    : "/api";
 
 const TOKEN_KEY = "kalasetu.token";
 

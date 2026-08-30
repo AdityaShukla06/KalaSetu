@@ -21,8 +21,10 @@ functions/.runtimeconfig.json
 .runtimeconfig.json
 
 # Environment & local files
+# Ignore every .env variant, but keep the committed example template.
 .env
-.env.*.local
+.env.*
+!.env.example
 
 .vscode/*
 !.vscode/extensions.json

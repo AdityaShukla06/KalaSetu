@@ -62,4 +62,25 @@ describe("loadEnv", () => {
     setEnv({ ...REQUIRED, DEMO_FALLBACK_OTP: "9999" });
     expect(loadEnv().DEMO_FALLBACK_OTP).toBe("9999");
   });
+
+  it("treats a key left blank in .env exactly like an unset key", () => {
+    setEnv({
+      ...REQUIRED,
+      GEMINI_TRANSCRIBE_MODEL: "",
+      GEMINI_FLASH_MODEL: "   ",
+      SUPABASE_STORAGE_BUCKET: "",
+      OTP_FROM_EMAIL: "",
+    });
+    const env = loadEnv();
+
+    expect(env.GEMINI_TRANSCRIBE_MODEL).toBe("gemini-2.5-flash");
+    expect(env.GEMINI_FLASH_MODEL).toBe("gemini-2.5-flash");
+    expect(env.SUPABASE_STORAGE_BUCKET).toBe("product-images");
+    expect(env.OTP_FROM_EMAIL).toContain("@");
+  });
+
+  it("reports a blank required key as missing rather than accepting it", () => {
+    setEnv({ ...REQUIRED, GEMINI_API_KEY: "" });
+    expect(() => loadEnv()).toThrow(/GEMINI_API_KEY/);
+  });
 });
