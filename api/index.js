@@ -4,9 +4,23 @@ import cors from "cors";
 
 // server/routes/health.ts
 import { Router } from "express";
+var REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET", "GEMINI_API_KEY"];
+var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED"];
 var router = Router();
+function isSet(name) {
+  const value = process.env[name];
+  return typeof value === "string" && value.trim() !== "";
+}
 router.get("/", (_req, res) => {
-  res.json({ status: "ok", version: "1.0.0" });
+  const missing = REQUIRED.filter((name) => !isSet(name));
+  res.json({
+    status: missing.length === 0 ? "ok" : "misconfigured",
+    version: "1.0.0",
+    config: {
+      missing,
+      present: [...REQUIRED, ...OPTIONAL].filter(isSet)
+    }
+  });
 });
 var health_default = router;
 
