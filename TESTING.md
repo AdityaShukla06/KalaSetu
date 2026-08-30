@@ -1,14 +1,14 @@
 # Device test checklist
 
-Run this on a real Android phone, using the live deployed URL (see `DEPLOY.md`), not a local IP address. Camera and microphone permissions require a secure context, so this checklist cannot be completed against a local dev server over plain HTTP.
+Run this on a real Android phone, using the live deployed URL (see `SETUP.md`), not a local IP address. Camera and microphone permissions require a secure context, so this checklist cannot be completed against a local dev server over plain HTTP.
 
 Fill in Pass/Fail and notes as you go. If something fails, note the issue and a plan to fix it before the demo rather than leaving it blank.
 
-Before starting, confirm `https://<project-id>.web.app/api/health` returns `{"status":"ok"}`. If it does not, the frontend will look broken in ways that have nothing to do with the checklist below.
+Before starting, confirm `https://<your-app>.vercel.app/api/health` returns `{"status":"ok"}`. If it does not, the frontend will look broken in ways that have nothing to do with the checklist below.
 
 | # | Check | Result | Notes |
 |---|-------|--------|-------|
-| 1 | Login with OTP works | Not yet tested | |
+| 1 | Login with an email OTP works | Not yet tested | Use the demo code 5741 if no email arrives |
 | 2 | Language toggle works and persists | Not yet tested | |
 | 3 | Camera capture works | Not yet tested | |
 | 4 | Camera file-picker fallback works (deny camera permission once to test) | Not yet tested | |
@@ -31,6 +31,6 @@ Before starting, confirm `https://<project-id>.web.app/api/health` returns `{"st
 
 ## Live URL
 
-Not yet deployed. Fill in here once `npm run deploy` succeeds (see `DEPLOY.md`), and share this file or the URL with the rest of the team.
+Not yet deployed. Fill in here once the Vercel deploy succeeds (see `SETUP.md`), and share this file or the URL with the rest of the team.
 
-`https://<project-id>.web.app`
+`https://<your-app>.vercel.app`

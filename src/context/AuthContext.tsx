@@ -1,16 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { onIdTokenChanged } from "firebase/auth";
-import { getFirebaseAuth } from "../services/firebase";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
 interface AuthState {
   token: string | null;
   userId: string | null;
-  phoneNumber: string | null;
+  email: string | null;
 }
 
 interface AuthContextValue extends AuthState {
   isAuthenticated: boolean;
-  login: (token: string, userId: string, phoneNumber: string) => void;
+  login: (token: string, userId: string, email: string) => void;
   logout: () => void;
 }
 
@@ -18,64 +16,34 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const TOKEN_KEY = "kalasetu.token";
 const USER_ID_KEY = "kalasetu.userId";
-const PHONE_NUMBER_KEY = "kalasetu.phoneNumber";
+const EMAIL_KEY = "kalasetu.email";
 
 function getInitialState(): AuthState {
   return {
     token: localStorage.getItem(TOKEN_KEY),
     userId: localStorage.getItem(USER_ID_KEY),
-    phoneNumber: localStorage.getItem(PHONE_NUMBER_KEY),
+    email: localStorage.getItem(EMAIL_KEY),
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(getInitialState);
 
-  useEffect(() => {
-    let auth;
-    try {
-      auth = getFirebaseAuth();
-    } catch {
-      return;
-    }
-
-    return onIdTokenChanged(auth, async (user) => {
-      if (!user) {
-        if (localStorage.getItem(TOKEN_KEY) === null) return;
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_ID_KEY);
-        localStorage.removeItem(PHONE_NUMBER_KEY);
-        setState({ token: null, userId: null, phoneNumber: null });
-        return;
-      }
-
-      const token = await user.getIdToken();
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_ID_KEY, user.uid);
-      setState((prev) => ({ ...prev, token, userId: user.uid }));
-    });
-  }, []);
-
   const value = useMemo<AuthContextValue>(
     () => ({
       ...state,
       isAuthenticated: state.token !== null,
-      login: (token, userId, phoneNumber) => {
+      login: (token, userId, email) => {
         localStorage.setItem(TOKEN_KEY, token);
         localStorage.setItem(USER_ID_KEY, userId);
-        localStorage.setItem(PHONE_NUMBER_KEY, phoneNumber);
-        setState({ token, userId, phoneNumber });
+        localStorage.setItem(EMAIL_KEY, email);
+        setState({ token, userId, email });
       },
       logout: () => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_ID_KEY);
-        localStorage.removeItem(PHONE_NUMBER_KEY);
-        setState({ token: null, userId: null, phoneNumber: null });
-        try {
-          getFirebaseAuth().signOut();
-        } catch {
-          return;
-        }
+        localStorage.removeItem(EMAIL_KEY);
+        setState({ token: null, userId: null, email: null });
       },
     }),
     [state],

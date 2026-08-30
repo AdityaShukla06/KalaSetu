@@ -24,16 +24,11 @@ function LogoutIcon() {
   );
 }
 
-function PhoneIcon() {
+function MailIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M6 3h4l1.5 4-2 1.5a11 11 0 0 0 6 6l1.5-2 4 1.5v4a2 2 0 0 1-2 2C11.4 20 4 12.6 4 5a2 2 0 0 1 2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="m3.5 7 8.5 6 8.5-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -57,7 +52,7 @@ function RetryIcon() {
 
 export function ProfileScreen() {
   const navigate = useNavigate();
-  const { phoneNumber, logout } = useAuth();
+  const { email, logout } = useAuth();
   const { t } = useLanguage();
 
   const [state, setState] = useState<LoadState>("loading");
@@ -111,7 +106,7 @@ export function ProfileScreen() {
     navigate("/login", { replace: true });
   }
 
-  const shownPhone = profile?.phoneNumber || phoneNumber;
+  const shownEmail = profile?.email || email;
 
   return (
     <div className="screen">
@@ -119,13 +114,13 @@ export function ProfileScreen() {
         <h1>{t("profile.title")}</h1>
 
         <div className="profile-section">
-          <p className="caption">{t("profile.phoneLabel")}</p>
+          <p className="caption">{t("profile.emailLabel")}</p>
           <div className="profile-phone">
             <span className="profile-phone-icon" aria-hidden="true">
-              <PhoneIcon />
+              <MailIcon />
             </span>
             <span className="profile-phone-value">
-              {shownPhone ? `+91 ${shownPhone.replace(/^\+91/, "")}` : t("profile.phoneUnknown")}
+              {shownEmail || t("profile.emailUnknown")}
             </span>
           </div>
         </div>

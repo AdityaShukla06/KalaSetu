@@ -1,51 +1,29 @@
-import type { ConfirmationResult } from "firebase/auth";
-import { signInWithPhoneNumber, RecaptchaVerifier, PhoneAuthProvider, signInWithCredential } from "firebase/auth";
-import { getFirebaseAuth } from "../firebase";
+import { apiFetch } from "./_helpers";
 
-let _confirmationResult: ConfirmationResult | null = null;
+export const OTP_LENGTH = 4;
 
-function ensureRecaptchaContainer(): HTMLElement {
-  let container = document.getElementById("recaptcha-container");
-  if (!container) {
-    container = document.createElement("div");
-    container.id = "recaptcha-container";
-    container.style.display = "none";
-    document.body.appendChild(container);
-  }
-  return container;
+export interface RequestOtpResult {
+  success: boolean;
+  emailDelivered: boolean;
+  expiresInMinutes: number;
 }
 
-//send otp
-export async function sendOtp(phoneNumber: string): Promise<{ success: boolean }> {
-  const auth = getFirebaseAuth();
-  ensureRecaptchaContainer();
+export interface VerifyOtpResult {
+  token: string;
+  userId: string;
+  email: string;
+}
 
-  const verifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-    size: "invisible",
+export function sendOtp(email: string): Promise<RequestOtpResult> {
+  return apiFetch("/auth/request-otp", {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
-
-  _confirmationResult = await signInWithPhoneNumber(auth, `+91${phoneNumber}`, verifier);
-  return { success: true };
 }
 
-//verify otp
-export async function verifyOtp(
-  _phoneNumber: string,
-  otp: string,
-): Promise<{ token: string; userId: string }> {
-  const auth = getFirebaseAuth();
-
-  if (!_confirmationResult) {
-    throw new Error("No OTP session found — call sendOtp first.");
-  }
-
-  const credential = PhoneAuthProvider.credential(
-    _confirmationResult.verificationId,
-    otp,
-  );
-  const userCredential = await signInWithCredential(auth, credential);
-  const token = await userCredential.user.getIdToken();
-
-  _confirmationResult = null;
-  return { token, userId: userCredential.user.uid };
+export function verifyOtp(email: string, otp: string): Promise<VerifyOtpResult> {
+  return apiFetch("/auth/verify-otp", {
+    method: "POST",
+    body: JSON.stringify({ email, otp }),
+  });
 }

@@ -1,19 +1,9 @@
-import { apiFetch } from "./_helpers";
+import { apiUpload } from "./_helpers";
 
-// POST /images/enhance
-// Request:  multipart/form-data, field "image" (Blob)
-// Response: { enhancedImageUrl: string }
 export function enhanceImage(imageBlob: Blob): Promise<{ enhancedImageUrl: string }> {
-  const formData = new FormData();
-  formData.append("image", imageBlob, "product.jpg");
-  return apiFetch("/images/enhance", { method: "POST", body: formData });
+  return apiUpload("/images/enhance", imageBlob, imageBlob.type || "image/jpeg");
 }
 
-// POST /images/upload
-// Request:  multipart/form-data, field "image" (Blob)
-// Response: { imageUrl: string }
 export function uploadImage(imageBlob: Blob): Promise<{ imageUrl: string }> {
-  const formData = new FormData();
-  formData.append("image", imageBlob, "product.jpg");
-  return apiFetch("/images/upload", { method: "POST", body: formData });
+  return apiUpload("/images/upload", imageBlob, imageBlob.type || "image/jpeg");
 }

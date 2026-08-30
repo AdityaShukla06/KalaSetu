@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { OtpInput } from "../../components/OtpInput";
-import { sendOtp, verifyOtp } from "../../services/api";
+import { sendOtp, verifyOtp, OTP_LENGTH } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
@@ -10,8 +10,9 @@ import "./Onboarding.css";
 const RESEND_COOLDOWN_SECONDS = 30;
 
 interface OtpVerificationScreenProps {
-  phoneNumber: string;
-  onChangeNumber: () => void;
+  email: string;
+  emailDelivered: boolean;
+  onChangeEmail: () => void;
 }
 
 function ShieldIcon() {
@@ -28,7 +29,11 @@ function ShieldIcon() {
   );
 }
 
-export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerificationScreenProps) {
+export function OtpVerificationScreen({
+  email,
+  emailDelivered,
+  onChangeEmail,
+}: OtpVerificationScreenProps) {
   const navigate = useNavigate();
   const { login } = useAuth();
   const { language, t } = useLanguage();
@@ -37,6 +42,7 @@ export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerifi
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
+  const [delivered, setDelivered] = useState(emailDelivered);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
 
   useEffect(() => {
@@ -51,7 +57,7 @@ export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerifi
   }
 
   async function handleVerify() {
-    if (otp.length !== 6) {
+    if (otp.length !== OTP_LENGTH) {
       setError(t("otp.invalid"));
       return;
     }
@@ -60,8 +66,8 @@ export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerifi
     setError(null);
 
     try {
-      const { token, userId } = await verifyOtp(phoneNumber, otp);
-      login(token, userId, phoneNumber);
+      const { token, userId, email: verifiedEmail } = await verifyOtp(email, otp);
+      login(token, userId, verifiedEmail);
       navigate("/", { replace: true });
     } catch {
       setOtp("");
@@ -78,7 +84,8 @@ export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerifi
     setError(null);
 
     try {
-      await sendOtp(phoneNumber);
+      const result = await sendOtp(email);
+      setDelivered(result.emailDelivered);
       setOtp("");
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch {
@@ -92,10 +99,20 @@ export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerifi
     <div className="onboarding-screen" lang={language}>
       <h1 className="onboarding-title">{t("otp.title")}</h1>
       <p className="body-s onboarding-helper">
-        {t("otp.subtitle")} +91 {phoneNumber}
+        {t("otp.subtitle")} {email}
       </p>
 
-      <OtpInput value={otp} onChange={handleOtpChange} error={Boolean(error)} disabled={verifying} />
+      {!delivered && (
+        <p className="body-s onboarding-helper onboarding-notice">{t("otp.emailUndelivered")}</p>
+      )}
+
+      <OtpInput
+        length={OTP_LENGTH}
+        value={otp}
+        onChange={handleOtpChange}
+        error={Boolean(error)}
+        disabled={verifying}
+      />
 
       {error && (
         <p className="onboarding-error" role="alert">
@@ -108,8 +125,8 @@ export function OtpVerificationScreen({ phoneNumber, onChangeNumber }: OtpVerifi
       </Button>
 
       <div className="onboarding-otp-actions">
-        <button type="button" className="onboarding-link" onClick={onChangeNumber}>
-          {t("otp.changeNumber")}
+        <button type="button" className="onboarding-link" onClick={onChangeEmail}>
+          {t("otp.changeEmail")}
         </button>
         <button
           type="button"
