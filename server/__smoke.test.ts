@@ -333,12 +333,12 @@ suite("upload guards", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects webm audio the model cannot read, before calling the provider", async () => {
+  it("rejects a format the provider cannot read, before calling it", async () => {
     const { token } = await signIn(EMAIL_A);
     const res = await fetch(`${base}/api/voice/transcribe?category=pottery`, {
       method: "POST",
-      headers: { ...auth(token), "Content-Type": "application/octet-stream", "X-File-Type": "audio/webm" },
-      body: Buffer.from("fake audio bytes"),
+      headers: { ...auth(token), "Content-Type": "application/octet-stream", "X-File-Type": "application/pdf" },
+      body: Buffer.from("not audio at all"),
     });
     expect(res.status).toBe(500);
     const body = await json(res);

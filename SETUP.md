@@ -18,12 +18,14 @@ Work through the sections in order. Expect about 45 minutes the first time.
 
 > The `service_role` key bypasses row level security. It belongs only in server side environment variables. Never put it in the frontend, and never commit it.
 
-## 2. Gemini API key
+## 2. Groq API key
 
-1. Go to [Google AI Studio](https://aistudio.google.com/apikey).
-2. **Create API key**, copy it into `GEMINI_API_KEY`.
+1. Go to [console.groq.com](https://console.groq.com) (Groq the inference provider, not Grok the chatbot) and sign in with Google or GitHub. Free, no card.
+2. **API Keys -> Create API Key**, copy it into `GROQ_API_KEY`. It starts with `gsk_`.
 
-This powers voice transcription, translation, and description generation. Without it the voice step returns an error and everything else still works.
+This powers voice transcription (Whisper), translation, and description generation (gpt-oss-120b). Without it the voice step returns an error and everything else still works.
+
+Gemini is supported as a fallback: set `VOICE_AI_PROVIDER=gemini` and supply `GEMINI_API_KEY` instead. Worth knowing that Gemini's free tier allows only 5 requests per minute, and one voice note costs up to four of them.
 
 ## 3. A session secret
 
@@ -65,7 +67,7 @@ To check the API is alive: `http://localhost:5173/api/health` should return `{"s
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `JWT_SECRET`
-   - `GEMINI_API_KEY`
+   - `GROQ_API_KEY`
    - `RESEND_API_KEY` (only if you did step 4)
    - `DEMO_FALLBACK_OTP_ENABLED`
 5. **Deploy.**
@@ -103,6 +105,6 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 | `/api/health` returns 500 | A required env var is missing | Vercel logs name the exact variable. Check all of section 6. |
 | `Invalid server environment configuration` | Same as above | The error lists every missing or invalid variable. |
 | Sign in says the code is wrong | No email arrived and you typed a guess | Use `5741`, or set `RESEND_API_KEY` to receive real codes. |
-| Voice returns 500 with `stage: "stt"` | Gemini key or model problem | Check the function logs. Try setting `GEMINI_TRANSCRIBE_MODEL` to a current model ID. |
+| Voice returns 500 with `stage: "stt"` | Provider key, model, or rate limit | The function logs carry the provider's own error. |
 | Images 404 after upload | Storage bucket missing or private | Re-run `supabase/schema.sql`, then confirm `product-images` exists and is public. |
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |

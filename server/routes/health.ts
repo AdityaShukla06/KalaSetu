@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { loadEnv } from "../lib/env";
 
-const REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET", "GEMINI_API_KEY"];
-const OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED"];
+const BASE_REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET"];
+const OPTIONAL_EXTRA = ["VOICE_AI_PROVIDER", "GROQ_API_KEY", "GEMINI_API_KEY"];
+const OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED", ...OPTIONAL_EXTRA];
 
 const router = Router();
 
@@ -12,7 +13,9 @@ function isSet(name: string): boolean {
 }
 
 router.get("/", (_req, res) => {
-  const missing = REQUIRED.filter((name) => !isSet(name));
+  const provider = (process.env.VOICE_AI_PROVIDER || "groq").toLowerCase();
+  const required = [...BASE_REQUIRED, provider === "gemini" ? "GEMINI_API_KEY" : "GROQ_API_KEY"];
+  const missing = required.filter((name) => !isSet(name));
 
   let configValid = true;
   let configError: string | undefined;
@@ -29,7 +32,8 @@ router.get("/", (_req, res) => {
     version: "1.0.0",
     config: {
       missing,
-      present: [...REQUIRED, ...OPTIONAL].filter(isSet),
+      provider,
+      present: [...required, ...OPTIONAL].filter(isSet),
       valid: configValid,
       ...(configError ? { error: configError } : {}),
     },

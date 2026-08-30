@@ -11,7 +11,7 @@ An artisan records a voice note in their own language. The app transcribes it, w
 - Express API deployed as a single Vercel serverless function
 - Supabase Postgres for data, Supabase Storage for images
 - Email OTP sign in with app issued JWT sessions
-- Gemini for transcription, translation, and description generation
+- Groq (Whisper and gpt-oss-120b) for transcription, translation, and description, with Gemini as a switchable fallback
 - `sharp` for image enhancement
 
 ## Getting started
@@ -93,6 +93,12 @@ Email OTP, issued by this API rather than a third party. SMS was not viable: sen
 
 Email delivery is optional. Without `RESEND_API_KEY` the app still works through the demo fallback code, which is documented in [SETUP.md](SETUP.md) along with how to turn it off.
 
+## Swapping the AI provider
+
+`VOICE_AI_PROVIDER` selects `groq` (default) or `gemini`. Nothing else changes: the pipeline talks to `SpeechToTextService`, `TranslationService`, and `ProductDescriptionService`, and the factory picks the implementations. Only the selected provider's key is required, and the health endpoint reports which one is active.
+
+Groq is the default because its free tier is far more generous. Gemini's free tier allows 5 requests per minute, and one voice note costs up to four, so a second recording inside a minute fails.
+
 ## Data and ownership
 
 Two tables plus one for OTPs, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product read, update, and delete is scoped by `user_id` in the query itself, so knowing a product ID is not enough to touch someone else's listing. Row level security is enabled on every table with no public policies, so the anon key cannot read anything even if it ends up in the browser bundle. The API uses the service role key server side only.
@@ -103,7 +109,7 @@ Two tables plus one for OTPs, defined in [`supabase/schema.sql`](supabase/schema
 
 **Photo.** `getUserMedia` with the rear camera, falling back to a native file picker if the camera is unavailable or denied. The captured image goes to `/api/images/enhance`, which runs a real `sharp` pipeline: EXIF auto rotation, resize to fit 1600px, contrast normalisation, a slight saturation lift, mild sharpening, and mozjpeg encoding. Auto rotation matters most in practice, since phone photos carry an orientation flag that would otherwise show the product sideways. Enhancement is deliberately deterministic rather than generative, because a marketplace photo has to keep showing the artisan's actual product.
 
-**Voice.** `MediaRecorder` produces `audio/webm` on Chrome for Android, which the transcription model does not accept, so recordings are decoded and re-encoded to 16kHz mono WAV in the browser first ([`src/services/audio.ts`](src/services/audio.ts)). The backend independently validates the incoming type and rejects an unsupported one with a clear error. The pipeline then transcribes in the original script, translates to English if needed, generates the English description under a strict no-invention prompt, and translates that result to Hindi rather than generating Hindi separately. If the mic is unavailable the flow falls back to typing, and either language alone is enough to publish.
+**Voice.** `MediaRecorder` produces `audio/webm` on Chrome for Android. Groq accepts that, Gemini does not, so recordings are decoded and re-encoded to 16kHz mono WAV in the browser ([`src/services/audio.ts`](src/services/audio.ts)), which is the one format both accept. That keeps the provider switch a server side concern the frontend never has to know about. The backend independently validates the incoming type against the active provider and rejects an unsupported one with a clear error. The pipeline then transcribes in the original script, translates to English if needed, generates the English description under a strict no-invention prompt, and translates that result to Hindi rather than generating Hindi separately. If the mic is unavailable the flow falls back to typing, and either language alone is enough to publish.
 
 **Pricing.** A transparent formula in [`server/services/pricingEngine.ts`](server/services/pricingEngine.ts): material cost divided by a per-category material share, adjusted by inferred complexity, rounded to sensible rupee values, and scored for confidence against stored market benchmarks. The artisan can always override the suggestion.
 

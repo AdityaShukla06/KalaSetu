@@ -5,7 +5,7 @@ const REQUIRED = {
   SUPABASE_URL: "https://example.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
   JWT_SECRET: "test-secret-that-is-long-enough",
-  GEMINI_API_KEY: "gemini-key",
+  GROQ_API_KEY: "groq-key",
 };
 
 let original: NodeJS.ProcessEnv;
@@ -42,7 +42,6 @@ describe("loadEnv", () => {
     const env = loadEnv();
 
     expect(env.SUPABASE_STORAGE_BUCKET).toBe("product-images");
-    expect(env.GEMINI_TRANSCRIBE_MODEL).toBe("gemini-3.6-flash");
     expect(env.JWT_EXPIRES_IN).toBe("7d");
     expect(env.DEMO_FALLBACK_OTP).toBe("5741");
   });
@@ -66,21 +65,36 @@ describe("loadEnv", () => {
   it("treats a key left blank in .env exactly like an unset key", () => {
     setEnv({
       ...REQUIRED,
-      GEMINI_TRANSCRIBE_MODEL: "",
-      GEMINI_FLASH_MODEL: "   ",
       SUPABASE_STORAGE_BUCKET: "",
       OTP_FROM_EMAIL: "",
     });
     const env = loadEnv();
 
-    expect(env.GEMINI_TRANSCRIBE_MODEL).toBe("gemini-3.6-flash");
-    expect(env.GEMINI_FLASH_MODEL).toBe("gemini-3.6-flash");
     expect(env.SUPABASE_STORAGE_BUCKET).toBe("product-images");
     expect(env.OTP_FROM_EMAIL).toContain("@");
   });
 
   it("reports a blank required key as missing rather than accepting it", () => {
-    setEnv({ ...REQUIRED, GEMINI_API_KEY: "" });
+    setEnv({ ...REQUIRED, GROQ_API_KEY: "" });
+    expect(() => loadEnv()).toThrow(/GROQ_API_KEY/);
+  });
+
+  it("defaults to the groq provider and requires its key", () => {
+    setEnv(REQUIRED);
+    expect(loadEnv().VOICE_AI_PROVIDER).toBe("groq");
+  });
+
+  it("requires the gemini key only when the provider is gemini", () => {
+    const { GROQ_API_KEY, ...withoutGroq } = REQUIRED;
+    setEnv({ ...withoutGroq, VOICE_AI_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-key" });
+    expect(loadEnv().VOICE_AI_PROVIDER).toBe("gemini");
+
+    setEnv({ ...withoutGroq, VOICE_AI_PROVIDER: "gemini" });
     expect(() => loadEnv()).toThrow(/GEMINI_API_KEY/);
+  });
+
+  it("rejects an unknown provider", () => {
+    setEnv({ ...REQUIRED, VOICE_AI_PROVIDER: "openai" });
+    expect(() => loadEnv()).toThrow(/VOICE_AI_PROVIDER/);
   });
 });

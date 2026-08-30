@@ -1,11 +1,34 @@
 import "dotenv/config";
 import { z } from "zod";
 
-const envSchema = z.object({
-  GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
-  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
-  GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
-});
+const envSchema = z
+  .object({
+    VOICE_AI_PROVIDER: z.enum(["groq", "gemini"]).default("groq"),
+
+    GROQ_API_KEY: z.string().optional(),
+    GROQ_STT_MODEL: z.string().default("whisper-large-v3"),
+    GROQ_LLM_MODEL: z.string().default("openai/gpt-oss-120b"),
+
+    GEMINI_API_KEY: z.string().optional(),
+    GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
+    GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
+  })
+  .superRefine((env, ctx) => {
+    if (env.VOICE_AI_PROVIDER === "groq" && !env.GROQ_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["GROQ_API_KEY"],
+        message: "GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq",
+      });
+    }
+    if (env.VOICE_AI_PROVIDER === "gemini" && !env.GEMINI_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["GEMINI_API_KEY"],
+        message: "GEMINI_API_KEY is required when VOICE_AI_PROVIDER is gemini",
+      });
+    }
+  });
 
 export type VoiceAiEnv = z.infer<typeof envSchema>;
 
@@ -30,4 +53,8 @@ export function loadEnv(): VoiceAiEnv {
 
   cached = parsed.data;
   return cached;
+}
+
+export function resetVoiceAiEnvCache(): void {
+  cached = undefined;
 }

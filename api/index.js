@@ -13,13 +13,29 @@ var envSchema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().default("product-images"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   JWT_EXPIRES_IN: z.string().default("7d"),
-  GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
-  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
-  GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
+  VOICE_AI_PROVIDER: z.enum(["groq", "gemini"]).default("groq"),
+  GROQ_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   OTP_FROM_EMAIL: z.string().default("KalaSetu <onboarding@resend.dev>"),
   DEMO_FALLBACK_OTP: z.string().default("5741"),
   DEMO_FALLBACK_OTP_ENABLED: z.string().default("true").transform((value) => value.toLowerCase() !== "false")
+}).superRefine((env, ctx) => {
+  const provider = env.VOICE_AI_PROVIDER;
+  if (provider === "groq" && !env.GROQ_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["GROQ_API_KEY"],
+      message: "GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq"
+    });
+  }
+  if (provider === "gemini" && !env.GEMINI_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["GEMINI_API_KEY"],
+      message: "GEMINI_API_KEY is required when VOICE_AI_PROVIDER is gemini"
+    });
+  }
 });
 var cached;
 function withoutBlanks(source) {
@@ -41,15 +57,18 @@ function loadEnv() {
 }
 
 // server/routes/health.ts
-var REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET", "GEMINI_API_KEY"];
-var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED"];
+var BASE_REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET"];
+var OPTIONAL_EXTRA = ["VOICE_AI_PROVIDER", "GROQ_API_KEY", "GEMINI_API_KEY"];
+var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED", ...OPTIONAL_EXTRA];
 var router = Router();
 function isSet(name) {
   const value = process.env[name];
   return typeof value === "string" && value.trim() !== "";
 }
 router.get("/", (_req, res) => {
-  const missing = REQUIRED.filter((name) => !isSet(name));
+  const provider = (process.env.VOICE_AI_PROVIDER || "groq").toLowerCase();
+  const required = [...BASE_REQUIRED, provider === "gemini" ? "GEMINI_API_KEY" : "GROQ_API_KEY"];
+  const missing = required.filter((name) => !isSet(name));
   let configValid = true;
   let configError;
   try {
@@ -63,7 +82,8 @@ router.get("/", (_req, res) => {
     version: "1.0.0",
     config: {
       missing,
-      present: [...REQUIRED, ...OPTIONAL].filter(isSet),
+      provider,
+      present: [...required, ...OPTIONAL].filter(isSet),
       valid: configValid,
       ...configError ? { error: configError } : {}
     }
@@ -677,9 +697,28 @@ var MalformedModelResponseError = class extends VoiceAiError {
 import "dotenv/config";
 import { z as z5 } from "zod";
 var envSchema2 = z5.object({
-  GEMINI_API_KEY: z5.string().min(1, "GEMINI_API_KEY is required"),
+  VOICE_AI_PROVIDER: z5.enum(["groq", "gemini"]).default("groq"),
+  GROQ_API_KEY: z5.string().optional(),
+  GROQ_STT_MODEL: z5.string().default("whisper-large-v3"),
+  GROQ_LLM_MODEL: z5.string().default("openai/gpt-oss-120b"),
+  GEMINI_API_KEY: z5.string().optional(),
   GEMINI_TRANSCRIBE_MODEL: z5.string().default("gemini-3.6-flash"),
   GEMINI_FLASH_MODEL: z5.string().default("gemini-3.6-flash")
+}).superRefine((env, ctx) => {
+  if (env.VOICE_AI_PROVIDER === "groq" && !env.GROQ_API_KEY) {
+    ctx.addIssue({
+      code: z5.ZodIssueCode.custom,
+      path: ["GROQ_API_KEY"],
+      message: "GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq"
+    });
+  }
+  if (env.VOICE_AI_PROVIDER === "gemini" && !env.GEMINI_API_KEY) {
+    ctx.addIssue({
+      code: z5.ZodIssueCode.custom,
+      path: ["GEMINI_API_KEY"],
+      message: "GEMINI_API_KEY is required when VOICE_AI_PROVIDER is gemini"
+    });
+  }
 });
 var cached3;
 function withoutBlanks2(source) {
@@ -736,10 +775,286 @@ async function processVoiceDescription(input, deps) {
   }
 }
 
+// server/voice-ai/stt/audio-mime.ts
+var ALIASES = {
+  "audio/x-wav": "audio/wav",
+  "audio/wave": "audio/wav",
+  "audio/vnd.wave": "audio/wav",
+  "audio/x-m4a": "audio/m4a",
+  "audio/mp4": "audio/m4a",
+  "audio/vorbis": "audio/ogg"
+};
+var EXTENSIONS = {
+  "audio/wav": "wav",
+  "audio/mp3": "mp3",
+  "audio/mpeg": "mp3",
+  "audio/m4a": "m4a",
+  "audio/ogg": "ogg",
+  "audio/opus": "opus",
+  "audio/flac": "flac",
+  "audio/webm": "webm",
+  "audio/aac": "aac",
+  "audio/aiff": "aiff"
+};
+function normaliseAudioMimeType(mimeType, supported) {
+  const bare = (mimeType || "").split(";")[0].trim().toLowerCase();
+  const aliased = ALIASES[bare] ?? bare;
+  if (supported.includes(aliased)) {
+    return aliased;
+  }
+  throw new InvalidAudioError(
+    `Audio format "${bare || "unknown"}" is not supported for transcription`
+  );
+}
+function extensionForAudio(mimeType) {
+  return EXTENSIONS[mimeType] ?? "wav";
+}
+
+// server/voice-ai/stt/groq-stt.service.ts
+var GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+var GROQ_SUPPORTED_AUDIO_TYPES = [
+  "audio/flac",
+  "audio/m4a",
+  "audio/mp3",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/opus",
+  "audio/wav",
+  "audio/webm"
+];
+var NAME_TO_CODE = (() => {
+  const map = {};
+  for (const language of SUPPORTED_LANGUAGES) {
+    map[language.name.toLowerCase()] = language.code;
+    map[language.code] = language.code;
+  }
+  map.oriya = "or";
+  return map;
+})();
+function toSupportedLanguage(reported) {
+  const key = (reported ?? "").trim().toLowerCase();
+  const mapped = NAME_TO_CODE[key];
+  if (mapped) return mapped;
+  if (isSupportedLanguageCode(key)) return key;
+  throw new UnsupportedLanguageError(reported ?? "unknown");
+}
+var GroqSttService = class {
+  apiKey;
+  model;
+  constructor(env) {
+    if (!env.GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
+    }
+    this.apiKey = env.GROQ_API_KEY;
+    this.model = env.GROQ_STT_MODEL;
+  }
+  async transcribe(audio, mimeType) {
+    if (!audio || audio.length === 0) {
+      throw new InvalidAudioError();
+    }
+    const audioMimeType = normaliseAudioMimeType(mimeType, GROQ_SUPPORTED_AUDIO_TYPES);
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(audio)], { type: audioMimeType }), `recording.${extensionForAudio(audioMimeType)}`);
+    form.append("model", this.model);
+    form.append("response_format", "verbose_json");
+    form.append(
+      "prompt",
+      "An Indian artisan describing a handmade product in their own language."
+    );
+    let payload;
+    try {
+      const response = await fetch(GROQ_TRANSCRIPTION_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+        body: form
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new InvalidAudioError(
+          `Transcription provider returned ${response.status}`,
+          detail.slice(0, 500)
+        );
+      }
+      payload = await response.json();
+    } catch (err) {
+      if (err instanceof InvalidAudioError) throw err;
+      throw new InvalidAudioError("Speech-to-text provider rejected or failed to process the audio", err);
+    }
+    const text = payload.text?.trim();
+    if (!text) {
+      throw new EmptyTranscriptError();
+    }
+    if (payload.language === void 0) {
+      throw new MalformedModelResponseError("stt", "Transcription response had no language field");
+    }
+    return { text, language: toSupportedLanguage(payload.language) };
+  }
+};
+
+// server/voice-ai/groq/chat.ts
+var GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
+async function groqChat(options) {
+  const response = await fetch(GROQ_CHAT_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${options.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: options.model,
+      temperature: 0.2,
+      messages: [{ role: "user", content: options.prompt }],
+      ...options.json ? { response_format: { type: "json_object" } } : {}
+    })
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Groq returned ${response.status}: ${detail.slice(0, 400)}`);
+  }
+  const payload = await response.json();
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || content.trim().length === 0) {
+    throw new Error("Groq returned an empty completion");
+  }
+  return content.trim();
+}
+
+// server/voice-ai/translation/groq-translation.service.ts
+var GroqTranslationService = class {
+  apiKey;
+  model;
+  constructor(env) {
+    if (!env.GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
+    }
+    this.apiKey = env.GROQ_API_KEY;
+    this.model = env.GROQ_LLM_MODEL;
+  }
+  async translate(text, sourceLanguage, targetLanguage) {
+    if (sourceLanguage === targetLanguage || !text || text.trim().length === 0) {
+      return text;
+    }
+    const sourceName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLanguage)?.name ?? sourceLanguage;
+    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.name ?? targetLanguage;
+    let raw;
+    try {
+      raw = await groqChat({
+        apiKey: this.apiKey,
+        model: this.model,
+        json: true,
+        prompt: buildPrompt(text, sourceName, targetName)
+      });
+    } catch (err) {
+      throw new TranslationFailedError(
+        `Translation failed for ${sourceLanguage} to ${targetLanguage}`,
+        err
+      );
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      throw new MalformedModelResponseError(
+        "translation",
+        "Translation response was not valid JSON",
+        parseErr
+      );
+    }
+    const translated = parsed.translation?.trim();
+    if (!translated) {
+      throw new TranslationFailedError(
+        `Empty translation output from ${sourceName} to ${targetName}`
+      );
+    }
+    return translated;
+  }
+};
+function buildPrompt(text, sourceName, targetName) {
+  return `Translate the following artisan product text from ${sourceName} into natural ${targetName}.
+
+Rules:
+1. Preserve the exact meaning, materials, and craft terminology.
+2. Add nothing that is not in the original, and drop nothing that is.
+3. Do not add commentary, notes, or markup.
+4. Write ${targetName} in its own script.
+
+Original text:
+"""${text}"""
+
+Respond with a JSON object of the form {"translation": "..."}.`;
+}
+
+// server/voice-ai/description/groq-description.service.ts
+var GroqDescriptionService = class {
+  apiKey;
+  model;
+  constructor(env) {
+    if (!env.GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
+    }
+    this.apiKey = env.GROQ_API_KEY;
+    this.model = env.GROQ_LLM_MODEL;
+  }
+  async generateDescription(englishTranscript, category) {
+    if (!englishTranscript || englishTranscript.trim().length === 0) {
+      throw new DescriptionGenerationError("Cannot generate a description from an empty transcript");
+    }
+    let raw;
+    try {
+      raw = await groqChat({
+        apiKey: this.apiKey,
+        model: this.model,
+        json: true,
+        prompt: buildPrompt2(englishTranscript, category)
+      });
+    } catch (err) {
+      throw new DescriptionGenerationError("Description generation call failed", err);
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      throw new MalformedModelResponseError(
+        "generation",
+        "Description response was not valid JSON",
+        parseErr
+      );
+    }
+    const description = parsed.descriptionEn?.trim();
+    if (!description) {
+      throw new MalformedModelResponseError("generation", "Response was missing descriptionEn");
+    }
+    return description;
+  }
+};
+function buildPrompt2(englishTranscript, category) {
+  return `You are writing a short e-commerce product description for an Indian artisan marketplace (KalaSetu).
+
+You will be given:
+- category: the product category the artisan selected
+- transcript: an English translation of the artisan describing their own product in their own words
+
+Your task: write ONE concise, natural-sounding English product description (1-3 sentences) for this listing.
+
+STRICT RULES, follow every one of these:
+1. Use ONLY information explicitly present in the transcript. Do not add anything the artisan did not say.
+2. Do NOT invent or assume: materials, dimensions/size, price, location/region, certifications, historical or cultural claims (e.g. "traditional", "passed down through generations"), quality claims (e.g. "premium", "finest"), or environmental claims (e.g. "eco-friendly", "sustainable", "100% natural") unless the transcript states them directly.
+3. Do NOT assume properties just because of the category (e.g. do not assume a "basket" category item is bamboo, or that a "textile" is cotton, unless the artisan said so).
+4. If the transcript is vague or sparse, write a short, honest, equally sparse description rather than padding it with invented detail.
+5. Preserve the specific details the artisan DID give (materials, use, technique, color, etc. if mentioned).
+6. Write in natural e-commerce language, not a literal translation, not a list of keywords, not overly flowery.
+7. Do not mention the artisan speaking, transcripts, translation, or the AI process. Write only the product description itself.
+
+category: ${category}
+transcript: """${englishTranscript}"""
+
+Respond with a JSON object of the form {"descriptionEn": "..."}.`;
+}
+
 // server/voice-ai/stt/gemini-stt.service.ts
 import { GoogleGenAI } from "@google/genai";
 var MAX_INLINE_AUDIO_BYTES = 18 * 1024 * 1024;
-var SUPPORTED_AUDIO_MIME_TYPES = [
+var GEMINI_SUPPORTED_AUDIO_TYPES = [
   "audio/wav",
   "audio/mp3",
   "audio/mpeg",
@@ -750,24 +1065,6 @@ var SUPPORTED_AUDIO_MIME_TYPES = [
   "audio/m4a",
   "audio/opus"
 ];
-var MIME_ALIASES = {
-  "audio/x-wav": "audio/wav",
-  "audio/wave": "audio/wav",
-  "audio/vnd.wave": "audio/wav",
-  "audio/x-m4a": "audio/m4a",
-  "audio/mp4": "audio/m4a",
-  "audio/vorbis": "audio/ogg"
-};
-function normaliseAudioMimeType(mimeType) {
-  const bare = (mimeType || "").split(";")[0].trim().toLowerCase();
-  const aliased = MIME_ALIASES[bare] ?? bare;
-  if (SUPPORTED_AUDIO_MIME_TYPES.includes(aliased)) {
-    return aliased;
-  }
-  throw new InvalidAudioError(
-    `Audio format "${bare || "unknown"}" is not supported for transcription`
-  );
-}
 var GeminiSttService = class {
   client;
   transcribeModel;
@@ -782,7 +1079,7 @@ var GeminiSttService = class {
     if (audio.length > MAX_INLINE_AUDIO_BYTES) {
       throw new InvalidAudioError("Audio recording is too large to transcribe in a single request");
     }
-    const audioMimeType = normaliseAudioMimeType(mimeType);
+    const audioMimeType = normaliseAudioMimeType(mimeType, GEMINI_SUPPORTED_AUDIO_TYPES);
     const supportedCodes = SUPPORTED_LANGUAGES.map((l) => l.code);
     let raw;
     try {
@@ -892,21 +1189,6 @@ Translated ${targetName} Text:`
   }
 };
 
-// server/voice-ai/translation/mock-translation.service.ts
-var MockTranslationService = class {
-  constructor(failOnLanguagePair) {
-    this.failOnLanguagePair = failOnLanguagePair;
-  }
-  failOnLanguagePair;
-  async translate(text, sourceLanguage, targetLanguage) {
-    if (sourceLanguage === targetLanguage) return text;
-    if (this.failOnLanguagePair && this.failOnLanguagePair.source === sourceLanguage && this.failOnLanguagePair.target === targetLanguage) {
-      throw new TranslationFailedError(`Simulated failure for ${sourceLanguage} -> ${targetLanguage}`);
-    }
-    return `[mock:${sourceLanguage}->${targetLanguage}] ${text}`;
-  }
-};
-
 // server/voice-ai/description/gemini-description.service.ts
 import { GoogleGenAI as GoogleGenAI3 } from "@google/genai";
 var GeminiDescriptionService = class {
@@ -926,7 +1208,7 @@ var GeminiDescriptionService = class {
         contents: [
           {
             role: "user",
-            parts: [{ text: buildPrompt(englishTranscript, category) }]
+            parts: [{ text: buildPrompt3(englishTranscript, category) }]
           }
         ],
         config: {
@@ -960,7 +1242,7 @@ var GeminiDescriptionService = class {
     }
   }
 };
-function buildPrompt(englishTranscript, category) {
+function buildPrompt3(englishTranscript, category) {
   return `You are writing a short e-commerce product description for an Indian artisan marketplace (KalaSetu).
 
 You will be given:
@@ -984,13 +1266,36 @@ transcript: """${englishTranscript}"""
 Respond with a JSON object of the form {"descriptionEn": "..."}.`;
 }
 
+// server/voice-ai/translation/mock-translation.service.ts
+var MockTranslationService = class {
+  constructor(failOnLanguagePair) {
+    this.failOnLanguagePair = failOnLanguagePair;
+  }
+  failOnLanguagePair;
+  async translate(text, sourceLanguage, targetLanguage) {
+    if (sourceLanguage === targetLanguage) return text;
+    if (this.failOnLanguagePair && this.failOnLanguagePair.source === sourceLanguage && this.failOnLanguagePair.target === targetLanguage) {
+      throw new TranslationFailedError(`Simulated failure for ${sourceLanguage} -> ${targetLanguage}`);
+    }
+    return `[mock:${sourceLanguage}->${targetLanguage}] ${text}`;
+  }
+};
+
 // server/voice-ai/pipeline/factory.ts
 function buildVoiceAiDependencies(options = {}) {
   const env = loadEnv2();
+  if (env.VOICE_AI_PROVIDER === "gemini") {
+    return {
+      sttService: new GeminiSttService(env),
+      descriptionService: new GeminiDescriptionService(env),
+      translationService: options.forceMockTranslation ? new MockTranslationService() : new GeminiTranslationService(env),
+      logger: options.logger
+    };
+  }
   return {
-    sttService: new GeminiSttService(env),
-    descriptionService: new GeminiDescriptionService(env),
-    translationService: options.forceMockTranslation ? new MockTranslationService() : new GeminiTranslationService(env),
+    sttService: new GroqSttService(env),
+    descriptionService: new GroqDescriptionService(env),
+    translationService: options.forceMockTranslation ? new MockTranslationService() : new GroqTranslationService(env),
     logger: options.logger
   };
 }

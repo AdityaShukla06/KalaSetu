@@ -7,7 +7,7 @@ const BASE_ENV = {
   SUPABASE_URL: "https://example.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
   JWT_SECRET: "test-secret-that-is-long-enough",
-  GEMINI_API_KEY: "gemini-key",
+  GROQ_API_KEY: "groq-key",
 };
 
 let original: NodeJS.ProcessEnv;

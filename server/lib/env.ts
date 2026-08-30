@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-const envSchema = z.object({
+const envSchema = z
+  .object({
   SUPABASE_URL: z.string().url("SUPABASE_URL must be your project URL"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
   SUPABASE_STORAGE_BUCKET: z.string().default("product-images"),
@@ -8,9 +9,9 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   JWT_EXPIRES_IN: z.string().default("7d"),
 
-  GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
-  GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
-  GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
+  VOICE_AI_PROVIDER: z.enum(["groq", "gemini"]).default("groq"),
+  GROQ_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
 
   RESEND_API_KEY: z.string().optional(),
   OTP_FROM_EMAIL: z.string().default("KalaSetu <onboarding@resend.dev>"),
@@ -20,7 +21,24 @@ const envSchema = z.object({
     .string()
     .default("true")
     .transform((value) => value.toLowerCase() !== "false"),
-});
+  })
+  .superRefine((env, ctx) => {
+    const provider = env.VOICE_AI_PROVIDER;
+    if (provider === "groq" && !env.GROQ_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["GROQ_API_KEY"],
+        message: "GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq",
+      });
+    }
+    if (provider === "gemini" && !env.GEMINI_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["GEMINI_API_KEY"],
+        message: "GEMINI_API_KEY is required when VOICE_AI_PROVIDER is gemini",
+      });
+    }
+  });
 
 export type ServerEnv = z.infer<typeof envSchema>;
 

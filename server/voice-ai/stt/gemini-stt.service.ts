@@ -12,10 +12,11 @@ import {
   MalformedModelResponseError,
 } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
+import { normaliseAudioMimeType } from "./audio-mime";
 
 const MAX_INLINE_AUDIO_BYTES = 18 * 1024 * 1024;
 
-const SUPPORTED_AUDIO_MIME_TYPES = [
+export const GEMINI_SUPPORTED_AUDIO_TYPES = [
   "audio/wav",
   "audio/mp3",
   "audio/mpeg",
@@ -26,28 +27,6 @@ const SUPPORTED_AUDIO_MIME_TYPES = [
   "audio/m4a",
   "audio/opus",
 ];
-
-const MIME_ALIASES: Record<string, string> = {
-  "audio/x-wav": "audio/wav",
-  "audio/wave": "audio/wav",
-  "audio/vnd.wave": "audio/wav",
-  "audio/x-m4a": "audio/m4a",
-  "audio/mp4": "audio/m4a",
-  "audio/vorbis": "audio/ogg",
-};
-
-export function normaliseAudioMimeType(mimeType: string): string {
-  const bare = (mimeType || "").split(";")[0].trim().toLowerCase();
-  const aliased = MIME_ALIASES[bare] ?? bare;
-
-  if (SUPPORTED_AUDIO_MIME_TYPES.includes(aliased)) {
-    return aliased;
-  }
-
-  throw new InvalidAudioError(
-    `Audio format "${bare || "unknown"}" is not supported for transcription`,
-  );
-}
 
 export class GeminiSttService implements SpeechToTextService {
   private readonly client: GoogleGenAI;
@@ -66,7 +45,7 @@ export class GeminiSttService implements SpeechToTextService {
       throw new InvalidAudioError("Audio recording is too large to transcribe in a single request");
     }
 
-    const audioMimeType = normaliseAudioMimeType(mimeType);
+    const audioMimeType = normaliseAudioMimeType(mimeType, GEMINI_SUPPORTED_AUDIO_TYPES);
     const supportedCodes = SUPPORTED_LANGUAGES.map((l) => l.code);
     let raw: string | undefined;
 
