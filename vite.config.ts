@@ -41,7 +41,11 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             urlPattern: /\/api\/.*/,
@@ -52,20 +56,6 @@ export default defineConfig({
               expiration: {
                 maxEntries: 100,
                 maxAgeSeconds: 60 * 60 * 24,
-              },
-            },
-          },
-          {
-            urlPattern: ({ request }) =>
-              request.destination === "script" ||
-              request.destination === "style" ||
-              request.destination === "document",
-            handler: "CacheFirst",
-            options: {
-              cacheName: "kalasetu-app-shell",
-              expiration: {
-                maxEntries: 60,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
               },
             },
           },
