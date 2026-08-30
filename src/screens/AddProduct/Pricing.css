@@ -113,3 +113,13 @@
   width: auto;
   padding: 0 var(--space-8);
 }
+
+.pricing-range-stale .pricing-range-value {
+  opacity: 0.45;
+}
+
+.pricing-updating {
+  margin-top: var(--space-2);
+  color: var(--color-primary);
+  font-weight: 600;
+}

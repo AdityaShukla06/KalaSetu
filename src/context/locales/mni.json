@@ -120,5 +120,6 @@
   "describe.placeholderLocal": "ꯈꯨꯝꯁꯤꯡ ꯂꯣꯟꯕꯒꯤ ꯑꯃꯁꯨꯡ",
   "describe.syncing": "ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯕ...",
   "describe.syncFailed": "ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯒꯤ꯫ ꯑꯃꯁꯨꯡ ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯒꯤ꯫",
-  "describe.syncHint": "ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯒꯤ꯫"
+  "describe.syncHint": "ꯈꯨꯝꯅꯨꯡ ꯂꯩꯄꯥꯡꯒꯤ꯫",
+  "pricing.updating": "ꯅꯤꯟꯗꯤ ꯂꯤꯗꯤ ꯂꯤꯗꯤ ꯑ ꯑꯤ ꯑꯤꯕꯤ ꯑꯤꯕꯤ"
 }

@@ -187,6 +187,27 @@ describe("calculateSmartPrice", () => {
     expect(rich.recommendationReliability).toBeGreaterThan(sparse.recommendationReliability);
   });
 
+  it("scales proportionally with material cost", () => {
+    const ten = calculateSmartPrice({ category: "textiles", materialCost: 10 });
+    const tenThousand = calculateSmartPrice({ category: "textiles", materialCost: 10000 });
+
+    expect(ten.suggestedMin).toBe(20);
+    expect(tenThousand.suggestedMin).toBeGreaterThan(19000);
+    expect(tenThousand.recommendedPrice / ten.recommendedPrice).toBeGreaterThan(900);
+  });
+
+  it("always reports a reliability label", () => {
+    for (const input of [
+      { category: "woodwork", materialCost: 250 },
+      { category: "other", materialCost: 10 },
+      { category: "pottery", materialCost: 400, descriptionEn: "A vase", imageUrl: "https://x/y.jpg" },
+    ]) {
+      const result = calculateSmartPrice(input);
+      expect(result.reliabilityLabel).toBeTruthy();
+      expect(typeof result.reliabilityLabel).toBe("string");
+    }
+  });
+
   it("keeps reason and reasoning in sync for the frontend", () => {
     const result = calculateSmartPrice({ category: "pottery", materialCost: 250 });
 

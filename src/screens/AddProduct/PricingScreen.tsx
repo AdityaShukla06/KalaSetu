@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
@@ -73,7 +73,9 @@ export function PricingScreen() {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState(false);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggestedForCost, setSuggestedForCost] = useState<number | null>(null);
   const [sellingPrice, setSellingPrice] = useState("");
+  const [sellingPriceEdited, setSellingPriceEdited] = useState(false);
   const [sellingPriceError, setSellingPriceError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState(false);
@@ -93,32 +95,52 @@ export function PricingScreen() {
     }
   }, [missingPhoto, missingDescription, published, navigate]);
 
+  const parsedCost = Number(materialCost);
+  const costIsValid = Boolean(materialCost.trim()) && Number.isFinite(parsedCost) && parsedCost > 0;
+  const suggestionIsStale = suggestion !== null && costIsValid && parsedCost !== suggestedForCost;
+
+  const fetchSuggestion = useCallback(
+    async (cost: number) => {
+      setSuggestError(false);
+      setSuggesting(true);
+
+      try {
+        const result = await suggestPrice({
+          category: draft.category ?? "other",
+          materialCost: cost,
+          descriptionEn: draft.descriptionEn ?? "",
+          imageUrl: draft.imageUrl ?? "",
+        });
+        setSuggestion(result);
+        setSuggestedForCost(cost);
+        if (!sellingPriceEdited) {
+          setSellingPrice(String(Math.round((result.suggestedMin + result.suggestedMax) / 2)));
+        }
+      } catch {
+        setSuggestError(true);
+      } finally {
+        setSuggesting(false);
+      }
+    },
+    [draft.category, draft.descriptionEn, draft.imageUrl, sellingPriceEdited],
+  );
+
   async function handleGetSuggestion() {
-    const cost = Number(materialCost);
-    if (!materialCost.trim() || !Number.isFinite(cost) || cost <= 0) {
+    if (!costIsValid) {
       setMaterialCostError(t("pricing.materialCostInvalid"));
       return;
     }
-
     setMaterialCostError(null);
-    setSuggestError(false);
-    setSuggesting(true);
-
-    try {
-      const result = await suggestPrice({
-        category: draft.category ?? "other",
-        materialCost: cost,
-        descriptionEn: draft.descriptionEn ?? "",
-        imageUrl: draft.imageUrl ?? "",
-      });
-      setSuggestion(result);
-      setSellingPrice(String(Math.round((result.suggestedMin + result.suggestedMax) / 2)));
-    } catch {
-      setSuggestError(true);
-    } finally {
-      setSuggesting(false);
-    }
+    await fetchSuggestion(parsedCost);
   }
+
+  useEffect(() => {
+    if (!suggestionIsStale) return;
+    const timer = setTimeout(() => {
+      void fetchSuggestion(parsedCost);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [suggestionIsStale, parsedCost, fetchSuggestion]);
 
   async function handlePublish() {
     const price = Number(sellingPrice);
@@ -210,6 +232,10 @@ export function PricingScreen() {
           onChange={(event) => {
             setMaterialCost(event.target.value);
             if (materialCostError) setMaterialCostError(null);
+            if (!event.target.value.trim()) {
+              setSuggestion(null);
+              setSuggestedForCost(null);
+            }
           }}
           error={materialCostError ?? undefined}
         />
@@ -238,10 +264,11 @@ export function PricingScreen() {
       {suggestion && (
         <div className="pricing-section">
           <p className="caption">{t("pricing.rangeLabel")}</p>
-          <div className="pricing-range">
+          <div className={`pricing-range${suggesting ? " pricing-range-stale" : ""}`}>
             <span className="pricing-range-value">
               ₹{suggestion.suggestedMin} - ₹{suggestion.suggestedMax}
             </span>
+            {suggesting && <p className="body-s pricing-updating">{t("pricing.updating")}</p>}
             <p className="body-s pricing-reasoning">{suggestion.reasoning}</p>
           </div>
 
@@ -254,6 +281,7 @@ export function PricingScreen() {
             value={sellingPrice}
             onChange={(event) => {
               setSellingPrice(event.target.value);
+              setSellingPriceEdited(true);
               if (sellingPriceError) setSellingPriceError(null);
             }}
             error={sellingPriceError ?? undefined}
