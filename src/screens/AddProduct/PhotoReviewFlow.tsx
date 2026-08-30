@@ -1,6 +1,7 @@
 import { useLayoutEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { enhanceImage } from "../../services/api";
+import { BeforeAfterCompare } from "./BeforeAfterCompare";
 import { useAddProductDraft } from "../../context/AddProductDraftContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./AddProduct.css";
@@ -110,16 +111,8 @@ export function PhotoReviewFlow({ blob, onRetake, onDone }: PhotoReviewFlowProps
 
   return (
     <div className="compare-screen">
-      <div className="compare-images">
-        <div className="compare-item">
-          <p className="caption">{t("camera.before")}</p>
-          <img src={originalUrl} alt="" className="compare-image" />
-        </div>
-        <div className="compare-item">
-          <p className="caption">{t("camera.after")}</p>
-          <img src={enhancedUrl ?? originalUrl} alt="" className="compare-image" />
-        </div>
-      </div>
+      <BeforeAfterCompare originalUrl={originalUrl} enhancedUrl={enhancedUrl ?? originalUrl} />
+      <p className="body-s compare-hint">{t("camera.compareHint")}</p>
       <Button variant="primary" icon={<ArrowIcon />} onClick={onDone}>
         {t("camera.continue")}
       </Button>
