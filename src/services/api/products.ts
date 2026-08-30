@@ -6,9 +6,10 @@ export type ProductStatus = "draft" | "published" | "failed";
 export interface ProductInput {
   category: string;
   titleEn: string;
-  titleHi: string;
+  titleLocal: string;
   descriptionEn: string;
-  descriptionHi: string;
+  descriptionLocal: string;
+  localLanguage: string;
   imageUrl: string;
   price: number;
   materialCost: number;

@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import type { Server } from "node:http";
 import sharp from "sharp";
 import app from "./app";
@@ -15,7 +15,25 @@ const FALLBACK = process.env.DEMO_FALLBACK_OTP || "5741";
 const HAS_CREDENTIALS = Boolean(
   process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.GEMINI_API_KEY,
 );
+let schemaReady = false;
+
+beforeAll(async () => {
+  if (!HAS_CREDENTIALS) return;
+  const { error } = await getSupabase().from("products").select("local_language").limit(1);
+  schemaReady = !error;
+  if (!schemaReady) {
+    console.warn(
+      "Skipping live tests: this database predates the multilingual change. " +
+        "Run supabase/migrations/001-multilingual.sql first.",
+    );
+  }
+});
+
 const suite = HAS_CREDENTIALS ? describe : describe.skip;
+
+beforeEach((ctx) => {
+  if (!schemaReady) ctx.skip();
+});
 
 const created: {
   users: string[];
@@ -210,9 +228,10 @@ suite("full artisan journey", () => {
       body: JSON.stringify({
         category: "pottery",
         titleEn: "Pottery",
-        titleHi: "मिट्टी के बर्तन",
+        titleLocal: "मिट्टी के बर्तन",
+        localLanguage: "hi",
         descriptionEn: "A tall ceramic vase for flowers",
-        descriptionHi: "फूलों के लिए एक लंबा मिट्टी का फूलदान",
+        descriptionLocal: "फूलों के लिए एक लंबा मिट्टी का फूलदान",
         imageUrl: enhancedImageUrl,
         price: pricing.recommendedPrice,
         materialCost: 250,
@@ -266,9 +285,10 @@ suite("ownership isolation", () => {
       body: JSON.stringify({
         category: "pottery",
         titleEn: "Pottery",
-        titleHi: "मिट्टी",
+        titleLocal: "मिट्टी",
+        localLanguage: "hi",
         descriptionEn: "Owned by A",
-        descriptionHi: "A का",
+        descriptionLocal: "A का",
         imageUrl: "https://example.com/a.jpg",
         price: 100,
         materialCost: 25,

@@ -1,5 +1,5 @@
 import { Button } from "../../components/Button";
-import { LanguageToggle } from "../../components/LanguageToggle";
+import { LanguageSelect } from "../../components/LanguageSelect";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
 
@@ -26,8 +26,8 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
       </div>
 
       <div className="onboarding-section">
-        <p className="caption onboarding-section-label">{t("welcome.languageLabel")}</p>
-        <LanguageToggle />
+        <LanguageSelect label={t("welcome.languageLabel")} />
+        <p className="caption onboarding-section-hint">{t("welcome.languageHint")}</p>
       </div>
 
       <Button variant="primary" icon={<ArrowIcon />} onClick={onGetStarted}>

@@ -21,8 +21,8 @@ export class GeminiTranslationService implements TranslationService {
       return text;
     }
 
-    const sourceName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLanguage)?.name || sourceLanguage;
-    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.name || targetLanguage;
+    const sourceName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceLanguage)?.englishName || sourceLanguage;
+    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.englishName || targetLanguage;
 
     try {
       const response = await this.client.models.generateContent({

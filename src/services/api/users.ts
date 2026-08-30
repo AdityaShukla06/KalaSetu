@@ -5,7 +5,7 @@ export interface UserProfile {
   email: string;
   displayName: string | null;
   shopName: string | null;
-  language: "en" | "hi";
+  language: string;
   totalProducts: number;
   createdAt: string;
 }

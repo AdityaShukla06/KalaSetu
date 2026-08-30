@@ -23,14 +23,14 @@ function RetakeIcon() {
 
 export function VoiceDescribeScreen() {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const { draft, updateDraft } = useAddProductDraft();
 
   const [phase, setPhase] = useState<Phase>("category");
   const [category, setCategory] = useState<string | null>(draft.category ?? null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [descriptionEn, setDescriptionEn] = useState(draft.descriptionEn ?? "");
-  const [descriptionHi, setDescriptionHi] = useState(draft.descriptionHi ?? "");
+  const [descriptionLocal, setDescriptionLocal] = useState(draft.descriptionLocal ?? "");
   const [fallbackNote, setFallbackNote] = useState(false);
 
   const hasPhoto = Boolean(draft.imageUrl);
@@ -55,9 +55,9 @@ export function VoiceDescribeScreen() {
 
     try {
       const audio = await toWavBlob(blob);
-      const result = await transcribeAndDescribe(audio, category ?? "other");
+      const result = await transcribeAndDescribe(audio, category ?? "other", language);
       setDescriptionEn(result.descriptionEn);
-      setDescriptionHi(result.descriptionHi);
+      setDescriptionLocal(result.descriptionLocal);
       setFallbackNote(false);
       setPhase("review");
     } catch {
@@ -75,7 +75,7 @@ export function VoiceDescribeScreen() {
   }
 
   function handleDescriptionContinue() {
-    updateDraft({ descriptionEn, descriptionHi });
+    updateDraft({ descriptionEn, descriptionLocal });
     navigate("/add-product/price");
   }
 
@@ -112,9 +112,9 @@ export function VoiceDescribeScreen() {
   return (
     <DescriptionEditor
       descriptionEn={descriptionEn}
-      descriptionHi={descriptionHi}
+      descriptionLocal={descriptionLocal}
       onChangeEn={setDescriptionEn}
-      onChangeHi={setDescriptionHi}
+      onChangeLocal={setDescriptionLocal}
       onContinue={handleDescriptionContinue}
       note={fallbackNote ? t("describe.fallbackNote") : undefined}
     />

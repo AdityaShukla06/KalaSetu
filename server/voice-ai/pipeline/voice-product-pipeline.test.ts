@@ -31,7 +31,7 @@ describe("processVoiceDescription", () => {
     };
 
     const result = await processVoiceDescription(
-      { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "bamboo-cane" },
+      { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "bamboo-cane", targetLanguage: "hi" },
       deps,
     );
 
@@ -49,7 +49,7 @@ describe("processVoiceDescription", () => {
     const translateSpy = vi.spyOn(translationService, "translate");
 
     await processVoiceDescription(
-      { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "woodwork" },
+      { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "woodwork", targetLanguage: "hi" },
       { sttService: sttReturning("A carved wooden elephant.", "en"), translationService, descriptionService },
     );
 
@@ -63,7 +63,7 @@ describe("processVoiceDescription", () => {
 
   it("derives the Hindi description from the generated English one", async () => {
     const result = await processVoiceDescription(
-      { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "pottery" },
+      { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "pottery", targetLanguage: "hi" },
       {
         sttService: sttReturning("A clay pot.", "en"),
         translationService: new MockTranslationService(),
@@ -72,7 +72,7 @@ describe("processVoiceDescription", () => {
     );
 
     expect(result.descriptionEn).toBe("A hand-thrown clay pot.");
-    expect(result.descriptionHi).toBe("[mock:en->hi] A hand-thrown clay pot.");
+    expect(result.descriptionLocal).toBe("[mock:en->hi] A hand-thrown clay pot.");
   });
 
   it("propagates a typed error with the failing stage", async () => {
@@ -84,7 +84,7 @@ describe("processVoiceDescription", () => {
 
     await expect(
       processVoiceDescription(
-        { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "pottery" },
+        { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "pottery", targetLanguage: "hi" },
         deps,
       ),
     ).rejects.toBeInstanceOf(TranslationFailedError);
@@ -99,7 +99,7 @@ describe("processVoiceDescription", () => {
 
     await expect(
       processVoiceDescription(
-        { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "pottery" },
+        { audio: Buffer.from("some-audio-bytes"), mimeType: "audio/webm", category: "pottery", targetLanguage: "hi" },
         deps,
       ),
     ).rejects.toBeInstanceOf(DescriptionGenerationError);
@@ -114,7 +114,7 @@ describe("processVoiceDescription", () => {
 
     await expect(
       processVoiceDescription(
-        { audio: Buffer.alloc(0), mimeType: "audio/webm", category: "pottery" },
+        { audio: Buffer.alloc(0), mimeType: "audio/webm", category: "pottery", targetLanguage: "hi" },
         deps,
       ),
     ).rejects.toMatchObject({ stage: "stt" });

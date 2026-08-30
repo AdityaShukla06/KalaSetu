@@ -8,16 +8,17 @@ import { Product, ProductStatus } from "../types";
 const router = Router();
 
 const PRODUCT_COLUMNS =
-  "id, user_id, category, title_en, title_hi, description_en, description_hi, image_url, price, material_cost, status, created_at, updated_at";
+  "id, user_id, category, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, created_at, updated_at";
 
 interface ProductRow {
   id: string;
   user_id: string;
   category: string;
   title_en: string;
-  title_hi: string;
+  title_local: string;
   description_en: string;
-  description_hi: string;
+  description_local: string;
+  local_language: string;
   image_url: string;
   price: number | string;
   material_cost: number | string;
@@ -32,9 +33,10 @@ export function toProduct(row: ProductRow): Product {
     userId: row.user_id,
     category: row.category,
     titleEn: row.title_en,
-    titleHi: row.title_hi,
+    titleLocal: row.title_local,
     descriptionEn: row.description_en,
-    descriptionHi: row.description_hi,
+    descriptionLocal: row.description_local,
+    localLanguage: row.local_language,
     imageUrl: row.image_url,
     price: Number(row.price),
     materialCost: Number(row.material_cost),
@@ -47,9 +49,10 @@ export function toProduct(row: ProductRow): Product {
 const ProductInputSchema = z.object({
   category: z.string().min(1),
   titleEn: z.string().min(1),
-  titleHi: z.string().min(1),
+  titleLocal: z.string().min(1),
   descriptionEn: z.string().min(1),
-  descriptionHi: z.string().min(1),
+  descriptionLocal: z.string().min(1),
+  localLanguage: z.string().min(2).max(8),
   imageUrl: z.string().url(),
   price: z.number().positive(),
   materialCost: z.number().positive(),
@@ -59,9 +62,10 @@ function toRow(input: Partial<z.infer<typeof ProductInputSchema>>): Record<strin
   const row: Record<string, unknown> = {};
   if (input.category !== undefined) row.category = input.category;
   if (input.titleEn !== undefined) row.title_en = input.titleEn;
-  if (input.titleHi !== undefined) row.title_hi = input.titleHi;
+  if (input.titleLocal !== undefined) row.title_local = input.titleLocal;
   if (input.descriptionEn !== undefined) row.description_en = input.descriptionEn;
-  if (input.descriptionHi !== undefined) row.description_hi = input.descriptionHi;
+  if (input.descriptionLocal !== undefined) row.description_local = input.descriptionLocal;
+  if (input.localLanguage !== undefined) row.local_language = input.localLanguage;
   if (input.imageUrl !== undefined) row.image_url = input.imageUrl;
   if (input.price !== undefined) row.price = input.price;
   if (input.materialCost !== undefined) row.material_cost = input.materialCost;

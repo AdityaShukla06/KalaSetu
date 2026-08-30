@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
-import { LanguageToggle } from "../../components/LanguageToggle";
+import { LanguageSelect } from "../../components/LanguageSelect";
 import { getMyProfile, updateMyProfile, type UserProfile } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
@@ -179,8 +179,7 @@ export function ProfileScreen() {
         )}
 
         <div className="profile-section">
-          <p className="caption">{t("welcome.languageLabel")}</p>
-          <LanguageToggle />
+          <LanguageSelect label={t("welcome.languageLabel")} />
         </div>
 
         <Button variant="secondary" icon={<LogoutIcon />} onClick={handleLogout}>

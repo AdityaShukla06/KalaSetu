@@ -15,8 +15,8 @@ const STATUS_LABEL_KEY: Record<Product["status"], string> = {
 
 export function ProductCard({ product, onClick }: ProductCardProps) {
   const { language, t } = useLanguage();
-  const title = language === "hi" ? product.titleHi : product.titleEn;
-  const description = language === "hi" ? product.descriptionHi : product.descriptionEn;
+  const title = language === product.localLanguage ? product.titleLocal : product.titleEn;
+  const description = language === product.localLanguage ? product.descriptionLocal : product.descriptionEn;
 
   return (
     <button type="button" className="product-card" onClick={onClick}>
