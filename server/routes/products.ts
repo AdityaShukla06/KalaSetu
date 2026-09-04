@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
+import { requireRole } from "../middleware/requireRole";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
 import { Product, ProductStatus } from "../types";
@@ -48,7 +49,7 @@ function getTranslator() {
 }
 
 const PRODUCT_COLUMNS =
-  "id, user_id, category, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, created_at, updated_at";
+  "id, user_id, category, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, created_at, updated_at";
 
 interface ProductRow {
   id: string;
@@ -63,6 +64,8 @@ interface ProductRow {
   price: number | string;
   material_cost: number | string;
   status: string;
+  flagged: boolean;
+  flag_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +84,8 @@ export function toProduct(row: ProductRow): Product {
     price: Number(row.price),
     materialCost: Number(row.material_cost),
     status: row.status as ProductStatus,
+    flagged: row.flagged,
+    flagReason: row.flag_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -115,6 +120,7 @@ function toRow(input: Partial<z.infer<typeof ProductInputSchema>>): Record<strin
 router.post(
   "/",
   requireAuth,
+  requireRole("artisan"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const parsed = ProductInputSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -159,9 +165,27 @@ router.get(
   }),
 );
 
+router.get(
+  "/marketplace",
+  requireAuth,
+  asyncRoute(async (_req: Request, res: Response): Promise<void> => {
+    const { data, error } = await getSupabase()
+      .from("products")
+      .select(PRODUCT_COLUMNS)
+      .eq("status", "published")
+      .eq("flagged", false)
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(`Could not list marketplace products: ${error.message}`);
+
+    res.json((data as ProductRow[]).map(toProduct));
+  }),
+);
+
 router.patch(
   "/:id",
   requireAuth,
+  requireRole("artisan"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const parsed = ProductInputSchema.partial().safeParse(req.body);
     if (!parsed.success) {
@@ -190,6 +214,7 @@ router.patch(
 router.delete(
   "/:id",
   requireAuth,
+  requireRole("artisan"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const supabase = getSupabase();
     const { data, error } = await supabase
@@ -223,6 +248,7 @@ const RelocaliseSchema = z.object({
 router.post(
   "/relocalise",
   requireAuth,
+  requireRole("artisan"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
     const parsed = RelocaliseSchema.safeParse(req.body);
     if (!parsed.success) {

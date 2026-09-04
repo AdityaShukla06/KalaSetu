@@ -5,6 +5,7 @@ import { getSupabase } from "../lib/supabase";
 import { loadEnv } from "../lib/env";
 import { signSessionToken } from "../lib/jwt";
 import { sendOtpEmail } from "../lib/mailer";
+import { UserRole } from "../types";
 import {
   OTP_LENGTH,
   OTP_MAX_ATTEMPTS,
@@ -122,46 +123,51 @@ router.post(
         .eq("id", record.id);
     }
 
-    const userId = await findOrCreateUser(email);
+    const { userId, role } = await findOrCreateUser(email);
     const token = signSessionToken({ sub: userId, email });
 
-    res.json({ token, userId, email });
+    res.json({ token, userId, email, role });
   }),
 );
 
-async function findOrCreateUser(email: string): Promise<string> {
+interface FoundUser {
+  userId: string;
+  role: UserRole;
+}
+
+async function findOrCreateUser(email: string): Promise<FoundUser> {
   const supabase = getSupabase();
 
   const { data: existing, error: readError } = await supabase
     .from("users")
-    .select("id")
+    .select("id, role")
     .eq("email", email)
     .maybeSingle();
 
   if (readError) {
     throw new Error(`Could not look up the user: ${readError.message}`);
   }
-  if (existing) return existing.id;
+  if (existing) return { userId: existing.id, role: existing.role };
 
   const { data: created, error: writeError } = await supabase
     .from("users")
     .insert({ email })
-    .select("id")
+    .select("id, role")
     .single();
 
   if (writeError) {
     if (writeError.code === "23505") {
       const { data: raced } = await supabase
         .from("users")
-        .select("id")
+        .select("id, role")
         .eq("email", email)
         .single();
-      if (raced) return raced.id;
+      if (raced) return { userId: raced.id, role: raced.role };
     }
     throw new Error(`Could not create the user: ${writeError.message}`);
   }
 
-  return created.id;
+  return { userId: created.id, role: created.role };
 }
 
 export default router;

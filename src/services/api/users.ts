@@ -1,4 +1,5 @@
 import { apiFetch } from "./_helpers";
+import type { UserRole } from "./auth";
 
 export interface UserProfile {
   userId: string;
@@ -6,6 +7,7 @@ export interface UserProfile {
   displayName: string | null;
   shopName: string | null;
   language: string;
+  role: UserRole;
   totalProducts: number;
   createdAt: string;
 }

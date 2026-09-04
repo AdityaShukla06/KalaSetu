@@ -2,6 +2,7 @@
 export type { ProductStatus, ProductInput, Product } from "./api/products";
 export type { UserProfile } from "./api/users";
 export type { RawMaterialItem, PricingSuggestionInput, PricingSuggestionOutput } from "./api/pricing";
+export type { UserRole, VerifyOtpResult } from "./api/auth";
 
 // importing utility apis
 export { sendOtp, verifyOtp, OTP_LENGTH } from "./api/auth";

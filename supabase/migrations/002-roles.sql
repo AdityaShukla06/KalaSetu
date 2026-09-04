@@ -1,41 +1,17 @@
--- KalaSetu database schema.
--- Run this once in the Supabase SQL editor (Dashboard -> SQL Editor -> New query).
--- Safe to re-run: every statement is guarded.
+-- Three-role migration: artisan, buyer, admin.
+--
+-- Run this once in the Supabase SQL editor against a database created before
+-- this change. A fresh database created from schema.sql already has this
+-- shape and does not need it. Safe to re-run.
 
-create extension if not exists "pgcrypto";
+alter table users
+  add column if not exists role text not null default 'artisan' check (role in ('artisan', 'buyer', 'admin'));
 
-create table if not exists users (
-  id             uuid primary key default gen_random_uuid(),
-  email          text not null unique,
-  display_name   text,
-  shop_name      text,
-  language       text not null default 'en',
-  role           text not null default 'artisan' check (role in ('artisan', 'buyer', 'admin')),
-  total_products integer not null default 0,
-  created_at     timestamptz not null default now()
-);
+alter table products
+  add column if not exists flagged boolean not null default false;
 
-create table if not exists products (
-  id              uuid primary key default gen_random_uuid(),
-  user_id         uuid not null references users(id) on delete cascade,
-  category        text not null,
-  title_en        text not null,
-  title_local     text not null,
-  description_en  text not null,
-  description_local text not null,
-  local_language  text not null default 'en',
-  image_url       text not null,
-  price           numeric(12, 2) not null check (price > 0),
-  material_cost   numeric(12, 2) not null check (material_cost > 0),
-  status          text not null default 'published' check (status in ('draft', 'published', 'failed')),
-  flagged         boolean not null default false,
-  flag_reason     text,
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
-);
-
-create index if not exists products_user_id_created_at_idx
-  on products (user_id, created_at desc);
+alter table products
+  add column if not exists flag_reason text;
 
 create index if not exists products_status_flagged_idx
   on products (status, flagged);
@@ -56,28 +32,7 @@ create index if not exists inquiries_buyer_id_created_at_idx
 create index if not exists inquiries_artisan_id_created_at_idx
   on inquiries (artisan_id, created_at desc);
 
-create table if not exists otp_codes (
-  id          uuid primary key default gen_random_uuid(),
-  email       text not null,
-  code_hash   text not null,
-  expires_at  timestamptz not null,
-  attempts    integer not null default 0,
-  consumed_at timestamptz,
-  created_at  timestamptz not null default now()
-);
-
-create index if not exists otp_codes_email_created_at_idx
-  on otp_codes (email, created_at desc);
-
--- Keeps users.total_products correct without a read-modify-write race.
-create or replace function increment_total_products(target_user uuid, delta integer)
-returns void
-language sql
-as $$
-  update users
-  set total_products = greatest(0, total_products + delta)
-  where id = target_user;
-$$;
+alter table inquiries enable row level security;
 
 create or replace function app_current_role()
 returns text
@@ -110,16 +65,6 @@ drop trigger if exists products_protect_moderation on products;
 create trigger products_protect_moderation
   before update on products
   for each row execute function protect_product_moderation_columns();
-
--- The API talks to Postgres with the service role key, which bypasses RLS
--- entirely (BYPASSRLS), so none of the policies below constrain the Express
--- server. They exist so the anon/authenticated Postgres roles are locked
--- down to the same three-role rules if anything ever queries Supabase
--- directly instead of through the API.
-alter table users      enable row level security;
-alter table products   enable row level security;
-alter table inquiries  enable row level security;
-alter table otp_codes  enable row level security;
 
 revoke update (role) on users from authenticated, anon;
 
@@ -201,12 +146,6 @@ create policy inquiries_update_parties on inquiries
   for update to authenticated
   using (buyer_id = auth.uid() or artisan_id = auth.uid())
   with check (buyer_id = auth.uid() or artisan_id = auth.uid());
-
--- Storage bucket for product images. Public read so <img src> works,
--- writes only ever happen server side with the service role key.
-insert into storage.buckets (id, name, public)
-values ('product-images', 'product-images', true)
-on conflict (id) do nothing;
 
 drop policy if exists product_images_insert_own_folder on storage.objects;
 create policy product_images_insert_own_folder on storage.objects

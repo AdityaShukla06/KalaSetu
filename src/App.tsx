@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { AppProviders } from "./context/AppProviders";
-import { useAuth } from "./context/AuthContext";
+import { useAuth, roleLandingPath } from "./context/AuthContext";
+import type { UserRole } from "./services/api";
 import { BottomNav } from "./components/BottomNav";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppBanners } from "./components/AppBanners";
@@ -10,6 +11,8 @@ import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
 import { VoiceDescribeScreen } from "./screens/AddProduct/VoiceDescribeScreen";
 import { PricingScreen } from "./screens/AddProduct/PricingScreen";
 import { ProfileScreen } from "./screens/Profile/ProfileScreen";
+import { MarketplaceScreen } from "./screens/Marketplace/MarketplaceScreen";
+import { AdminScreen } from "./screens/Admin/AdminScreen";
 
 function AppLayout() {
   return (
@@ -26,8 +29,13 @@ function RequireAuth() {
 }
 
 function RedirectIfAuthed() {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <Navigate to="/" replace /> : <Outlet />;
+  const { isAuthenticated, role } = useAuth();
+  return isAuthenticated ? <Navigate to={roleLandingPath(role ?? "artisan")} replace /> : <Outlet />;
+}
+
+function RequireRole({ role }: { role: UserRole }) {
+  const { role: currentRole } = useAuth();
+  return currentRole === role ? <Outlet /> : <Navigate to={roleLandingPath(currentRole ?? "artisan")} replace />;
 }
 
 function App() {
@@ -42,13 +50,23 @@ function App() {
             </Route>
 
             <Route element={<RequireAuth />}>
-              <Route path="/add-product/photo" element={<AddProductScreen />} />
-              <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
-              <Route path="/add-product/price" element={<PricingScreen />} />
+              <Route element={<RequireRole role="buyer" />}>
+                <Route path="/marketplace" element={<MarketplaceScreen />} />
+              </Route>
 
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<HomeScreen />} />
-                <Route path="/profile" element={<ProfileScreen />} />
+              <Route element={<RequireRole role="admin" />}>
+                <Route path="/admin" element={<AdminScreen />} />
+              </Route>
+
+              <Route element={<RequireRole role="artisan" />}>
+                <Route path="/add-product/photo" element={<AddProductScreen />} />
+                <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
+                <Route path="/add-product/price" element={<PricingScreen />} />
+
+                <Route element={<AppLayout />}>
+                  <Route path="/" element={<HomeScreen />} />
+                  <Route path="/profile" element={<ProfileScreen />} />
+                </Route>
               </Route>
             </Route>
 

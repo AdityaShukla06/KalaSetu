@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { OtpInput } from "../../components/OtpInput";
 import { sendOtp, verifyOtp, OTP_LENGTH } from "../../services/api";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth, roleLandingPath } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
 
@@ -66,9 +66,9 @@ export function OtpVerificationScreen({
     setError(null);
 
     try {
-      const { token, userId, email: verifiedEmail } = await verifyOtp(email, otp);
-      login(token, userId, verifiedEmail);
-      navigate("/", { replace: true });
+      const { token, userId, email: verifiedEmail, role } = await verifyOtp(email, otp);
+      login(token, userId, verifiedEmail, role);
+      navigate(roleLandingPath(role), { replace: true });
     } catch {
       setOtp("");
       setError(t("otp.wrong"));

@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
 import { isAppLanguage } from "../../shared/languages";
-import { UserProfile } from "../types";
+import { UserProfile, isUserRole } from "../types";
 
 const router = Router();
 
@@ -14,6 +14,7 @@ interface UserRow {
   display_name: string | null;
   shop_name: string | null;
   language: string;
+  role: string;
   total_products: number;
   created_at: string;
 }
@@ -25,6 +26,7 @@ export function toUserProfile(row: UserRow): UserProfile {
     displayName: row.display_name,
     shopName: row.shop_name,
     language: isAppLanguage(row.language) ? row.language : "en",
+    role: isUserRole(row.role) ? row.role : "artisan",
     totalProducts: row.total_products,
     createdAt: row.created_at,
   };
@@ -37,7 +39,7 @@ router.get(
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from("users")
-      .select("id, email, display_name, shop_name, language, total_products, created_at")
+      .select("id, email, display_name, shop_name, language, role, total_products, created_at")
       .eq("id", req.uid)
       .maybeSingle();
 

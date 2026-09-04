@@ -8,6 +8,8 @@ import imagesRouter from "./routes/images";
 import voiceRouter from "./routes/voice";
 import translateRouter from "./routes/translate";
 import pricingRouter from "./routes/pricing";
+import inquiriesRouter from "./routes/inquiries";
+import adminRouter from "./routes/admin";
 import { PayloadTooLargeError } from "./middleware/rawBody";
 
 const app = express();
@@ -23,6 +25,8 @@ app.use("/api/images", imagesRouter);
 app.use("/api/voice", voiceRouter);
 app.use("/api/translate", translateRouter);
 app.use("/api/pricing", pricingRouter);
+app.use("/api/inquiries", inquiriesRouter);
+app.use("/api/admin", adminRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });

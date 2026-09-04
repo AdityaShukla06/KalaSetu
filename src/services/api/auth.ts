@@ -2,6 +2,8 @@ import { apiFetch } from "./_helpers";
 
 export const OTP_LENGTH = 4;
 
+export type UserRole = "artisan" | "buyer" | "admin";
+
 export interface RequestOtpResult {
   success: boolean;
   emailDelivered: boolean;
@@ -12,6 +14,7 @@ export interface VerifyOtpResult {
   token: string;
   userId: string;
   email: string;
+  role: UserRole;
 }
 
 export function sendOtp(email: string): Promise<RequestOtpResult> {

@@ -11,7 +11,8 @@
     "typecheck:server": "tsc -p tsconfig.server.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:api": "node scripts/build-api.mjs"
+    "build:api": "node scripts/build-api.mjs",
+    "verify:rls": "node scripts/verify-rls.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",

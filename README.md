@@ -49,6 +49,8 @@ src/                 the PWA
     Home/            My Shop catalog, product detail sheet, GeM/ONDC banner
     AddProduct/      camera, category, voice description, pricing, publish
     Profile/         profile and language
+    Marketplace/     buyer landing (placeholder until the buyer portal is built)
+    Admin/           admin landing (placeholder until the admin console is built)
   components/        Button, Card, Input, OtpInput, LanguageToggle, BottomNav
   context/           Auth, Language, AddProductDraft
     locales/         one JSON dictionary per language
@@ -57,7 +59,7 @@ src/                 the PWA
 
 server/              the API, an ordinary Express app
   routes/            one router per resource, all mounted under /api
-  middleware/        session verification, raw body reading, async errors
+  middleware/        session verification, role checks, raw body reading, async errors
   lib/               supabase client, env schema, JWT, OTP, email
   services/          pricingEngine.ts, imageEnhancer.ts
   voice-ai/          provider-agnostic STT, translation, description pipeline
@@ -83,10 +85,17 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, width, height }` |
 | POST | `/api/voice/transcribe` | raw audio bytes, `?category=` and `?language=` | `{ transcript, descriptionEn, descriptionLocal, localLanguage, detectedLanguage }` |
 | POST | `/api/pricing/suggest` | `{ category, materialCost or rawMaterials, ... }` | range, confidence, market reference, breakdown |
-| POST | `/api/products` | `ProductInput` | `{ productId }` |
-| GET | `/api/products` | | `Product[]` |
-| PATCH | `/api/products/:id` | partial `ProductInput` | `{ success }` |
-| DELETE | `/api/products/:id` | | `{ success }` |
+| POST | `/api/products` | `ProductInput` | `{ productId }`, artisan only |
+| GET | `/api/products` | | `Product[]`, the caller's own |
+| GET | `/api/products/marketplace` | | `Product[]`, every published and unflagged product |
+| PATCH | `/api/products/:id` | partial `ProductInput` | `{ success }`, artisan only, own product |
+| DELETE | `/api/products/:id` | | `{ success }`, artisan only, own product |
+| POST | `/api/inquiries` | `{ productId, message }` | `{ inquiryId }`, buyer only |
+| GET | `/api/inquiries/mine` | | `Inquiry[]`, buyer only, sent by the caller |
+| GET | `/api/inquiries/received` | | `Inquiry[]`, artisan only, about the caller's products |
+| PATCH | `/api/inquiries/:id` | `{ status: "closed" }` | `{ success }`, either party to the inquiry |
+| GET | `/api/admin/products` | | `Product[]`, every product, admin only |
+| PATCH | `/api/admin/products/:id/moderate` | `{ flagged?, flagReason?, status? }` | `{ success }`, admin only |
 
 Uploads send the file as the raw request body with its real type in an `X-File-Type` header rather than as multipart. Serverless runtimes buffer and consume the request stream before the handler runs, which breaks multipart parsers; reading a raw body works both under a normal Express server and on Vercel.
 
@@ -97,6 +106,14 @@ Email OTP, issued by this API rather than a third party. SMS was not viable: sen
 `request-otp` stores a SHA-256 hash of a 4 digit code with a 10 minute expiry and emails it through Resend. `verify-otp` checks it and returns a JWT that the client sends on every later request. Codes are single use, capped at 5 attempts, and compared with a timing safe comparison. Sessions last 7 days; changing `JWT_SECRET` revokes all of them at once.
 
 Email delivery is optional. Without `RESEND_API_KEY` the app still works through the demo fallback code, which is documented in [SETUP.md](SETUP.md) along with how to turn it off.
+
+## Roles
+
+Every account is `artisan`, `buyer`, or `admin`, stored in `users.role` and defaulting to `artisan`. `verify-otp` reads the role fresh from the database and returns it alongside the token; the frontend uses it once, right after login, to send an artisan to `/`, a buyer to `/marketplace`, or an admin to `/admin`. Nothing about that redirect is trusted afterward: every admin-only route re-checks the role from the database on every request through `requireRole()` in [server/middleware/requireRole.ts](server/middleware/requireRole.ts), never from the session token, so revoking someone's access takes effect on their very next request rather than waiting out a 7 day token.
+
+No code path accepts a `role` value from a client. `PATCH /api/users/me` never lists `role` as an updatable field, and `users.role` also has `UPDATE` revoked from the `authenticated` and `anon` Postgres roles as a second, independent lock. An admin account is created by hand, either in the Supabase dashboard or with a seed script run with the service role key.
+
+Buyers browse `GET /api/products/marketplace`, which returns published, unflagged listings from every artisan. An artisan's own `GET /api/products` still only returns their own listings, exactly as before roles existed. Admin moderation (`flagged`, `flag_reason`) is guarded by a database trigger rather than a column grant, because an artisan and an admin share the same Postgres `authenticated` role, so a column-level `REVOKE` cannot tell them apart; only Postgres RLS combined with a per-row role lookup can.
 
 ## Languages
 
@@ -130,7 +147,9 @@ Groq's free tier caps tokens per day per model rather than per minute, and each 
 
 ## Data and ownership
 
-Two tables plus one for OTPs, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product read, update, and delete is scoped by `user_id` in the query itself, so knowing a product ID is not enough to touch someone else's listing. Row level security is enabled on every table with no public policies, so the anon key cannot read anything even if it ends up in the browser bundle. The API uses the service role key server side only.
+`users`, `products`, `inquiries`, and `otp_codes`, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product and inquiry read, update, and delete is scoped by ownership in the query itself, so knowing an ID is not enough to touch someone else's row. The API uses the service role key server side only, which bypasses row level security entirely, so this ownership scoping in the route code is what actually gates every request that comes through the API today.
+
+Row level security is enabled on every table and carries the full three-role rule set: an artisan sees and writes only their own products and profile, a buyer reads published listings and writes only their own inquiries and profile, and an admin reads everything and can update moderation fields. It exists as a second, independent layer for anything that isn't the service-role-authenticated API, such as a leaked anon key or a future direct-from-browser read. [`scripts/verify-rls.mjs`](scripts/verify-rls.mjs) proves those policies directly against Postgres, and [`server/__roles.test.ts`](server/__roles.test.ts) proves the same six rules through the live API.
 
 `users.total_products` is maintained by a Postgres function rather than a read-modify-write, so it cannot drift under concurrent writes.
 
@@ -153,7 +172,9 @@ Two tables plus one for OTPs, defined in [`supabase/schema.sql`](supabase/schema
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts` drives the whole API against a real Supabase project. It only runs when `.env` has credentials, skips itself in CI, and cleans up everything it creates.
+- `server/__smoke.test.ts` and `server/__roles.test.ts` drive the whole API against a real Supabase project. Both only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
+- After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 
 ## Design system
 

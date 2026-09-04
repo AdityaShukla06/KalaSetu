@@ -1,3 +1,11 @@
+export type UserRole = "artisan" | "buyer" | "admin";
+
+export const USER_ROLES: UserRole[] = ["artisan", "buyer", "admin"];
+
+export function isUserRole(value: unknown): value is UserRole {
+  return typeof value === "string" && (USER_ROLES as string[]).includes(value);
+}
+
 export type ProductStatus = "draft" | "published" | "failed";
 
 export interface ProductInput {
@@ -16,8 +24,22 @@ export interface Product extends ProductInput {
   productId: string;
   userId: string;
   status: ProductStatus;
+  flagged: boolean;
+  flagReason: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type InquiryStatus = "open" | "closed";
+
+export interface Inquiry {
+  inquiryId: string;
+  productId: string;
+  buyerId: string;
+  artisanId: string;
+  message: string;
+  status: InquiryStatus;
+  createdAt: string;
 }
 
 export interface UserProfile {
@@ -26,6 +48,7 @@ export interface UserProfile {
   displayName: string | null;
   shopName: string | null;
   language: string;
+  role: UserRole;
   totalProducts: number;
   createdAt: string;
 }
@@ -35,6 +58,7 @@ declare global {
     interface Request {
       uid: string;
       email: string;
+      role?: UserRole;
     }
   }
 }
