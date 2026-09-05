@@ -184,20 +184,16 @@ suite("three role model", () => {
     expect(marketplace.items.some((p) => p.productId === productId)).toBe(true);
   });
 
-  it("PASS/FAIL: admin can read all products", async () => {
+  it("PASS/FAIL: admin can read all of an artisan's products regardless of status", async () => {
     const a = await signInAs(EMAIL_ARTISAN_A, "artisan");
-    const b = await signInAs(EMAIL_ARTISAN_B, "artisan");
     const admin = await signInAs(EMAIL_ADMIN, "admin");
-    const productIdA = await createPublishedProduct(a.token);
-    const productIdB = await createPublishedProduct(b.token);
+    const productId = await createPublishedProduct(a.token);
 
-    const allProducts = await json<Array<{ productId: string }>>(
-      await fetch(`${base}/api/admin/products`, { headers: auth(admin.token) }),
+    const detail = await json<{ listings: Array<{ productId: string }> }>(
+      await fetch(`${base}/api/internal/console/artisans/${a.userId}`, { headers: auth(admin.token) }),
     );
-    const ids = allProducts.map((p) => p.productId);
 
-    expect(ids).toContain(productIdA);
-    expect(ids).toContain(productIdB);
+    expect(detail.listings.map((p) => p.productId)).toContain(productId);
   });
 
   it("PASS/FAIL: admin can update a moderation field", async () => {
@@ -205,20 +201,30 @@ suite("three role model", () => {
     const admin = await signInAs(EMAIL_ADMIN, "admin");
     const productId = await createPublishedProduct(a.token);
 
-    const moderateRes = await fetch(`${base}/api/admin/products/${productId}/moderate`, {
+    const flagRes = await fetch(`${base}/api/internal/console/moderation/${productId}/flag`, {
       method: "PATCH",
       headers: { ...auth(admin.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ flagged: true, flagReason: "role verification test" }),
+      body: JSON.stringify({ reason: "role verification test" }),
     });
-    expect(moderateRes.status).toBe(200);
+    expect(flagRes.status).toBe(200);
 
-    const allProducts = await json<Array<{ productId: string; flagged: boolean; flagReason: string | null }>>(
-      await fetch(`${base}/api/admin/products`, { headers: auth(admin.token) }),
+    const detail = await json<{ listings: Array<{ productId: string; flagged: boolean; flagReason: string | null }> }>(
+      await fetch(`${base}/api/internal/console/artisans/${a.userId}`, { headers: auth(admin.token) }),
     );
-    const updated = allProducts.find((p) => p.productId === productId);
+    const updated = detail.listings.find((p) => p.productId === productId);
 
     expect(updated?.flagged).toBe(true);
     expect(updated?.flagReason).toBe("role verification test");
+  });
+
+  it("PASS/FAIL: a non-admin hitting the console API gets 404, not 403", async () => {
+    const artisan = await signInAs(EMAIL_ARTISAN_A, "artisan");
+
+    const res = await fetch(`${base}/api/internal/console/dashboard`, { headers: auth(artisan.token) });
+    expect(res.status).toBe(404);
+
+    const anonRes = await fetch(`${base}/api/internal/console/dashboard`);
+    expect(anonRes.status).toBe(404);
   });
 });
 

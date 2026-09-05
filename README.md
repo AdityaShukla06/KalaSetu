@@ -39,6 +39,7 @@ Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](
 | `npm test` | vitest |
 | `npm run verify:rls` | Checks row level security policies directly against Postgres |
 | `npm run promote:admin -- <email>` | Promotes an existing account to admin (they must have signed in once first) |
+| `npm run seed:demo-admin -- [email]` | Creates (or fixes up) one admin account directly, no prior sign-in needed. Defaults to `admin@kalasetu.demo` |
 
 CI runs all of these on every pull request.
 
@@ -52,8 +53,9 @@ src/                 the PWA
     AddProduct/      camera, enhancement studio, category, voice description, pricing, publish
     Profile/         profile and language
     Marketplace/     buyer portal: browse/search/filter, product detail, inquiries, profile
-    Admin/           admin landing (placeholder until the admin console is built)
-  components/        Button, Card, Input, OtpInput, LanguageToggle, RegionSelect, Skeleton, BottomNav
+    Console/         admin console: dashboard, artisans, moderation, flagged listings
+    NotFound/        generic 404, also used to hide the console route from non-admins
+  components/        Button, Card, Input, OtpInput, LanguageToggle, RegionSelect, Skeleton, ConfirmDialog, BottomNav
   context/           Auth, Language, AddProductDraft
     locales/         one JSON dictionary per language
   services/          api/ one module per resource, audio.ts (WAV conversion)
@@ -102,8 +104,16 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | GET | `/api/inquiries/mine` | | `Inquiry[]`, buyer only, sent by the caller |
 | GET | `/api/inquiries/received` | | `Inquiry[]`, artisan only, about the caller's products |
 | PATCH | `/api/inquiries/:id` | `{ status: "closed" }` | `{ success }`, either party to the inquiry |
-| GET | `/api/admin/products` | | `Product[]`, every product, admin only |
-| PATCH | `/api/admin/products/:id/moderate` | `{ flagged?, flagReason?, status? }` | `{ success }`, admin only |
+| GET | `/api/internal/console/dashboard` | | `DashboardStats`, admin only, 404 for everyone else |
+| GET | `/api/internal/console/artisans` | `?q=&page=&limit=` | `{ items, page, limit, total, hasMore }`, admin only |
+| GET | `/api/internal/console/artisans/:id` | | `ConsoleArtisanDetail` (profile + every listing), admin only |
+| PATCH | `/api/internal/console/artisans/:id` | `{ isActive, reason? }` | `{ success }`, admin only, deactivation blocks that artisan's next login |
+| GET | `/api/internal/console/moderation/queue` | `?page=&limit=` | `{ items, page, limit, total, hasMore }`, `review_status = 'pending'` only, admin only |
+| PATCH | `/api/internal/console/moderation/:id/approve` | | `{ success }`, admin only |
+| PATCH | `/api/internal/console/moderation/:id/reject` | `{ reason }` | `{ success }`, admin only, pulls the listing from the marketplace |
+| PATCH | `/api/internal/console/moderation/:id/flag` | `{ reason }` | `{ success }`, admin only, pulls the listing from the marketplace |
+| GET | `/api/internal/console/flagged` | | `{ available, items }`, admin only, `available: false` until the pricing overcharge check exists |
+| GET | `/api/internal/console/audit` | `?limit=` | `AuditLogEntry[]`, admin only |
 
 Uploads send the file as the raw request body with its real type in an `X-File-Type` header rather than as multipart. Serverless runtimes buffer and consume the request stream before the handler runs, which breaks multipart parsers; reading a raw body works both under a normal Express server and on Vercel.
 
@@ -117,7 +127,9 @@ Email delivery is optional. Without `RESEND_API_KEY` the app still works through
 
 ## Roles
 
-Every account is `artisan`, `buyer`, or `admin`, stored in `users.role` and defaulting to `artisan`. `verify-otp` reads the role fresh from the database and returns it alongside the token; the frontend uses it once, right after login, to send an artisan to `/`, a buyer to `/marketplace`, or an admin to `/admin`. Nothing about that redirect is trusted afterward: every admin-only route re-checks the role from the database on every request through `requireRole()` in [server/middleware/requireRole.ts](server/middleware/requireRole.ts), never from the session token, so revoking someone's access takes effect on their very next request rather than waiting out a 7 day token.
+Every account is `artisan`, `buyer`, or `admin`, stored in `users.role` and defaulting to `artisan`. `verify-otp` reads the role fresh from the database and returns it alongside the token; the frontend uses it once, right after login, to send an artisan to `/`, a buyer to `/marketplace`, or an admin to `/internal/console`. Nothing about that redirect is trusted afterward: every admin-only route re-checks the role from the database on every request, never from the session token, so revoking someone's access takes effect on their very next request rather than waiting out a 7 day token.
+
+`users.is_active` (default `true`) is the other login gate: `verify-otp` rejects a deactivated account with `403 { error: "account_deactivated" }` before it ever issues a token, regardless of role. The admin console is the only thing that can flip it, and only for artisans.
 
 The email screen asks "I'm here to sell / buy" before sending the code. That choice (`intendedRole`, restricted to `artisan` or `buyer`, `admin` is not a legal value here) only ever affects the moment `verify-otp` first creates the account row; for an email that already has an account, it's silently ignored and the stored role never changes, so logging in again with the other choice picked does nothing. No code path accepts a `role` value for an *existing* account either: `PATCH /api/users/me` never lists `role` as an updatable field, and `users.role` also has `UPDATE` revoked from the `authenticated` and `anon` Postgres roles as a second, independent lock.
 
@@ -138,6 +150,24 @@ Four screens under `src/screens/Marketplace/`: browse (search, filter, sort, pag
 **Desktop responsiveness required one shared-shell change.** The whole app was capped at `max-width: 390px` on `#root`, fine for the artisan/admin mobile-only experience, wrong for a page meant to also work as a desktop website. `#root`'s max-width now reads a `--shell-max-width` custom property (default still `390px`), and `MarketplaceLayout` is the only place that overrides it, while mounted, back to `none`. Nothing about the artisan or admin screens changed.
 
 **Scope note**: "image gallery" on the product detail screen renders whatever a multi-image gallery would, but today's schema only ever stores one `image_url` per product, so it's a gallery of one. Adding multi-image capture to the artisan side is a separate, larger feature this didn't pull in.
+
+## Admin console
+
+Four screens under `src/screens/Console/`, deliberately unlinked from anywhere in the public app: dashboard (stat cards, a hand-rolled SVG bar chart of signups, recent audit activity), artisan management (searchable paginated table, per-artisan profile and listing history, deactivate/reactivate), listing moderation (a queue, approve/reject-with-reason/flag-with-reason), and flagged listings. It's the one part of this app written in plain English with no `t()` calls: the audience is internal admin staff, not artisans or buyers, and translating a dense data table across 22 languages for that audience isn't a good trade.
+
+**Route obscurity is convenience, not the security boundary, exactly as asked.** The path is `/internal/console`, linked from nowhere. A non-admin hitting any `/api/internal/console/*` endpoint gets a bare `404`, indistinguishable from a route that doesn't exist, whether they're a logged-in artisan, a logged-in buyer, or not logged in at all: `requireAdminOr404` in [server/middleware/requireAdminOr404.ts](server/middleware/requireAdminOr404.ts) verifies the session token and re-checks the role from the database itself, and answers 404 for every failure mode uniformly, never 401 or 403, since either of those would confirm to a curious visitor that a gated route exists here. The frontend guard (`RequireAdminOr404` in `App.tsx`) does the same: a non-admin sees the same generic "Page not found" screen as any bad URL, never a redirect, since a redirect would itself leak "you're logged in as someone this route knows about." RLS backs both: `products_select_admin`/`users_select_admin`/`users_update_admin` already gate the tables this reads and writes.
+
+**Retrospective moderation, not a publish gate**, a deliberate choice: publishing stays instant and artisan-facing messaging is unchanged. Every product still gets `review_status = 'pending'` at creation, but that's advisory bookkeeping for the admin queue, not a visibility switch, and a brand new listing is already live in the marketplace the moment it's created, same as before this existed. `status` and `flagged`, the two fields that actually gate marketplace visibility, are untouched by "pending." Approve marks `review_status = 'approved'` and changes nothing else, since the listing was already visible. Reject requires a reason, sets `review_status = 'rejected'`, and moves `status` to `'draft'`, pulling it from the marketplace, reversibly (the row still exists, nothing is deleted). Flag requires a reason and reuses the `flagged`/`flag_reason` columns the buyer marketplace already excludes.
+
+**Deactivating an artisan** sets `users.is_active = false`, checked at `verify-otp`, so the very next sign-in attempt is refused; it does not touch their existing listings. Reactivating is the same endpoint with the flag flipped back. No hard deletes exist anywhere in this feature.
+
+**Every moderation action and every deactivate/reactivate writes to `audit_log`** (actor, action, target table and id, an optional reason, optional metadata, timestamp) via `recordAudit()` in [server/lib/auditLog.ts](server/lib/auditLog.ts). It's best-effort: a failed audit write is logged server side and does not roll back or block the underlying action, a deliberate choice given the scope here (an admin tool's activity trail, not a financial ledger needing transactional guarantees).
+
+**Flagged listings degrades on purpose.** Section 6's pricing overcharge check doesn't exist yet, so `GET /api/internal/console/flagged` selects a `products.auto_flag_reason` column that isn't there today, catches Postgres's `42703` (undefined column) specifically, and returns `{ available: false, items: [] }` instead of a 500. The screen shows "not enabled yet" rather than an error. The moment that column exists and gets populated, this starts working with no frontend change.
+
+**Confirm dialogs are one reusable component** ([src/components/ConfirmDialog.tsx](src/components/ConfirmDialog.tsx)), used for deactivate and for reject/flag's required-reason prompt, matching the existing design system rather than adding a modal library.
+
+**Demo login**: `npm run seed:demo-admin -- you@example.com` (or no argument, defaults to `admin@kalasetu.demo`) creates the account directly with the service role key, no prior sign-in required, unlike `promote:admin`. Sign in through the normal email/OTP screen afterward; the role choice on that screen is ignored for an account that already exists.
 
 ## Languages
 
@@ -171,7 +201,7 @@ Groq's free tier caps tokens per day per model rather than per minute, and each 
 
 ## Data and ownership
 
-`users`, `products`, `inquiries`, and `otp_codes`, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product and inquiry read, update, and delete is scoped by ownership in the query itself, so knowing an ID is not enough to touch someone else's row. The API uses the service role key server side only, which bypasses row level security entirely, so this ownership scoping in the route code is what actually gates every request that comes through the API today.
+`users`, `products`, `inquiries`, `audit_log`, and `otp_codes`, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product and inquiry read, update, and delete is scoped by ownership in the query itself, so knowing an ID is not enough to touch someone else's row. The API uses the service role key server side only, which bypasses row level security entirely, so this ownership scoping in the route code is what actually gates every request that comes through the API today.
 
 Row level security is enabled on every table and carries the full three-role rule set: an artisan sees and writes only their own products and profile, a buyer reads published listings and writes only their own inquiries and profile, and an admin reads everything and can update moderation fields. It exists as a second, independent layer for anything that isn't the service-role-authenticated API, such as a leaked anon key or a future direct-from-browser read. [`scripts/verify-rls.mjs`](scripts/verify-rls.mjs) proves those policies directly against Postgres, and [`server/__roles.test.ts`](server/__roles.test.ts) proves the same six rules through the live API.
 
@@ -200,7 +230,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts`, `server/__roles.test.ts`, and `server/__marketplace.test.ts` drive the whole API against a real Supabase project. All three only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, and `server/__console.test.ts` drive the whole API against a real Supabase project. All four only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
 - `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
 - After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 

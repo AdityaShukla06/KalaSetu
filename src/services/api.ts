@@ -3,6 +3,7 @@ export type {
   ProductStatus,
   ProductInput,
   Product,
+  ReviewStatus,
   ArtisanSummary,
   ProductWithArtisan,
   MarketplaceSort,
@@ -21,6 +22,17 @@ export type {
   CropPreset,
   FinalizeResult,
 } from "./api/images";
+export type {
+  ConsoleArtisan,
+  ConsoleArtisanDetail,
+  ArtisanListResult,
+  DashboardStats,
+  DashboardSignupPoint,
+  ModerationQueueResult,
+  AuditLogEntry,
+  FlaggedListing,
+  FlaggedListingsResult,
+} from "./api/console";
 
 // importing utility apis
 export { sendOtp, verifyOtp, OTP_LENGTH } from "./api/auth";
@@ -38,3 +50,15 @@ export {
 } from "./api/products";
 export { getMyProfile, updateMyProfile } from "./api/users";
 export { createInquiry, listMyInquiries, closeInquiry } from "./api/inquiries";
+export {
+  getDashboardStats,
+  listArtisans,
+  getArtisanDetail,
+  setArtisanActive,
+  getModerationQueue,
+  approveListing,
+  rejectListing,
+  flagListing,
+  getFlaggedListings,
+  getAuditLog,
+} from "./api/console";

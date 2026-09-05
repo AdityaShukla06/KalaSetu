@@ -12,9 +12,13 @@ create table if not exists users (
   region         text,
   language       text not null default 'en',
   role           text not null default 'artisan' check (role in ('artisan', 'buyer', 'admin')),
+  is_active      boolean not null default true,
   total_products integer not null default 0,
   created_at     timestamptz not null default now()
 );
+
+create index if not exists users_is_active_idx
+  on users (is_active);
 
 create table if not exists products (
   id              uuid primary key default gen_random_uuid(),
@@ -34,6 +38,10 @@ create table if not exists products (
   status          text not null default 'published' check (status in ('draft', 'published', 'failed')),
   flagged         boolean not null default false,
   flag_reason     text,
+  review_status   text not null default 'pending' check (review_status in ('pending', 'approved', 'rejected', 'flagged')),
+  reviewed_at     timestamptz,
+  reviewed_by     uuid references users(id),
+  review_reason   text,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -50,6 +58,9 @@ create index if not exists products_marketplace_filter_idx
 create index if not exists products_price_idx
   on products (price);
 
+create index if not exists products_review_status_idx
+  on products (review_status);
+
 create table if not exists inquiries (
   id          uuid primary key default gen_random_uuid(),
   product_id  uuid not null references products(id) on delete cascade,
@@ -65,6 +76,23 @@ create index if not exists inquiries_buyer_id_created_at_idx
 
 create index if not exists inquiries_artisan_id_created_at_idx
   on inquiries (artisan_id, created_at desc);
+
+create table if not exists audit_log (
+  id          uuid primary key default gen_random_uuid(),
+  actor_id    uuid references users(id) on delete set null,
+  action      text not null,
+  target_table text not null,
+  target_id   uuid not null,
+  reason      text,
+  metadata    jsonb,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists audit_log_created_at_idx
+  on audit_log (created_at desc);
+
+create index if not exists audit_log_target_idx
+  on audit_log (target_table, target_id);
 
 create table if not exists otp_codes (
   id          uuid primary key default gen_random_uuid(),
@@ -129,9 +157,11 @@ create trigger products_protect_moderation
 alter table users      enable row level security;
 alter table products   enable row level security;
 alter table inquiries  enable row level security;
+alter table audit_log  enable row level security;
 alter table otp_codes  enable row level security;
 
 revoke update (role) on users from authenticated, anon;
+revoke update (is_active) on users from authenticated, anon;
 
 drop policy if exists users_select_own on users;
 create policy users_select_own on users
@@ -148,6 +178,12 @@ create policy users_update_own on users
   for update to authenticated
   using (id = auth.uid())
   with check (id = auth.uid());
+
+drop policy if exists users_update_admin on users;
+create policy users_update_admin on users
+  for update to authenticated
+  using (app_current_role() = 'admin')
+  with check (app_current_role() = 'admin');
 
 drop policy if exists products_select_own on products;
 create policy products_select_own on products
@@ -211,6 +247,11 @@ create policy inquiries_update_parties on inquiries
   for update to authenticated
   using (buyer_id = auth.uid() or artisan_id = auth.uid())
   with check (buyer_id = auth.uid() or artisan_id = auth.uid());
+
+drop policy if exists audit_log_select_admin on audit_log;
+create policy audit_log_select_admin on audit_log
+  for select to authenticated
+  using (app_current_role() = 'admin');
 
 -- Storage bucket for product images. Public read so <img src> works,
 -- writes only ever happen server side with the service role key.

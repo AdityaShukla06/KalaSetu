@@ -126,7 +126,13 @@ router.post(
         .eq("id", record.id);
     }
 
-    const { userId, role } = await findOrCreateUser(email, parsed.data.intendedRole);
+    const { userId, role, isActive } = await findOrCreateUser(email, parsed.data.intendedRole);
+
+    if (!isActive) {
+      res.status(403).json({ error: "account_deactivated" });
+      return;
+    }
+
     const token = signSessionToken({ sub: userId, email });
 
     res.json({ token, userId, email, role });
@@ -136,6 +142,7 @@ router.post(
 interface FoundUser {
   userId: string;
   role: UserRole;
+  isActive: boolean;
 }
 
 async function findOrCreateUser(
@@ -146,34 +153,34 @@ async function findOrCreateUser(
 
   const { data: existing, error: readError } = await supabase
     .from("users")
-    .select("id, role")
+    .select("id, role, is_active")
     .eq("email", email)
     .maybeSingle();
 
   if (readError) {
     throw new Error(`Could not look up the user: ${readError.message}`);
   }
-  if (existing) return { userId: existing.id, role: existing.role };
+  if (existing) return { userId: existing.id, role: existing.role, isActive: existing.is_active };
 
   const { data: created, error: writeError } = await supabase
     .from("users")
     .insert({ email, role: intendedRole })
-    .select("id, role")
+    .select("id, role, is_active")
     .single();
 
   if (writeError) {
     if (writeError.code === "23505") {
       const { data: raced } = await supabase
         .from("users")
-        .select("id, role")
+        .select("id, role, is_active")
         .eq("email", email)
         .single();
-      if (raced) return { userId: raced.id, role: raced.role };
+      if (raced) return { userId: raced.id, role: raced.role, isActive: raced.is_active };
     }
     throw new Error(`Could not create the user: ${writeError.message}`);
   }
 
-  return { userId: created.id, role: created.role };
+  return { userId: created.id, role: created.role, isActive: created.is_active };
 }
 
 export default router;

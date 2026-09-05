@@ -71,6 +71,6 @@ export function useAuth(): AuthContextValue {
 
 export function roleLandingPath(role: UserRole): string {
   if (role === "buyer") return "/marketplace";
-  if (role === "admin") return "/admin";
+  if (role === "admin") return "/internal/console";
   return "/";
 }

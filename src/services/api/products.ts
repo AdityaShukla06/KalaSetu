@@ -16,12 +16,22 @@ export interface ProductInput {
   materialCost: number;
 }
 
+export type ReviewStatus = "pending" | "approved" | "rejected" | "flagged";
+
 export interface Product extends ProductInput {
   productId: string;
+  userId: string;
   region: string | null;
   artisanName: string | null;
   status: ProductStatus;
+  flagged: boolean;
+  flagReason: string | null;
+  reviewStatus: ReviewStatus;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewReason: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface ArtisanSummary {

@@ -21,6 +21,8 @@ export interface ProductInput {
   materialCost: number;
 }
 
+export type ReviewStatus = "pending" | "approved" | "rejected" | "flagged";
+
 export interface Product extends ProductInput {
   productId: string;
   userId: string;
@@ -29,6 +31,10 @@ export interface Product extends ProductInput {
   status: ProductStatus;
   flagged: boolean;
   flagReason: string | null;
+  reviewStatus: ReviewStatus;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewReason: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,6 +82,56 @@ export interface UserProfile {
   role: UserRole;
   totalProducts: number;
   createdAt: string;
+}
+
+export interface ConsoleArtisan {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  shopName: string | null;
+  region: string | null;
+  isActive: boolean;
+  totalProducts: number;
+  createdAt: string;
+}
+
+export interface ConsoleArtisanDetail extends ConsoleArtisan {
+  listings: Product[];
+}
+
+export interface DashboardSignupPoint {
+  date: string;
+  count: number;
+}
+
+export interface DashboardStats {
+  totalArtisans: number;
+  totalBuyers: number;
+  totalProducts: number;
+  pendingApproval: number;
+  totalInquiries: number;
+  signupsOverTime: DashboardSignupPoint[];
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  action: string;
+  targetTable: string;
+  targetId: string;
+  reason: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface FlaggedListing extends Product {
+  autoFlagReason: string;
+}
+
+export interface FlaggedListingsResult {
+  available: boolean;
+  items: FlaggedListing[];
 }
 
 declare global {

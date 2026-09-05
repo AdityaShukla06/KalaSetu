@@ -13,7 +13,7 @@ Work through the sections in order. Expect about 45 minutes the first time.
 3. Wait for the project to finish provisioning, about two minutes.
 4. Open **SQL Editor** in the sidebar, click **New query**, paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. It creates the tables, the indexes, the counter function, row level security, and the storage bucket. It is safe to run more than once.
 
-   If your database predates a later change, also run whichever files in [`supabase/migrations/`](supabase/migrations/) you're missing, in order: `001-multilingual.sql`, `002-roles.sql` (the artisan/buyer/admin role model), `003-marketplace-fields.sql` (region, material, and the buyer marketplace). A fresh database created from `schema.sql` today already has all of this and needs none of them. Each file is safe to run more than once and says at the top what it does.
+   If your database predates a later change, also run whichever files in [`supabase/migrations/`](supabase/migrations/) you're missing, in order: `001-multilingual.sql`, `002-roles.sql` (the artisan/buyer/admin role model), `003-marketplace-fields.sql` (region, material, and the buyer marketplace), `004-admin-console.sql` (artisan deactivation, retrospective listing review, the audit log). A fresh database created from `schema.sql` today already has all of this and needs none of them. Each file is safe to run more than once and says at the top what it does.
 5. Open **Project Settings -> API** and copy two values:
    - **Project URL** goes into `SUPABASE_URL`
    - **`service_role` secret** goes into `SUPABASE_SERVICE_ROLE_KEY`
@@ -99,6 +99,10 @@ Vercel gives you an HTTPS URL. That matters: the camera and microphone only work
 
 Then work through [`TESTING.md`](TESTING.md) on a real Android phone.
 
+## Admin console for judging
+
+`npm run seed:demo-admin -- you@example.com` creates that account directly as an active admin, no prior sign-in needed (defaults to `admin@kalasetu.demo` if you omit the email). Sign in through the normal email screen with that address; the sell/buy choice on that screen is ignored since the account already exists. You'll land on `/internal/console` automatically. The path is deliberately not linked from anywhere in the app, by design (see the README's "Admin console" section) — bookmark it.
+
 ---
 
 ## The demo fallback OTP
@@ -122,3 +126,5 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 | Images 404 after upload | Storage bucket missing or private | Re-run `supabase/schema.sql`, then confirm `product-images` exists and is public. |
 | "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, or the key is missing/wrong, or your remove.bg credits ran out | Check section 3, and your remove.bg dashboard for remaining credits. Everything else in the studio still works either way. |
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |
+| Sign in returns 403 `account_deactivated` | An admin deactivated that artisan in the console | Reactivate them from `/internal/console/artisans`, or it's expected if that was intentional. |
+| `/internal/console` shows "Page not found" | You're not signed in as an admin | That's the intended behaviour for anyone else, not a bug. Seed or promote an admin account (see "Admin console for judging" above). |

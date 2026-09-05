@@ -1,0 +1,9 @@
+.artisan-detail-back {
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  color: var(--color-secondary-soft);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 600;
+  text-decoration: none;
+}

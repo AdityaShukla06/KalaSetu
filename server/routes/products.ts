@@ -50,10 +50,10 @@ function getTranslator() {
   return voiceDeps.translationService;
 }
 
-const PRODUCT_COLUMNS =
-  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, created_at, updated_at";
+export const PRODUCT_COLUMNS =
+  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, review_status, reviewed_at, reviewed_by, review_reason, created_at, updated_at";
 
-interface ProductRow {
+export interface ProductRow {
   id: string;
   user_id: string;
   category: string;
@@ -71,6 +71,10 @@ interface ProductRow {
   status: string;
   flagged: boolean;
   flag_reason: string | null;
+  review_status: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  review_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -94,6 +98,10 @@ export function toProduct(row: ProductRow): Product {
     status: row.status as ProductStatus,
     flagged: row.flagged,
     flagReason: row.flag_reason,
+    reviewStatus: row.review_status as Product["reviewStatus"],
+    reviewedAt: row.reviewed_at,
+    reviewedBy: row.reviewed_by,
+    reviewReason: row.review_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

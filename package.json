@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "build:api": "node scripts/build-api.mjs",
     "verify:rls": "node scripts/verify-rls.mjs",
-    "promote:admin": "node scripts/promote-admin.mjs"
+    "promote:admin": "node scripts/promote-admin.mjs",
+    "seed:demo-admin": "node scripts/seed-demo-admin.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",

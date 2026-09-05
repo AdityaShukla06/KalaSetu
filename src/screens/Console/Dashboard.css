@@ -1,0 +1,63 @@
+.stat-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.stat-card-highlight {
+  border-color: var(--color-primary);
+  background: var(--color-primary-tint);
+}
+
+.stat-card-label {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.stat-card-value {
+  font-family: var(--font-heading);
+  font-size: var(--text-h2-size);
+  font-weight: 700;
+  color: var(--color-secondary);
+}
+
+.dashboard-section {
+  margin-bottom: var(--space-6);
+}
+
+.dashboard-section h3 {
+  margin-bottom: var(--space-3);
+}
+
+.signup-chart-scroll {
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .stat-card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .stat-card-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
