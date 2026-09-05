@@ -51,6 +51,7 @@ export interface ArtisanSummary {
   shopName: string | null;
   displayName: string | null;
   region: string | null;
+  whatsappNumber: string | null;
   totalProducts: number;
 }
 

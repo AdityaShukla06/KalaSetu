@@ -58,6 +58,8 @@ Sign in codes are emailed through [Resend](https://resend.com). Free tier, no ca
 
 **You can skip this entirely.** Without a key, codes are not emailed and the demo fallback OTP below is how you sign in.
 
+The same Resend setup also emails an artisan when a buyer sends an inquiry. Set `PUBLIC_APP_URL` to your deployed URL (defaults to `http://localhost:5173`) so that email's "view and respond" link points somewhere real.
+
 ## 6. Run it locally
 
 ```bash
@@ -82,6 +84,7 @@ To check the API is alive: `http://localhost:5173/api/health` should return `{"s
    - `GROQ_API_KEY`
    - `BACKGROUND_REMOVAL_PROVIDER` and `REMOVE_BG_API_KEY` (only if you did step 3)
    - `RESEND_API_KEY` (only if you did step 5)
+   - `PUBLIC_APP_URL` (your deployed URL, so inquiry notification emails link back correctly)
    - `DEMO_FALLBACK_OTP_ENABLED`
 5. **Deploy.**
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../components/Button";
+import { Input } from "../../components/Input";
 import { Skeleton } from "../../components/Skeleton";
 import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
 import { getMarketplaceProduct, createInquiry, recordProductView } from "../../services/api";
-import type { ProductWithArtisan } from "../../services/api";
+import type { ProductWithArtisan, InquiryContactPreference } from "../../services/api";
+import { buildWhatsAppUrl } from "../../../shared/whatsapp";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
 import { useLanguage } from "../../context/LanguageContext";
 import "./ProductDetail.css";
@@ -59,6 +61,23 @@ function PinIcon() {
   );
 }
 
+function WhatsAppIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 20l1.4-4.1A7.9 7.9 0 1 1 8.4 19L4 20Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.7 8.6c.2-.5.4-.5.6-.5h.5c.2 0 .4 0 .5.4.2.5.6 1.5.6 1.6.1.1.1.3 0 .4-.1.2-.1.3-.3.5-.1.2-.3.3-.4.5-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.3 2.4 1.5.3.1.5.1.6-.1.2-.2.7-.8.9-1.1.2-.2.4-.2.6-.1.2.1 1.5.7 1.8.8.3.1.4.2.5.3.1.2.1.9-.2 1.4-.3.5-1.5 1.1-2.1 1.1-.6 0-1.1.1-3.7-1.1-2.6-1.2-4.2-3.7-4.4-3.9-.1-.2-1-1.3-1-2.5s.6-1.8.8-2Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 function SendIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -86,6 +105,9 @@ export function ProductDetailScreen() {
   const [descriptionTab, setDescriptionTab] = useState<DescriptionTab>(language === "en" ? "en" : "local");
 
   const [message, setMessage] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [contactPreference, setContactPreference] = useState<InquiryContactPreference>("email");
+  const [contactValue, setContactValue] = useState("");
   const [inquiryState, setInquiryState] = useState<InquiryState>("idle");
 
   const load = useCallback(async () => {
@@ -114,16 +136,34 @@ export function ProductDetailScreen() {
     recordProductView(productId).catch(() => {});
   }, [state, productId]);
 
+  const needsContactValue = contactPreference !== "email";
+  const contactValueMissing = needsContactValue && !contactValue.trim();
+
   async function handleSendInquiry() {
-    if (!productId || !message.trim()) return;
+    if (!productId || !message.trim() || contactValueMissing) return;
     setInquiryState("sending");
     try {
-      await createInquiry(productId, message.trim());
+      const parsedQuantity = Number(quantity);
+      await createInquiry({
+        productId,
+        message: message.trim(),
+        quantity: quantity.trim() && Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : undefined,
+        contactPreference,
+        contactValue: needsContactValue ? contactValue.trim() : undefined,
+      });
       setInquiryState("sent");
       setMessage("");
+      setQuantity("");
+      setContactValue("");
     } catch {
       setInquiryState("error");
     }
+  }
+
+  function handleWhatsAppHandoff() {
+    if (!product?.artisan.whatsappNumber) return;
+    const text = t("marketplace.whatsappPrefill", { product: title, passportId: product.passportId });
+    window.open(buildWhatsAppUrl(product.artisan.whatsappNumber, text), "_blank", "noopener,noreferrer");
   }
 
   if (state === "loading") {
@@ -230,13 +270,32 @@ export function ProductDetailScreen() {
             </p>
           </div>
 
+          {product.artisan.whatsappNumber && (
+            <button type="button" className="whatsapp-handoff-button" onClick={handleWhatsAppHandoff}>
+              <WhatsAppIcon />
+              {t("marketplace.whatsappButton")}
+            </button>
+          )}
+
           <div className="inquiry-card">
             <h3>{t("marketplace.inquiryTitle")}</h3>
+            <p className="caption inquiry-card-subtitle">{t("marketplace.inquirySubtitle")}</p>
 
             {inquiryState === "sent" ? (
               <p className="body-s inquiry-sent">{t("marketplace.inquirySent")}</p>
             ) : (
               <>
+                <Input
+                  label={t("marketplace.inquiryQuantityLabel")}
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  placeholder={t("marketplace.inquiryQuantityPlaceholder")}
+                  value={quantity}
+                  onChange={(event) => setQuantity(event.target.value)}
+                  disabled={inquiryState === "sending"}
+                />
+
                 <label className="visually-hidden" htmlFor="inquiry-message">
                   {t("marketplace.inquiryPlaceholder")}
                 </label>
@@ -252,6 +311,35 @@ export function ProductDetailScreen() {
                   }}
                   disabled={inquiryState === "sending"}
                 />
+
+                <p className="field-label">{t("marketplace.contactPreferenceLabel")}</p>
+                <div className="contact-pref-tabs" role="tablist">
+                  {(["email", "phone", "whatsapp"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      role="tab"
+                      aria-selected={contactPreference === option}
+                      className={`contact-pref-tab${contactPreference === option ? " contact-pref-tab-active" : ""}`}
+                      onClick={() => setContactPreference(option)}
+                      disabled={inquiryState === "sending"}
+                    >
+                      {t(`marketplace.contactPreference.${option}`)}
+                    </button>
+                  ))}
+                </div>
+
+                {needsContactValue && (
+                  <Input
+                    label={t("marketplace.contactValueLabel")}
+                    type="tel"
+                    placeholder={t("marketplace.contactValuePlaceholder")}
+                    value={contactValue}
+                    onChange={(event) => setContactValue(event.target.value)}
+                    disabled={inquiryState === "sending"}
+                  />
+                )}
+
                 {inquiryState === "error" && (
                   <p className="onboarding-error" role="alert">
                     {t("marketplace.inquiryError")}
@@ -261,7 +349,7 @@ export function ProductDetailScreen() {
                   variant="primary"
                   icon={<SendIcon />}
                   loading={inquiryState === "sending"}
-                  disabled={!message.trim()}
+                  disabled={!message.trim() || contactValueMissing}
                   onClick={handleSendInquiry}
                 >
                   {t("marketplace.inquirySend")}

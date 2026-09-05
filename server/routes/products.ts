@@ -422,11 +422,21 @@ router.get(
       return;
     }
 
-    const { data: artisan, error: artisanError } = await supabase
+    let { data: artisan, error: artisanError } = await supabase
       .from("users")
-      .select("id, shop_name, display_name, region, total_products")
+      .select("id, shop_name, display_name, region, whatsapp_number, total_products")
       .eq("id", (product as ProductRow).user_id)
       .maybeSingle();
+
+    if (artisanError?.code === "42703") {
+      const fallback = await supabase
+        .from("users")
+        .select("id, shop_name, display_name, region, total_products")
+        .eq("id", (product as ProductRow).user_id)
+        .maybeSingle();
+      artisan = fallback.data ? { ...fallback.data, whatsapp_number: null } : null;
+      artisanError = fallback.error;
+    }
 
     if (artisanError) throw new Error(`Could not load the artisan profile: ${artisanError.message}`);
 
@@ -437,6 +447,7 @@ router.get(
         shopName: artisan?.shop_name ?? null,
         displayName: artisan?.display_name ?? null,
         region: artisan?.region ?? null,
+        whatsappNumber: artisan?.whatsapp_number ?? null,
         totalProducts: artisan?.total_products ?? 0,
       },
     };

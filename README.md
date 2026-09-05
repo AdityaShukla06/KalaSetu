@@ -57,6 +57,7 @@ src/                 the PWA
     Console/         admin console: dashboard, artisans, moderation, flagged listings
     Passport/        the public Craft Heritage Passport certificate page
     Analytics/       artisan-facing view and inquiry analytics dashboard
+    Inquiries/       artisan-facing inbox for buyer inquiries
     NotFound/        generic 404, also used to hide the console route from non-admins
   components/        Button, Card, Input, OtpInput, LanguageToggle, RegionSelect, Skeleton, ConfirmDialog, BottomNav
   context/           Auth, Language, AddProductDraft
@@ -67,7 +68,7 @@ src/                 the PWA
 server/              the API, an ordinary Express app
   routes/            one router per resource, all mounted under /api
   middleware/        session verification, role checks, raw body reading, async errors
-  lib/               supabase client, env schema, JWT, OTP, email, own-storage URL guard, passport id generation
+  lib/               supabase client, env schema, JWT, OTP, inquiry email, own-storage URL guard, passport id generation
   services/          pricingEngine.ts, imageEnhancer.ts, imageStudio.ts
   voice-ai/          provider-agnostic STT, translation, description pipeline
   image-ai/          swappable background removal provider, mirrors voice-ai/
@@ -77,6 +78,7 @@ shared/languages.ts  the language registry, used by both halves
 shared/regions.ts    the fixed list of Indian states/UTs, used by both halves
 shared/materials.ts  the fixed list of product materials, used by both halves
 shared/ondcCatalog.ts the ONDC retail catalog field mapping, used by the frontend export today
+shared/whatsapp.ts   number normalisation and wa.me link building, used by both the buyer and artisan sides
 supabase/
   schema.sql         tables, index, counter function, RLS, storage bucket
   migrations/        run these against a database created before a change
@@ -92,7 +94,7 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/auth/request-otp` | `{ email }` | `{ success, emailDelivered, expiresInMinutes }` |
 | POST | `/api/auth/verify-otp` | `{ email, otp, intendedRole? }` | `{ token, userId, email, role }` |
 | GET | `/api/users/me` | | `UserProfile` |
-| PATCH | `/api/users/me` | `{ displayName?, shopName?, region?, language? }` | `{ success }` |
+| PATCH | `/api/users/me` | `{ displayName?, shopName?, region?, whatsappNumber?, language? }` | `{ success }` |
 | POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, originalImageUrl, width, height }`, artisan only |
 | POST | `/api/images/remove-background` | raw image bytes | `{ cutoutUrl, backgroundRemoved, notice? }`, artisan only |
 | POST | `/api/images/finalize` | `{ sourceUrl, options }` | `{ finalImageUrl, width, height }`, artisan only |
@@ -104,10 +106,11 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | GET | `/api/products/marketplace/:id` | | `ProductWithArtisan`, a single published listing plus a live artisan summary |
 | PATCH | `/api/products/:id` | partial `ProductInput` | `{ success }`, artisan only, own product |
 | DELETE | `/api/products/:id` | | `{ success }`, artisan only, own product |
-| POST | `/api/inquiries` | `{ productId, message }` | `{ inquiryId }`, buyer only |
+| POST | `/api/inquiries` | `{ productId, message, quantity?, contactPreference, contactValue? }` | `{ inquiryId, emailDelivered }`, buyer only, emails the artisan (best effort) |
 | GET | `/api/inquiries/mine` | | `Inquiry[]`, buyer only, sent by the caller |
-| GET | `/api/inquiries/received` | | `Inquiry[]`, artisan only, about the caller's products |
+| GET | `/api/inquiries/received` | | `Inquiry[]`, artisan only, about the caller's products, marks them read as a side effect |
 | PATCH | `/api/inquiries/:id` | `{ status: "closed" }` | `{ success }`, either party to the inquiry |
+| PATCH | `/api/inquiries/:id/responded` | | `{ success }`, artisan only, own inquiry |
 | GET | `/api/internal/console/dashboard` | | `DashboardStats`, admin only, 404 for everyone else |
 | GET | `/api/internal/console/artisans` | `?q=&page=&limit=` | `{ items, page, limit, total, hasMore }`, admin only |
 | GET | `/api/internal/console/artisans/:id` | | `ConsoleArtisanDetail` (profile + every listing), admin only |
@@ -146,7 +149,7 @@ Buyers browse `GET /api/products/marketplace`, which returns published, unflagge
 
 ## Buyer marketplace
 
-Four screens under `src/screens/Marketplace/`: browse (search, filter, sort, pagination), product detail (gallery, description, artisan summary, inquiry form), and a buyer profile (details plus sent inquiries). All of it sits behind `MarketplaceLayout`, a top nav shared across the three, distinct from the artisan side's bottom tab bar because buyers need this to work as a real desktop website as well as inside a mobile WebView.
+Four screens under `src/screens/Marketplace/`: browse (search, filter, sort, pagination), product detail (gallery, description, artisan summary, a WhatsApp handoff, and an inquiry form, see "Buyer-to-artisan inquiries" below), and a buyer profile (details plus sent inquiries). All of it sits behind `MarketplaceLayout`, a top nav shared across the three, distinct from the artisan side's bottom tab bar because buyers need this to work as a real desktop website as well as inside a mobile WebView.
 
 **Filtering fields that didn't exist before this**: `products.material`, `products.region`, and a denormalized `products.artisan_name`, plus `users.region` as the source an artisan sets once in their profile and that gets copied onto each new listing at creation time, the same snapshot pattern already used for `title_local` and `inquiries.artisan_id`. All three are nullable; existing accounts and products just read as unspecified until an artisan fills them in. [`shared/regions.ts`](shared/regions.ts) and [`shared/materials.ts`](shared/materials.ts) are the fixed lists both the artisan-side pickers and the buyer-side filters validate against, the same pattern as [`shared/languages.ts`](shared/languages.ts).
 
@@ -157,6 +160,20 @@ Four screens under `src/screens/Marketplace/`: browse (search, filter, sort, pag
 **Desktop responsiveness required one shared-shell change.** The whole app was capped at `max-width: 390px` on `#root`, fine for the artisan/admin mobile-only experience, wrong for a page meant to also work as a desktop website. `#root`'s max-width now reads a `--shell-max-width` custom property (default still `390px`), and `MarketplaceLayout` is the only place that overrides it, while mounted, back to `none`. Nothing about the artisan or admin screens changed.
 
 **Scope note**: "image gallery" on the product detail screen renders whatever a multi-image gallery would, but today's schema only ever stores one `image_url` per product, so it's a gallery of one. Adding multi-image capture to the artisan side is a separate, larger feature this didn't pull in.
+
+## Buyer-to-artisan inquiries
+
+Async, not real-time chat, on purpose: an inquiry plus a WhatsApp handoff is closer to how this trade actually happens than an in-app chat would be, and building real-time messaging wasn't a good use of the time available.
+
+**The inquiry form** on the buyer's product detail page asks for a quantity (optional), a free-text message, and a contact preference (email, phone, or WhatsApp; a phone number is required for the latter two, validated both client and server side). `inquiries` gained `quantity`, `contact_preference`, `contact_value`, `read_at`, `responded_at`, and `notified_at` columns for this; the original `status` (`open`/`closed`) column is untouched and still means what it always meant.
+
+**WhatsApp is the obvious option, not a hidden one.** If the artisan has added a WhatsApp number to their profile (`users.whatsapp_number`, optional, artisan side only, validated with [`shared/whatsapp.ts`](shared/whatsapp.ts)), a prominent green "Message on WhatsApp" button sits above the inquiry form, not after it, opening `wa.me` with the product name and passport ID pre-filled. The in-app form is the fallback, not the primary path, deliberately, per the brief.
+
+**Email never risks the record.** `POST /api/inquiries` inserts the inquiry row first; only after that succeeds does it attempt to email the artisan via the existing Resend setup (`sendInquiryEmail` in [`server/lib/mailer.ts`](server/lib/mailer.ts), same never-throws contract as the OTP mailer). The email includes the product name, its photo, the buyer's message, the requested quantity, the preferred contact, and a deep link (`PUBLIC_APP_URL/inquiries`) back into the artisan's inbox. If Resend is unreachable, misconfigured, or rejects the request, the inquiry is already saved and the artisan still sees it in the app; only `notified_at` stays null.
+
+**The artisan inbox** at `/inquiries`, linked from My Shop, lists every inquiry received. Opening the inbox marks the inquiries visible in that load as read as a side effect of `GET /api/inquiries/received` itself (the response still reflects each row's read state from just before that update, so the badge that says "New" is accurate for that one view). "Mark as responded" is a separate, explicit action (`PATCH /api/inquiries/:id/responded`, artisan only, own inquiries only) from either reading it or closing it, since responding usually happens over WhatsApp or a phone call, outside the app entirely; the inbox surfaces a "Reply on WhatsApp" shortcut using the buyer's own contact value when they gave one.
+
+**RLS** needed no changes here: the existing `inquiries_select_buyer`/`inquiries_select_artisan`/`inquiries_select_admin`/`inquiries_update_parties` policies already cover every new column, since they're scoped by row, not by field.
 
 ## Admin console
 
@@ -285,7 +302,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, `server/__pricing_flag.test.ts`, and `server/__analytics.test.ts` drive the whole API against a real Supabase project. All seven only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, `server/__pricing_flag.test.ts`, `server/__analytics.test.ts`, and `server/__inquiries.test.ts` drive the whole API against a real Supabase project. All eight only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
 - `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
 - After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 

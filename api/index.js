@@ -18,6 +18,7 @@ var envSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   OTP_FROM_EMAIL: z.string().default("KalaSetu <onboarding@resend.dev>"),
+  PUBLIC_APP_URL: z.string().url().default("http://localhost:5173"),
   DEMO_FALLBACK_OTP: z.string().default("5741"),
   DEMO_FALLBACK_OTP_ENABLED: z.string().default("true").transform((value) => value.toLowerCase() !== "false")
 }).superRefine((env, ctx) => {
@@ -209,6 +210,78 @@ function buildHtmlBody(code) {
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">Enter this code to sign in.</p>
   <p style="font-size:34px;font-weight:700;letter-spacing:10px;margin:0 0 20px;color:#C1502E">${code}</p>
   <p style="font-size:13px;line-height:1.5;color:#6b6b6b;margin:0">It expires in ${OTP_TTL_MINUTES} minutes. If you did not ask to sign in, you can ignore this email.</p>
+</div>`;
+}
+var CONTACT_PREFERENCE_LABEL = {
+  email: "Email",
+  phone: "A phone call",
+  whatsapp: "WhatsApp"
+};
+async function sendInquiryEmail(input) {
+  const env = loadEnv();
+  if (!env.RESEND_API_KEY) {
+    console.warn("[inquiries] RESEND_API_KEY is not set, inquiry email was not sent", {
+      artisanEmail: input.artisanEmail
+    });
+    return { delivered: false, reason: "email_not_configured" };
+  }
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: env.OTP_FROM_EMAIL,
+        to: [input.artisanEmail],
+        subject: `New inquiry on KalaSetu: ${input.productTitle}`,
+        text: buildInquiryPlainTextBody(input),
+        html: buildInquiryHtmlBody(input)
+      })
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error("[inquiries] inquiry email provider rejected the request", {
+        status: response.status,
+        detail: detail.slice(0, 500)
+      });
+      return { delivered: false, reason: `provider_error_${response.status}` };
+    }
+    return { delivered: true };
+  } catch (err) {
+    console.error("[inquiries] inquiry email send failed", err);
+    return { delivered: false, reason: "send_failed" };
+  }
+}
+function contactLine(input) {
+  const label = CONTACT_PREFERENCE_LABEL[input.contactPreference];
+  if (input.contactPreference === "email") return `${label}: ${input.buyerEmail}`;
+  return `${label}: ${input.contactValue ?? input.buyerEmail}`;
+}
+function buildInquiryPlainTextBody(input) {
+  const lines = [
+    `You have a new inquiry on KalaSetu.`,
+    ``,
+    `Product: ${input.productTitle} (${input.passportId})`
+  ];
+  if (input.quantity) lines.push(`Quantity interested in: ${input.quantity}`);
+  lines.push(``, `Message:`, `"${input.buyerMessage}"`, ``, `Preferred contact: ${contactLine(input)}`, ``);
+  lines.push(`View and respond in KalaSetu: ${input.inboxUrl}`);
+  return lines.join("\n");
+}
+function buildInquiryHtmlBody(input) {
+  const quantityRow = input.quantity ? `<p style="font-size:14px;line-height:1.5;margin:0 0 12px"><strong>Quantity interested in:</strong> ${input.quantity}</p>` : "";
+  return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#2b2b2b">
+  <h1 style="font-size:20px;margin:0 0 16px">You have a new inquiry</h1>
+  <img src="${input.productImageUrl}" alt="" style="width:100%;max-width:280px;border-radius:8px;margin:0 0 16px;display:block" />
+  <p style="font-size:15px;line-height:1.5;margin:0 0 4px"><strong>${input.productTitle}</strong></p>
+  <p style="font-size:13px;color:#6b6b6b;margin:0 0 16px">${input.passportId}</p>
+  ${quantityRow}
+  <p style="font-size:14px;line-height:1.5;margin:0 0 4px"><strong>Message</strong></p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 16px;padding:12px;background:#FBF4EA;border-radius:8px">${input.buyerMessage}</p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px"><strong>Preferred contact:</strong> ${contactLine(input)}</p>
+  <a href="${input.inboxUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">View and respond in KalaSetu</a>
 </div>`;
 }
 
@@ -419,6 +492,15 @@ function isIndianRegion(value) {
   return REGION_SET.has(value);
 }
 
+// shared/whatsapp.ts
+function normalizeWhatsAppNumber(raw) {
+  return raw.replace(/[^0-9]/g, "");
+}
+function isValidWhatsAppNumber(raw) {
+  const digits = normalizeWhatsAppNumber(raw);
+  return digits.length >= 8 && digits.length <= 15;
+}
+
 // server/types/index.ts
 var USER_ROLES = ["artisan", "buyer", "admin"];
 function isUserRole(value) {
@@ -434,6 +516,7 @@ function toUserProfile(row) {
     displayName: row.display_name,
     shopName: row.shop_name,
     region: row.region,
+    whatsappNumber: row.whatsapp_number,
     language: isAppLanguage(row.language) ? row.language : "en",
     role: isUserRole(row.role) ? row.role : "artisan",
     totalProducts: row.total_products,
@@ -445,7 +528,12 @@ router3.get(
   requireAuth,
   asyncRoute(async (req, res) => {
     const supabase = getSupabase();
-    const { data, error } = await supabase.from("users").select("id, email, display_name, shop_name, region, language, role, total_products, created_at").eq("id", req.uid).maybeSingle();
+    let { data, error } = await supabase.from("users").select("id, email, display_name, shop_name, region, whatsapp_number, language, role, total_products, created_at").eq("id", req.uid).maybeSingle();
+    if (error?.code === "42703") {
+      const fallback = await supabase.from("users").select("id, email, display_name, shop_name, region, language, role, total_products, created_at").eq("id", req.uid).maybeSingle();
+      data = fallback.data ? { ...fallback.data, whatsapp_number: null } : null;
+      error = fallback.error;
+    }
     if (error) throw new Error(`Could not load the profile: ${error.message}`);
     if (!data) {
       res.status(404).json({ error: "User not found" });
@@ -458,6 +546,7 @@ var UpdateUserSchema = z3.object({
   displayName: z3.string().max(80).optional(),
   shopName: z3.string().max(120).optional(),
   region: z3.string().refine(isIndianRegion, "Unsupported region").optional(),
+  whatsappNumber: z3.string().refine((value) => value === "" || isValidWhatsAppNumber(value), "Enter a valid phone number").optional(),
   language: z3.string().refine(isAppLanguage, "Unsupported language").optional()
 });
 router3.patch(
@@ -473,6 +562,9 @@ router3.patch(
     if (parsed.data.displayName !== void 0) patch.display_name = parsed.data.displayName;
     if (parsed.data.shopName !== void 0) patch.shop_name = parsed.data.shopName;
     if (parsed.data.region !== void 0) patch.region = parsed.data.region;
+    if (parsed.data.whatsappNumber !== void 0) {
+      patch.whatsapp_number = parsed.data.whatsappNumber === "" ? null : parsed.data.whatsappNumber;
+    }
     if (parsed.data.language !== void 0) patch.language = parsed.data.language;
     if (Object.keys(patch).length === 0) {
       res.json({ success: true });
@@ -1772,6 +1864,10 @@ var as_default = {
   "profile.loadError": "\u09AA\u09CD\u09F0'\u09AB\u09BE\u0987\u09B2 \u09B2\u09CB\u09A1 \u09A8\u09CB\u09B9'\u09B2",
   "profile.displayNameLabel": "\u0986\u09AA\u09CB\u09A8\u09BE\u09F0 \u09A8\u09BE\u09AE",
   "profile.shopNameLabel": "\u09A6\u09CB\u0995\u09BE\u09A8\u09F0 \u09A8\u09BE\u09AE",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u09AA\u09CD\u09F0'\u09AB\u09BE\u0987\u09B2 \u09B8\u09BE\u0981\u099A\u09BF \u09B2\u0993\u0995",
   "profile.saved": "\u09AA\u09CD\u09F0'\u09AB\u09BE\u0987\u09B2 \u09B8\u09BE\u0981\u099A\u09BF \u09B2\u09CB\u09F1\u09BE \u09B9\u09C8\u099B\u09C7",
   "profile.saveError": "\u0986\u09AA\u09CB\u09A8\u09BE\u09F0 \u09AA\u09CD\u09F0'\u09AB\u09BE\u0987\u09B2 \u09B8\u0982\u09F0\u0995\u09CD\u09B7\u09A3 \u0995\u09F0\u09BF\u09AC \u09A8\u09CB\u09F1\u09BE\u09F0\u09BF, \u09AA\u09C1\u09A8\u09F0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09F0\u0995",
@@ -1803,6 +1899,18 @@ var as_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -1853,7 +1961,18 @@ var as_default = {
   "marketplace.artisanSummaryTitle": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u09F0 \u09AC\u09BF\u09B7\u09AF\u09BC\u09C7",
   "marketplace.artisanProductCount": "{n} \u099F\u09BE \u0989\u09CE\u09AA\u09BE\u09A6\u09A8 KalaSetu \u09A4 \u09A4\u09BE\u09B2\u09BF\u0995\u09BE\u09AD\u09C1\u0995\u09CD\u09A4",
   "marketplace.inquiryTitle": "\u098F\u0987 \u0989\u09CE\u09AA\u09BE\u09A6\u09A8\u09A4 \u0986\u0997\u09CD\u09F0\u09B9\u09C0 \u09A8\u09C7?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0986\u09AA\u09C1\u09A8\u09BF \u0995\u09BF \u09AC\u09BF\u099A\u09BE\u09F0\u09BF \u0986\u099B\u09C7, \u09AF\u09C7\u09A8\u09C7 \u09AA\u09F0\u09BF\u09AE\u09BE\u09A3, \u0995\u09BE\u09B7\u09CD\u099F\u09AE\u09BE\u0987\u099C\u09C7\u099A\u09A8, \u09A1\u09C7\u09B2\u09BF\u09AD\u09BE\u09F0\u09C0 \u09B8\u09AE\u09AF\u09BC\u09B8\u09C0\u09AE\u09BE \u0986\u09A6\u09BF \u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u0995 \u099C\u09A8\u09BE\u0993\u0995\u0964",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0985\u09A8\u09C1\u09F0\u09CB\u09A7 \u09AA\u09A0\u09BF\u09AF\u09BC\u09BE\u0993\u0995",
   "marketplace.inquirySent": "\u0986\u09AA\u09CB\u09A8\u09BE\u09F0 \u0985\u09A8\u09C1\u09F0\u09CB\u09A7 \u09AA\u09A0\u09BF\u09AF\u09BC\u09BE\u0987\u099B\u09C7\u0964 \u09B6\u09BF\u09B2\u09CD\u09AA\u09C0 \u09B6\u09C0\u0998\u09CD\u09F0\u09C7 \u09AF\u09CB\u0997\u09BE\u09AF\u09CB\u0997 \u0995\u09F0\u09BF\u09AC\u0964",
   "marketplace.inquiryError": "\u0985\u09A8\u09C1\u09F0\u09CB\u09A7 \u09AA\u09A0\u09BF\u09AF\u09BC\u09BE\u09AC \u09A8\u09CB\u09F1\u09BE\u09F0\u09BF, \u0985\u09A8\u09C1\u0997\u09CD\u09F0\u09B9 \u0995\u09F0\u09BF \u09AA\u09C1\u09A8\u09F0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09F0\u0995\u0964",
@@ -1867,6 +1986,7 @@ var as_default = {
   "marketplace.inquiryProductRemoved": "\u098F\u0987 \u09B8\u09BE\u09AE\u0997\u09CD\u09F0\u09C0\u099F\u09CB \u098F\u09A4\u09BF\u09AF\u09BC\u09BE \u0989\u09AA\u09B2\u09AC\u09CD\u09A7 \u09A8\u09B9\u09AF\u09BC",
   "marketplace.inquiryStatusOpen": "\u0989\u09A4\u09CD\u09A4\u09F0\u09F0 \u0985\u09AA\u09C7\u0995\u09CD\u09B7\u09BE",
   "marketplace.inquiryStatusClosed": "\u09AC\u09A8\u09CD\u09A7",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -2041,6 +2161,10 @@ var bn_default = {
   "profile.loadError": "\u09AA\u09CD\u09B0\u09CB\u09AB\u09BE\u0987\u09B2 \u09B2\u09CB\u09A1 \u0995\u09B0\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF",
   "profile.displayNameLabel": "\u0986\u09AA\u09A8\u09BE\u09B0 \u09A8\u09BE\u09AE",
   "profile.shopNameLabel": "\u09A6\u09CB\u0995\u09BE\u09A8\u09C7\u09B0 \u09A8\u09BE\u09AE",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u09AA\u09CD\u09B0\u09CB\u09AB\u09BE\u0987\u09B2 \u09B8\u0982\u09B0\u0995\u09CD\u09B7\u09A3 \u0995\u09B0\u09C1\u09A8",
   "profile.saved": "\u09AA\u09CD\u09B0\u09CB\u09AB\u09BE\u0987\u09B2 \u09B8\u0982\u09B0\u0995\u09CD\u09B7\u09BF\u09A4 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7",
   "profile.saveError": "\u09AA\u09CD\u09B0\u09CB\u09AB\u09BE\u0987\u09B2 \u09B8\u0982\u09B0\u0995\u09CD\u09B7\u09A3 \u0995\u09B0\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF, \u09A6\u09AF\u09BC\u09BE \u0995\u09B0\u09C7 \u0986\u09AC\u09BE\u09B0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09B0\u09C1\u09A8",
@@ -2072,6 +2196,18 @@ var bn_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -2122,7 +2258,18 @@ var bn_default = {
   "marketplace.artisanSummaryTitle": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u09B0 \u09B8\u09AE\u09CD\u09AA\u09B0\u09CD\u0995\u09C7",
   "marketplace.artisanProductCount": "{n}\u099F\u09BF \u09AA\u09A3\u09CD\u09AF \u0995\u09BE\u09B2\u09BE\u09B8\u09C7\u099F\u09C1\u09A4\u09C7 \u09A4\u09BE\u09B2\u09BF\u0995\u09BE\u09AD\u09C1\u0995\u09CD\u09A4",
   "marketplace.inquiryTitle": "\u098F\u0987 \u09AA\u09A3\u09CD\u09AF\u09C7 \u0986\u0997\u09CD\u09B0\u09B9\u09C0?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0986\u09AA\u09A8\u09BF \u0995\u09C0 \u099A\u09BE\u09A8 \u09A4\u09BE \u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u0995\u09C7 \u099C\u09BE\u09A8\u09BE\u09A8: \u09AA\u09B0\u09BF\u09AE\u09BE\u09A3, \u0995\u09BE\u09B8\u09CD\u099F\u09AE\u09BE\u0987\u099C\u09C7\u09B6\u09A8, \u09A1\u09C7\u09B2\u09BF\u09AD\u09BE\u09B0\u09BF\u09B0 \u09B8\u09AE\u09AF\u09BC\u09B8\u09C0\u09AE\u09BE...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0985\u09A8\u09C1\u09B0\u09CB\u09A7 \u09AA\u09BE\u09A0\u09BE\u09A8",
   "marketplace.inquirySent": "\u0986\u09AA\u09A8\u09BE\u09B0 \u0985\u09A8\u09C1\u09B0\u09CB\u09A7 \u09AA\u09BE\u09A0\u09BE\u09A8\u09CB \u09B9\u09AF\u09BC\u09C7\u099B\u09C7\u0964 \u09B6\u09BF\u09B2\u09CD\u09AA\u09C0 \u09B6\u09C0\u0998\u09CD\u09B0\u0987 \u09AF\u09CB\u0997\u09BE\u09AF\u09CB\u0997 \u0995\u09B0\u09AC\u09C7\u09A8\u0964",
   "marketplace.inquiryError": "\u0985\u09A8\u09C1\u09B0\u09CB\u09A7 \u09AA\u09BE\u09A0\u09BE\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7, \u09A6\u09AF\u09BC\u09BE \u0995\u09B0\u09C7 \u0986\u09AC\u09BE\u09B0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09B0\u09C1\u09A8",
@@ -2136,6 +2283,7 @@ var bn_default = {
   "marketplace.inquiryProductRemoved": "\u098F\u0987 \u09AA\u09A3\u09CD\u09AF\u099F\u09BF \u0986\u09B0 \u0989\u09AA\u09B2\u09AC\u09CD\u09A7 \u09A8\u09AF\u09BC",
   "marketplace.inquiryStatusOpen": "\u0989\u09A4\u09CD\u09A4\u09B0\u09C7\u09B0 \u0985\u09AA\u09C7\u0995\u09CD\u09B7\u09BE\u09AF\u09BC",
   "marketplace.inquiryStatusClosed": "\u09AC\u09A8\u09CD\u09A7",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "\u0995\u09BF\u099B\u09C1 \u0985\u09A4\u09BF\u09B0\u09BF\u0995\u09CD\u09A4 \u09A4\u09A5\u09CD\u09AF (\u0990\u099A\u09CD\u099B\u09BF\u0995)",
   "heritage.subtitle": "\u098F\u0997\u09C1\u09B2\u09CB \u0986\u09AA\u09A8\u09BE\u09B0 \u09AA\u09A3\u09CD\u09AF\u09C7\u09B0 \u09B9\u09C7\u09B0\u09BF\u099F\u09C7\u099C \u09AA\u09BE\u09B8\u09AA\u09CB\u09B0\u09CD\u099F\u09C7 \u0997\u09B2\u09CD\u09AA \u09AC\u09B2\u09A4\u09C7 \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u0995\u09B0\u09C7\u0964 \u0986\u09AA\u09A8\u09BF \u09A8\u09BF\u09B6\u09CD\u099A\u09BF\u09A4 \u09A8\u09BE \u09B9\u09B2\u09C7 \u09AC\u09BE\u09A6 \u09A6\u09BF\u09A8\u0964",
   "heritage.techniqueLabel": "\u09AA\u09CD\u09B0\u09AF\u09C1\u0995\u09CD\u09A4\u09BF",
@@ -2310,6 +2458,10 @@ var brx_default = {
   "profile.loadError": "\u0924\u092A\u093E\u0908\u0902\u092F\u093E\u0917\u0941 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0932\u094B\u0921 \u0928\u0916\u0947",
   "profile.displayNameLabel": "\u0924\u092A\u093E\u0908\u0902\u092F\u093E\u0917\u0941 \u0928\u093E\u092E",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928\u092F\u093E \u0928\u093E\u092E",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0947\u0935 \u092F\u093E\u0928\u0941\u0924",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0947\u0935 \u092D\u0947\u0932",
   "profile.saveError": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0947\u0935 \u0928\u0916\u0947, \u0915\u0943\u092A\u092F\u093E \u092B\u0947\u0930\u093F \u092A\u094D\u0930\u092F\u093E\u0938 \u092F\u093E\u0928",
@@ -2341,6 +2493,18 @@ var brx_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -2391,7 +2555,18 @@ var brx_default = {
   "marketplace.artisanSummaryTitle": "\u0939\u0938\u094D\u0924\u0915\u0932\u093E \u092C\u093F\u0938\u093E\u092F",
   "marketplace.artisanProductCount": "{n} \u0938\u093E\u092E\u093E\u0928 KalaSetu \u0928\u093E\u092F\u093E\u092C",
   "marketplace.inquiryTitle": "\u0939\u093E\u092C\u093E \u0938\u093E\u092E\u093E\u0928 \u0928\u093E\u092F\u093E\u092C \u0925\u093E\u0902\u092C\u093E\u092F?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0939\u0938\u094D\u0924\u0915\u0932\u093E \u0928\u093E\u092F\u093E\u092C \u0925\u093E\u0902\u092C\u093E\u092F \u0925\u093E\u0902\u092C\u093E\u092F: \u092C\u093F\u0938\u093E\u092C, \u092C\u093F\u0938\u093E\u092C\u0928\u093E\u092F, \u0921\u093F\u0932\u093F\u0935\u0930\u0940 \u092C\u093F\u0938\u093E\u092C...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0938\u0902\u0926\u0947\u0936 \u092C\u0947\u091C\u093E",
   "marketplace.inquirySent": "\u0925\u093E\u0902\u092C\u093E\u092F \u092C\u0947\u091C\u093E\u0964 \u0939\u0938\u094D\u0924\u0915\u0932\u093E \u0925\u093E\u0902\u092C\u093E\u092F \u0925\u093E\u0902\u092C\u093E\u092F\u0964",
   "marketplace.inquiryError": "\u0925\u093E\u0902\u092C\u093E\u092F \u092C\u0947\u091C\u093E \u0928\u093E\u092F\u093E\u092C\u0964 \u092B\u093F\u0928 \u0925\u093E\u0902\u092C\u093E\u092F\u0964",
@@ -2405,6 +2580,7 @@ var brx_default = {
   "marketplace.inquiryProductRemoved": "\u0939\u093E\u092C\u093E \u092C\u093F\u0938\u0930 \u0905\u092C\u093E \u0928\u093E\u092F \u0925\u093E\u0902",
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C\u0928\u093F \u0925\u093E\u0902",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -2579,6 +2755,10 @@ var doi_default = {
   "profile.loadError": "\u0924\u0941\u092E\u094D\u0939\u093E\u0930\u093E \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E",
   "profile.displayNameLabel": "\u0924\u0941\u092E\u094D\u0939\u093E\u0930\u093E \u0928\u093E\u092E",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928 \u0915\u093E \u0928\u093E\u092E",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u092C\u091A\u093E\u0913",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u092C\u091A\u093E \u0932\u0940",
   "profile.saveError": "\u0924\u0941\u092E\u094D\u0939\u093E\u0930\u0940 \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u092C\u091A\u093E \u0928\u0939\u0940\u0902 \u0938\u0915\u0940, \u0926\u094B\u092C\u093E\u0930\u093E \u0915\u094B\u0936\u093F\u0936 \u0915\u0930\u094B",
@@ -2610,6 +2790,18 @@ var doi_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -2660,7 +2852,18 @@ var doi_default = {
   "marketplace.artisanSummaryTitle": "\u0915\u093E\u0930\u0940\u0917\u0930 \u092C\u093E\u0930\u0947",
   "marketplace.artisanProductCount": "KalaSetu \u092A\u0930 {n} \u0938\u093E\u092E\u093E\u0928 \u0932\u093F\u0938\u094D\u091F\u0947\u0921",
   "marketplace.inquiryTitle": "\u090F\u0939 \u0938\u093E\u092E\u093E\u0928 \u092E\u0947\u0902 \u0930\u0941\u091A\u093F \u0939\u0948?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0928\u0941 \u0926\u0938\u094B \u0924\u0941\u0939\u093E\u0921\u0947 \u0915\u094B\u0932 \u0915\u0940 \u091A\u093E\u0939\u093F\u0926\u093E \u0939\u0948: \u092E\u093E\u0924\u094D\u0930\u093E, \u0915\u0938\u094D\u091F\u092E\u093E\u0907\u091C\u093C\u0947\u0936\u0928, \u0921\u093F\u0932\u093F\u0935\u0930\u0940 \u091F\u093E\u0907\u092E\u0932\u093E\u0907\u0928...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u092A\u0942\u091B\u0924\u093E\u091B \u092D\u0947\u091C\u094B",
   "marketplace.inquirySent": "\u0924\u0941\u0939\u093E\u0921\u093C\u0940 \u092A\u0942\u091B\u0924\u093E\u091B \u092D\u0947\u091C\u0940 \u0917\u0908 \u0939\u0948\u0964 \u0915\u093E\u0930\u0940\u0917\u0930 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u093E\u0964",
   "marketplace.inquiryError": "\u092A\u0942\u091B\u0924\u093E\u091B \u0928\u0939\u0940\u0902 \u092D\u0947\u091C\u0940 \u091C\u093E \u0938\u0915\u0940, \u092B\u0947\u0930 \u0915\u094B\u0936\u093F\u0936 \u0915\u0930\u094B",
@@ -2674,6 +2877,7 @@ var doi_default = {
   "marketplace.inquiryProductRemoved": "\u090F \u092A\u094D\u0930\u094B\u0921\u0915\u094D\u091F \u0905\u092C \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0926\u093E",
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C \u0926\u093E \u0907\u0902\u0924\u091C\u093E\u0930",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -2848,6 +3052,10 @@ var en_default = {
   "profile.loadError": "Could not load your profile",
   "profile.displayNameLabel": "Your name",
   "profile.shopNameLabel": "Shop name",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "Save profile",
   "profile.saved": "Profile saved",
   "profile.saveError": "Could not save your profile, please try again",
@@ -2879,6 +3087,18 @@ var en_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -2929,7 +3149,18 @@ var en_default = {
   "marketplace.artisanSummaryTitle": "About the artisan",
   "marketplace.artisanProductCount": "{n} products listed on KalaSetu",
   "marketplace.inquiryTitle": "Interested in this product?",
-  "marketplace.inquiryPlaceholder": "Tell the artisan what you're looking for: quantity, customisation, delivery timeline...",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
+  "marketplace.inquiryPlaceholder": "Tell the artisan what you're looking for: customisation, delivery timeline...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "Send inquiry",
   "marketplace.inquirySent": "Your inquiry has been sent. The artisan will be in touch.",
   "marketplace.inquiryError": "Could not send your inquiry, please try again",
@@ -2943,6 +3174,7 @@ var en_default = {
   "marketplace.inquiryProductRemoved": "This product is no longer available",
   "marketplace.inquiryStatusOpen": "Awaiting reply",
   "marketplace.inquiryStatusClosed": "Closed",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -3117,6 +3349,10 @@ var gu_default = {
   "profile.loadError": "\u0AAA\u0ACD\u0AB0\u0ACB\u0AAB\u0ABE\u0A87\u0AB2 \u0AB2\u0ACB\u0AA1 \u0A95\u0AB0\u0AC0 \u0AB6\u0A95\u0ACD\u0AAF\u0ABE \u0AA8\u0AB9\u0AC0\u0A82",
   "profile.displayNameLabel": "\u0AA4\u0AAE\u0ABE\u0AB0\u0AC1\u0A82 \u0AA8\u0ABE\u0AAE",
   "profile.shopNameLabel": "\u0AA6\u0AC1\u0A95\u0ABE\u0AA8\u0AA8\u0AC1\u0A82 \u0AA8\u0ABE\u0AAE",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u0AAA\u0ACD\u0AB0\u0ACB\u0AAB\u0ABE\u0A87\u0AB2 \u0AB8\u0ABE\u0A9A\u0AB5\u0ACB",
   "profile.saved": "\u0AAA\u0ACD\u0AB0\u0ACB\u0AAB\u0ABE\u0A87\u0AB2 \u0AB8\u0ABE\u0A9A\u0AB5\u0ABE\u0A88 \u0A97\u0A88",
   "profile.saveError": "\u0AAA\u0ACD\u0AB0\u0ACB\u0AAB\u0ABE\u0A87\u0AB2 \u0AB8\u0ABE\u0A9A\u0AB5\u0AC0 \u0AB6\u0A95\u0ABE\u0A88 \u0AA8\u0AB9\u0AC0\u0A82, \u0A95\u0AC3\u0AAA\u0ABE \u0A95\u0AB0\u0AC0\u0AA8\u0AC7 \u0AAB\u0AB0\u0AC0 \u0AAA\u0ACD\u0AB0\u0AAF\u0ABE\u0AB8 \u0A95\u0AB0\u0ACB",
@@ -3148,6 +3384,18 @@ var gu_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -3198,7 +3446,18 @@ var gu_default = {
   "marketplace.artisanSummaryTitle": "\u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0 \u0AB5\u0ABF\u0AB6\u0AC7",
   "marketplace.artisanProductCount": "{n} \u0A89\u0AA4\u0ACD\u0AAA\u0ABE\u0AA6\u0AA8\u0ACB \u0A95\u0ABE\u0AB2\u0ABE\u0AB8\u0AC7\u0AA4\u0AC1 \u0AAA\u0AB0 \u0AB8\u0AC2\u0A9A\u0ABF\u0AAC\u0AA6\u0ACD\u0AA7",
   "marketplace.inquiryTitle": "\u0A86 \u0A89\u0AA4\u0ACD\u0AAA\u0ABE\u0AA6\u0AA8\u0AAE\u0ABE\u0A82 \u0AB0\u0AB8 \u0A9B\u0AC7?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0\u0AA8\u0AC7 \u0A9C\u0AA3\u0ABE\u0AB5\u0ACB \u0A95\u0AC7 \u0AA4\u0AAE\u0AC7 \u0AB6\u0AC1\u0A82 \u0AB6\u0ACB\u0AA7\u0AC0 \u0AB0\u0AB9\u0ACD\u0AAF\u0ABE \u0A9B\u0ACB: \u0AAE\u0ABE\u0AA4\u0ACD\u0AB0\u0ABE, \u0A95\u0AB8\u0ACD\u0A9F\u0AAE\u0ABE\u0A87\u0A9D\u0AC7\u0AB6\u0AA8, \u0AA1\u0ABF\u0AB2\u0ABF\u0AB5\u0AB0\u0AC0 \u0AB8\u0AAE\u0AAF\u0AB8\u0AC0\u0AAE\u0ABE...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0AB5\u0ABF\u0AA8\u0A82\u0AA4\u0AC0 \u0AAE\u0ACB\u0A95\u0AB2\u0ACB",
   "marketplace.inquirySent": "\u0AA4\u0AAE\u0ABE\u0AB0\u0AC0 \u0AB5\u0ABF\u0AA8\u0A82\u0AA4\u0AC0 \u0AAE\u0ACB\u0A95\u0AB2\u0ABE\u0A88 \u0A97\u0A88 \u0A9B\u0AC7. \u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0 \u0AB8\u0A82\u0AAA\u0AB0\u0ACD\u0A95 \u0A95\u0AB0\u0AB6\u0AC7.",
   "marketplace.inquiryError": "\u0AB5\u0ABF\u0AA8\u0A82\u0AA4\u0AC0 \u0AAE\u0ACB\u0A95\u0AB2\u0AC0 \u0AB6\u0A95\u0ABE\u0A88 \u0AA8\u0AB9\u0AC0\u0A82, \u0A95\u0AC3\u0AAA\u0ABE \u0A95\u0AB0\u0AC0\u0AA8\u0AC7 \u0AAB\u0AB0\u0AC0 \u0AAA\u0ACD\u0AB0\u0AAF\u0ABE\u0AB8 \u0A95\u0AB0\u0ACB",
@@ -3212,6 +3471,7 @@ var gu_default = {
   "marketplace.inquiryProductRemoved": "\u0A86 \u0A89\u0AA4\u0ACD\u0AAA\u0ABE\u0AA6\u0AA8 \u0AB9\u0AB5\u0AC7 \u0A89\u0AAA\u0AB2\u0AAC\u0ACD\u0AA7 \u0AA8\u0AA5\u0AC0",
   "marketplace.inquiryStatusOpen": "\u0A9C\u0AB5\u0ABE\u0AAC\u0AA8\u0AC0 \u0AB0\u0ABE\u0AB9\u0AAE\u0ABE\u0A82",
   "marketplace.inquiryStatusClosed": "\u0AAC\u0A82\u0AA7",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -3386,6 +3646,10 @@ var hi_default = {
   "profile.loadError": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940",
   "profile.displayNameLabel": "\u0906\u092A\u0915\u093E \u0928\u093E\u092E",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928 \u0915\u093E \u0928\u093E\u092E",
+  "profile.whatsappLabel": "WhatsApp \u0928\u0902\u092C\u0930 (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "profile.whatsappPlaceholder": "\u0909\u0926\u093E\u0939\u0930\u0923: 98765 43210",
+  "profile.whatsappNote": "\u092F\u0926\u093F \u0906\u092A \u0907\u0938\u0947 \u091C\u094B\u0921\u093C\u0924\u0947 \u0939\u0948\u0902 \u0924\u094B \u0916\u0930\u0940\u0926\u093E\u0930 \u0906\u092A\u0915\u0940 \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u092A\u0930 WhatsApp \u092C\u091F\u0928 \u0926\u0947\u0916\u0947\u0902\u0917\u0947\u0964",
+  "profile.whatsappInvalid": "\u0935\u0948\u0927 \u092B\u093C\u094B\u0928 \u0928\u0902\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0939\u0947\u091C\u0947\u0902",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0939\u0947\u091C\u0940 \u0917\u0908",
   "profile.saveError": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0939\u0947\u091C\u0940 \u0928\u0939\u0940\u0902 \u091C\u093E \u0938\u0915\u0940, \u0915\u0943\u092A\u092F\u093E \u092B\u093F\u0930 \u0915\u094B\u0936\u093F\u0936 \u0915\u0930\u0947\u0902",
@@ -3417,6 +3681,18 @@ var hi_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "\u090F\u0928\u093E\u0932\u093F\u091F\u093F\u0915\u094D\u0938 \u0926\u0947\u0916\u0947\u0902",
+  "home.viewInquiries": "\u092A\u0942\u091B\u0924\u093E\u091B",
+  "inquiries.title": "\u092A\u0942\u091B\u0924\u093E\u091B",
+  "inquiries.loadError": "\u0906\u092A\u0915\u0940 \u092A\u0942\u091B\u0924\u093E\u091B \u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940",
+  "inquiries.empty": "\u0905\u092D\u0940 \u0924\u0915 \u0915\u094B\u0908 \u092A\u0942\u091B\u0924\u093E\u091B \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u091C\u092C \u0915\u094B\u0908 \u0916\u0930\u0940\u0926\u093E\u0930 \u0909\u0924\u094D\u092A\u093E\u0926 \u0915\u0947 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C\u0947\u0917\u093E, \u0924\u094B \u092F\u0939\u093E\u0901 \u0926\u093F\u0916\u0947\u0917\u093E\u0964",
+  "inquiries.badgeNew": "\u0928\u092F\u093E",
+  "inquiries.badgeResponded": "\u091C\u0935\u093E\u092C \u0926\u093F\u092F\u093E \u0917\u092F\u093E",
+  "inquiries.quantityLine": "\u0930\u0941\u091A\u093F \u0935\u093E\u0932\u0940 \u092E\u093E\u0924\u094D\u0930\u093E: {n}",
+  "inquiries.contactLine": "\u092A\u0938\u0902\u0926\u0940\u0926\u093E \u0938\u0902\u092A\u0930\u094D\u0915: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "WhatsApp \u092A\u0930 \u091C\u0935\u093E\u092C \u0926\u0947\u0902",
+  "inquiries.whatsappReplyPrefill": "\u0928\u092E\u0938\u094D\u0924\u0947! KalaSetu \u092A\u0930 {product} \u092E\u0947\u0902 \u0906\u092A\u0915\u0940 \u0930\u0941\u091A\u093F \u0915\u0947 \u0932\u093F\u090F \u0927\u0928\u094D\u092F\u0935\u093E\u0926\u0964",
+  "inquiries.markResponded": "\u091C\u0935\u093E\u092C \u0926\u093F\u092F\u093E \u0917\u092F\u093E",
+  "inquiries.close": "\u092A\u0942\u091B\u0924\u093E\u091B \u092C\u0902\u0926 \u0915\u0930\u0947\u0902",
   "analytics.backToShop": "\u092E\u0947\u0930\u0940 \u0926\u0941\u0915\u093E\u0928",
   "analytics.title": "\u090F\u0928\u093E\u0932\u093F\u091F\u093F\u0915\u094D\u0938",
   "analytics.loadError": "\u090F\u0928\u093E\u0932\u093F\u091F\u093F\u0915\u094D\u0938 \u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0939\u094B \u092A\u093E\u090F",
@@ -3467,7 +3743,18 @@ var hi_default = {
   "marketplace.artisanSummaryTitle": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0915\u0947 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902",
   "marketplace.artisanProductCount": "{n} \u0909\u0924\u094D\u092A\u093E\u0926 KalaSetu \u092A\u0930 \u0938\u0942\u091A\u0940\u092C\u0926\u094D\u0927",
   "marketplace.inquiryTitle": "\u0907\u0938 \u0909\u0924\u094D\u092A\u093E\u0926 \u092E\u0947\u0902 \u0930\u0941\u091A\u093F \u0939\u0948?",
+  "marketplace.inquirySubtitle": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0915\u094B \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C\u0947\u0902, \u092F\u093E \u090A\u092A\u0930 WhatsApp \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
   "marketplace.inquiryPlaceholder": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0915\u094B \u092C\u0924\u093E\u0907\u090F: \u092E\u093E\u0924\u094D\u0930\u093E, \u0915\u0938\u094D\u091F\u092E\u093E\u0907\u091C\u093C\u0947\u0936\u0928, \u0921\u093F\u0932\u0940\u0935\u0930\u0940 \u0938\u092E\u092F...",
+  "marketplace.inquiryQuantityLabel": "\u0907\u091A\u094D\u091B\u093F\u0924 \u092E\u093E\u0924\u094D\u0930\u093E",
+  "marketplace.inquiryQuantityPlaceholder": "\u0909\u0926\u093E. 2",
+  "marketplace.contactPreferenceLabel": "\u0906\u092A\u0938\u0947 \u0915\u093E\u0930\u0940\u0917\u0930 \u0915\u0948\u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947?",
+  "marketplace.contactPreference.email": "\u0908\u092E\u0947\u0932",
+  "marketplace.contactPreference.phone": "\u092B\u093C\u094B\u0928",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "\u0906\u092A\u0915\u093E \u0928\u0902\u092C\u0930",
+  "marketplace.contactValuePlaceholder": "\u0909\u0926\u093E. 98765 43210",
+  "marketplace.whatsappButton": "WhatsApp \u092A\u0930 \u0938\u0902\u0926\u0947\u0936",
+  "marketplace.whatsappPrefill": "\u0928\u092E\u0938\u094D\u0924\u0947! \u092E\u0948\u0902 KalaSetu \u092A\u0930 {product} ({passportId}) \u092E\u0947\u0902 \u0930\u0941\u091A\u093F \u0930\u0916\u0924\u093E \u0939\u0942\u0901\u0964",
   "marketplace.inquirySend": "\u092A\u0942\u091B\u0924\u093E\u091B \u092D\u0947\u091C\u0947\u0902",
   "marketplace.inquirySent": "\u0906\u092A\u0915\u0940 \u092A\u0942\u091B\u0924\u093E\u091B \u092D\u0947\u091C \u0926\u0940 \u0917\u0908 \u0939\u0948\u0964 \u0915\u093E\u0930\u0940\u0917\u0930 \u0906\u092A\u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u093E\u0964",
   "marketplace.inquiryError": "\u092A\u0942\u091B\u0924\u093E\u091B \u0928\u0939\u0940\u0902 \u092D\u0947\u091C\u0940 \u091C\u093E \u0938\u0915\u0940, \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902",
@@ -3481,6 +3768,7 @@ var hi_default = {
   "marketplace.inquiryProductRemoved": "\u092F\u0939 \u0909\u0924\u094D\u092A\u093E\u0926 \u0905\u092C \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948",
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C \u0915\u093E \u0907\u0902\u0924\u091C\u093E\u0930",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
+  "marketplace.inquiryResponded": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0928\u0947 \u091C\u0935\u093E\u092C \u0926\u093F\u092F\u093E",
   "heritage.title": "\u0915\u0941\u091B \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0935\u093F\u0935\u0930\u0923 (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
   "heritage.subtitle": "\u092F\u0947 \u0906\u092A\u0915\u0947 \u0909\u0924\u094D\u092A\u093E\u0926 \u0915\u0940 \u0915\u0939\u093E\u0928\u0940 \u0915\u094B \u0939\u0947\u0930\u093F\u091F\u0947\u091C \u092A\u093E\u0938\u092A\u094B\u0930\u094D\u091F \u092E\u0947\u0902 \u092C\u0924\u093E\u0928\u0947 \u092E\u0947\u0902 \u092E\u0926\u0926 \u0915\u0930\u0947\u0902\u0917\u0947\u0964 \u091C\u094B \u092C\u093E\u0924 \u092A\u0915\u094D\u0915\u0940 \u0928 \u0939\u094B, \u0909\u0938\u0947 \u091B\u094B\u0921\u093C \u0926\u0947\u0902\u0964",
   "heritage.techniqueLabel": "\u0924\u0915\u0928\u0940\u0915",
@@ -3655,6 +3943,10 @@ var kn_default = {
   "profile.loadError": "\u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0CAA\u0CCD\u0CB0\u0CCA\u0CAB\u0CC8\u0CB2\u0CCD \u0CB2\u0CCB\u0CA1\u0CCD \u0C86\u0C97\u0CB2\u0CBF\u0CB2\u0CCD\u0CB2",
   "profile.displayNameLabel": "\u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0CB9\u0CC6\u0CB8\u0CB0\u0CC1",
   "profile.shopNameLabel": "\u0C85\u0C82\u0C97\u0CA1\u0CBF \u0CB9\u0CC6\u0CB8\u0CB0\u0CC1",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u0CAA\u0CCD\u0CB0\u0CCA\u0CAB\u0CC8\u0CB2\u0CCD \u0C89\u0CB3\u0CBF\u0CB8\u0CBF",
   "profile.saved": "\u0CAA\u0CCD\u0CB0\u0CCA\u0CAB\u0CC8\u0CB2\u0CCD \u0C89\u0CB3\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
   "profile.saveError": "\u0CAA\u0CCD\u0CB0\u0CCA\u0CAB\u0CC8\u0CB2\u0CCD \u0C89\u0CB3\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CB2\u0CBF\u0CB2\u0CCD\u0CB2, \u0CAE\u0CA4\u0CCD\u0CA4\u0CC6 \u0CAA\u0CCD\u0CB0\u0CAF\u0CA4\u0CCD\u0CA8\u0CBF\u0CB8\u0CBF",
@@ -3686,6 +3978,18 @@ var kn_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -3736,7 +4040,18 @@ var kn_default = {
   "marketplace.artisanSummaryTitle": "\u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0\u0CB0 \u0CAC\u0C97\u0CCD\u0C97\u0CC6",
   "marketplace.artisanProductCount": "{n} \u0C89\u0CA4\u0CCD\u0CAA\u0CA8\u0CCD\u0CA8\u0C97\u0CB3\u0CC1 KalaSetu \u0CA8\u0CB2\u0CCD\u0CB2\u0CBF \u0CAA\u0C9F\u0CCD\u0C9F\u0CBF\u0CAF\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
   "marketplace.inquiryTitle": "\u0C88 \u0C89\u0CA4\u0CCD\u0CAA\u0CA8\u0CCD\u0CA8\u0CA6\u0CB2\u0CCD\u0CB2\u0CBF \u0C86\u0CB8\u0C95\u0CCD\u0CA4\u0CBF \u0C87\u0CA6\u0CC6\u0CAF\u0CC7?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0\u0CB0\u0CBF\u0C97\u0CC6 \u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0C85\u0C97\u0CA4\u0CCD\u0CAF\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CA4\u0CBF\u0CB3\u0CBF\u0CB8\u0CBF: \u0CAA\u0CCD\u0CB0\u0CAE\u0CBE\u0CA3, \u0C95\u0CB8\u0CCD\u0C9F\u0CAE\u0CC8\u0CB8\u0CCD, \u0CB5\u0CBF\u0CA4\u0CB0\u0CA3\u0CBE \u0CB8\u0CAE\u0CAF...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0CB5\u0CBF\u0C9A\u0CBE\u0CB0\u0CA3\u0CC6 \u0C95\u0CB3\u0CC1\u0CB9\u0CBF\u0CB8\u0CBF",
   "marketplace.inquirySent": "\u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0CB5\u0CBF\u0C9A\u0CBE\u0CB0\u0CA3\u0CC6 \u0C95\u0CB3\u0CC1\u0CB9\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6. \u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0\u0CBF \u0CA8\u0CBF\u0CAE\u0CCD\u0CAE\u0CA8\u0CCD\u0CA8\u0CC1 \u0CB8\u0C82\u0CAA\u0CB0\u0CCD\u0C95\u0CBF\u0CB8\u0CC1\u0CA4\u0CCD\u0CA4\u0CBE\u0CB0\u0CC6.",
   "marketplace.inquiryError": "\u0CB5\u0CBF\u0C9A\u0CBE\u0CB0\u0CA3\u0CC6 \u0C95\u0CB3\u0CC1\u0CB9\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CB2\u0CBF\u0CB2\u0CCD\u0CB2, \u0CA6\u0CAF\u0CB5\u0CBF\u0C9F\u0CCD\u0C9F\u0CC1 \u0CAE\u0CA4\u0CCD\u0CA4\u0CC6 \u0CAA\u0CCD\u0CB0\u0CAF\u0CA4\u0CCD\u0CA8\u0CBF\u0CB8\u0CBF",
@@ -3750,6 +4065,7 @@ var kn_default = {
   "marketplace.inquiryProductRemoved": "\u0C88 \u0C89\u0CA4\u0CCD\u0CAA\u0CA8\u0CCD\u0CA8 \u0C87\u0CA8\u0CCD\u0CA8\u0CC2 \u0CB2\u0CAD\u0CCD\u0CAF\u0CB5\u0CBF\u0CB2\u0CCD\u0CB2",
   "marketplace.inquiryStatusOpen": "\u0C89\u0CA4\u0CCD\u0CA4\u0CB0\u0C95\u0CCD\u0C95\u0CBE\u0C97\u0CBF \u0C95\u0CBE\u0CAF\u0CC1\u0CA4\u0CCD\u0CA4\u0CBF\u0CA6\u0CC6",
   "marketplace.inquiryStatusClosed": "\u0CAE\u0CC1\u0C9A\u0CCD\u0C9A\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -3924,6 +4240,10 @@ var kok_default = {
   "profile.loadError": "\u0906\u092A\u0932\u093E \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0932\u094B\u0921 \u0915\u0930\u0942 \u0936\u0915\u0932\u0947 \u0928\u093E\u0939\u0940",
   "profile.displayNameLabel": "\u0924\u0941\u092E\u091A\u0947 \u0928\u093E\u0935",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928\u093E\u091A\u0947 \u0928\u093E\u0935",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u091C\u0924\u0928 \u0915\u0930\u093E",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u091C\u0924\u0928 \u0915\u0947\u0932\u0947\u0902",
   "profile.saveError": "\u0924\u0941\u092E\u091A\u094B \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u091C\u0924\u0928 \u0915\u0930\u092A\u093E\u091A\u0947\u0902 \u0928\u0936\u0947, \u092A\u0941\u0928\u094D\u0939\u093E \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E",
@@ -3955,6 +4275,18 @@ var kok_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -4005,7 +4337,18 @@ var kok_default = {
   "marketplace.artisanSummaryTitle": "\u0915\u093E\u0930\u0940\u0917\u0930\u093E\u092C\u0926\u094D\u0926\u0932",
   "marketplace.artisanProductCount": "{n} \u0909\u0924\u094D\u092A\u093E\u0926\u0928\u093E\u0902 KalaSetu \u0935\u0930 \u0932\u093F\u0938\u094D\u091F\u0947\u0921",
   "marketplace.inquiryTitle": "\u0939\u094D\u092F\u093E \u0909\u0924\u094D\u092A\u093E\u0926\u0928\u093E\u0915 \u0906\u0935\u0921\u0924\u093E?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0915\u093E\u0930\u0940\u0917\u0930\u093E\u0915 \u0924\u0941\u092E\u0915\u093E \u0915\u093E\u092F \u0939\u0935\u0947 \u0924\u0947 \u0938\u093E\u0902\u0917\u093E: \u092A\u094D\u0930\u092E\u093E\u0923, \u0938\u093E\u0928\u0941\u0915\u0942\u0932\u0928, \u0921\u093F\u0932\u093F\u0935\u094D\u0939\u0930\u0940 \u0935\u0947\u0933...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0935\u093F\u091A\u093E\u0930 \u092A\u093E\u0920\u0935\u093E",
   "marketplace.inquirySent": "\u0924\u0941\u092E\u091A\u093E \u0935\u093F\u091A\u093E\u0930 \u092A\u093E\u0920\u0935\u0932\u093E. \u0915\u093E\u0930\u0940\u0917\u0930 \u0932\u0935\u0915\u0930 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0940\u0932.",
   "marketplace.inquiryError": "\u0935\u093F\u091A\u093E\u0930 \u092A\u093E\u0920\u0935\u0942\u0902\u0915 \u091C\u093E\u0932\u0947 \u0928\u093E, \u092A\u0930\u0924 \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E\u0924",
@@ -4019,6 +4362,7 @@ var kok_default = {
   "marketplace.inquiryProductRemoved": "\u0939\u0947\u0902 \u0909\u0924\u094D\u092A\u093E\u0926\u0928 \u0906\u0924\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u094D\u0939\u092F",
   "marketplace.inquiryStatusOpen": "\u0909\u0924\u094D\u0924\u0930\u093E \u0935\u093E\u091F\u0924\u093E",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -4193,6 +4537,10 @@ var ks_default = {
   "profile.loadError": "\u062A\u064F\u06C1\u0646\u062F\u06D2 \u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0644\u0648\u0688 \u0646\u06C1\u06CC \u06C1\u0648\u0626\u06CC\u0627\u06BA",
   "profile.displayNameLabel": "\u062A\u064F\u06C1\u0646\u062F\u06D2 \u0646\u0627\u06BA",
   "profile.shopNameLabel": "\u062F\u06A9\u0627\u0646 \u0646\u0627\u06BA",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638 \u06A9\u0631\u0646",
   "profile.saved": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638",
   "profile.saveError": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0628\u0686\u0627\u0646 \u0646\u06BE\u0659\u06CC\u0659\u0646\u060C \u0645\u06C1\u0631\u0628\u0627\u0646\u06CC \u06A9\u0631\u0646\u0659\u06CC\u0659 \u062F\u0648\u0628\u0627\u0631\u06C1 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u0646\u0659\u06CC\u0659",
@@ -4224,6 +4572,18 @@ var ks_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -4274,7 +4634,18 @@ var ks_default = {
   "marketplace.artisanSummaryTitle": "\u06C1\u0646\u0631 \u0645\u0646\u062F \u0628\u0627\u0631\u06D2",
   "marketplace.artisanProductCount": "{n} \u067E\u0631\u0648\u0688\u06A9\u0679 \u06A9\u0627\u0644\u0627\u0633\u06CC\u062A\u064F \u067E\u06CC\u0679\u06BE \u0644\u0633\u0679 \u06A9\u0631\u0646",
   "marketplace.inquiryTitle": "\u06CC\u06C1 \u067E\u0631\u0648\u0688\u06A9\u0679 \u0633\u064F\u0646\u062F \u062F\u0644\u0686\u0633\u067E\u06CC \u0686\u06BE\u064F\u061F",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u06A9\u0631\u0627\u0641\u0679 \u06A9\u0627\u0631\u0646 \u0633\u064F\u0646\u062F \u0628\u06CC\u0627\u06BA \u06A9\u0631\u0646 \u06A9\u06C1 \u062A\u064F\u06C1\u0646\u062F \u06A9\u06CC\u0627 \u0636\u0631\u0648\u0631\u062A \u0686\u06BE\u064F: \u0645\u0642\u062F\u0627\u0631\u060C \u062A\u062E\u0635\u06CC\u0635\u060C \u0688\u06CC\u0644\u06CC\u0648\u0631\u06CC \u0679\u0627\u0626\u0645 \u0644\u0627\u0626\u0646...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u067E\u0648\u0686\u06BE \u06AF\u0686\u06BE \u0628\u06BE\u06CC\u0698",
   "marketplace.inquirySent": "\u062A\u064F\u06C1\u0646\u062F \u067E\u0648\u0686\u06BE \u06AF\u0686\u06BE \u0628\u06BE\u06CC\u0698 \u06AF\u0654\u06CC \u06C1\u0646\u062F\u06D4 \u06A9\u0631\u0627\u0641\u0679 \u06A9\u0627\u0631\u0646 \u062A\u064F\u06C1\u0646\u062F \u0633\u064F\u0646\u062F \u0631\u0627\u0628\u0637\u06C1 \u06A9\u0631\u0646\u06D4",
   "marketplace.inquiryError": "\u067E\u0648\u0686\u06BE \u06AF\u0686\u06BE \u0628\u06BE\u06CC\u0698 \u0646\u06C1 \u06C1\u0646\u062F\u060C \u0645\u06C1\u0631\u0628\u0627\u0646\u06CC \u06A9\u0631 \u06A9\u06D2 \u062F\u0648\u0628\u0627\u0631 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u0646",
@@ -4288,6 +4659,7 @@ var ks_default = {
   "marketplace.inquiryProductRemoved": "\u06CC\u06C1 \u067E\u0631\u0648\u0688\u06A9\u0679 \u06C1\u0646\u0648\u0632 \u062F\u0633\u062A\u06CC\u0627\u0628 \u0646\u06C1 \u0686\u06BE\u064F",
   "marketplace.inquiryStatusOpen": "\u062C\u0648\u0627\u0628 \u0627\u0646\u062A\u0638\u0627\u0631\u06CC",
   "marketplace.inquiryStatusClosed": "\u0628\u0646\u062F",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -4462,6 +4834,10 @@ var mai_default = {
   "profile.loadError": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0932\u094B\u0921 \u0928\u0939\u093F \u092D' \u0938\u0915\u0932",
   "profile.displayNameLabel": "\u0905\u092A\u0928 \u0928\u093E\u092E",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928\u0915 \u0928\u093E\u092E",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0939\u0947\u091C\u0942",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u092D' \u0917\u0947\u0932",
   "profile.saveError": "\u0905\u092A\u0928 \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0928\u0939\u093F \u092D' \u0938\u0915\u0932, \u092B\u0947\u0930 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0942",
@@ -4493,6 +4869,18 @@ var mai_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -4543,7 +4931,18 @@ var mai_default = {
   "marketplace.artisanSummaryTitle": "\u0915\u093E\u0930\u0940\u0917\u0930\u0915 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902",
   "marketplace.artisanProductCount": "{n} \u0909\u0924\u094D\u092A\u093E\u0926 KalaSetu \u092A\u0930 \u0938\u0942\u091A\u0940\u092C\u0926\u094D\u0927",
   "marketplace.inquiryTitle": "\u0908 \u0909\u0924\u094D\u092A\u093E\u0926 \u092E\u0947\u0902 \u0930\u0941\u091A\u093F \u0905\u091B\u093F?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0915\u0947\u0901 \u092C\u0924\u093E\u0909 \u091C\u0947 \u0905\u0939\u093E\u0901 \u0915\u0940 \u091A\u093E\u0939\u0940: \u092E\u093E\u0924\u094D\u0930\u093E, \u0905\u0928\u0941\u0915\u0942\u0932\u0928, \u0921\u093F\u0932\u093F\u0935\u0930\u0940 \u0938\u092E\u092F...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u092A\u0942\u091B\u0924\u093E\u091B \u092D\u0947\u091C\u0942",
   "marketplace.inquirySent": "\u0905\u0939\u093E\u0901\u0915 \u092A\u0942\u091B\u0924\u093E\u091B \u092D\u0947\u091C\u0932 \u0917\u0947\u0932 \u0905\u091B\u093F\u0964 \u0915\u093E\u0930\u0940\u0917\u0930 \u0936\u0940\u0918\u094D\u0930 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0925\u093F\u0928\u0964",
   "marketplace.inquiryError": "\u092A\u0942\u091B\u0924\u093E\u091B \u092D\u0947\u091C\u093F \u0928\u0939\u093F \u0938\u0915\u0932, \u0915\u0943\u092A\u092F\u093E \u092B\u0947\u0930 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0942",
@@ -4557,6 +4956,7 @@ var mai_default = {
   "marketplace.inquiryProductRemoved": "\u0908 \u0909\u0924\u094D\u092A\u093E\u0926 \u0905\u092C \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u093F \u0905\u091B\u093F",
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -4731,6 +5131,10 @@ var ml_default = {
   "profile.loadError": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D33\u0D41\u0D1F\u0D46 \u0D2A\u0D4D\u0D30\u0D4A\u0D2B\u0D48\u0D7D \u0D32\u0D4B\u0D21\u0D4D \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D3E\u0D7B \u0D15\u0D34\u0D3F\u0D1E\u0D4D\u0D1E\u0D3F\u0D32\u0D4D\u0D32",
   "profile.displayNameLabel": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D33\u0D41\u0D1F\u0D46 \u0D2A\u0D47\u0D30\u0D4D",
   "profile.shopNameLabel": "\u0D15\u0D1F\u0D2F\u0D41\u0D1F\u0D46 \u0D2A\u0D47\u0D30\u0D4D",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u0D2A\u0D4D\u0D30\u0D4A\u0D2B\u0D48\u0D7D \u0D38\u0D02\u0D30\u0D15\u0D4D\u0D37\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15",
   "profile.saved": "\u0D2A\u0D4D\u0D30\u0D4A\u0D2B\u0D48\u0D7D \u0D38\u0D02\u0D30\u0D15\u0D4D\u0D37\u0D3F\u0D1A\u0D4D\u0D1A\u0D41",
   "profile.saveError": "\u0D2A\u0D4D\u0D30\u0D4A\u0D2B\u0D48\u0D7D \u0D38\u0D02\u0D30\u0D15\u0D4D\u0D37\u0D3F\u0D15\u0D4D\u0D15\u0D3E\u0D7B \u0D15\u0D34\u0D3F\u0D1E\u0D4D\u0D1E\u0D3F\u0D32\u0D4D\u0D32, \u0D35\u0D40\u0D23\u0D4D\u0D1F\u0D41\u0D02 \u0D36\u0D4D\u0D30\u0D2E\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15",
@@ -4762,6 +5166,18 @@ var ml_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -4812,7 +5228,18 @@ var ml_default = {
   "marketplace.artisanSummaryTitle": "\u0D15\u0D3E\u0D7C\u0D17\u0D3F\u0D15\u0D28\u0D46\u0D15\u0D4D\u0D15\u0D41\u0D31\u0D3F\u0D1A\u0D4D\u0D1A\u0D4D",
   "marketplace.artisanProductCount": "KalaSetu-\u0D2F\u0D3F\u0D7D {n} \u0D09\u0D7D\u0D2A\u0D4D\u0D2A\u0D28\u0D4D\u0D28\u0D19\u0D4D\u0D19\u0D7E",
   "marketplace.inquiryTitle": "\u0D08 \u0D09\u0D7D\u0D2A\u0D4D\u0D2A\u0D28\u0D4D\u0D28\u0D24\u0D4D\u0D24\u0D3F\u0D7D \u0D24\u0D3E\u0D7D\u0D2A\u0D4D\u0D2A\u0D30\u0D4D\u0D2F\u0D2E\u0D41\u0D23\u0D4D\u0D1F\u0D4B?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0D15\u0D3E\u0D7C\u0D17\u0D3F\u0D15\u0D28\u0D4D \u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D7E\u0D15\u0D4D\u0D15\u0D4D \u0D35\u0D47\u0D23\u0D4D\u0D1F\u0D24\u0D4D \u0D2A\u0D31\u0D2F\u0D42: \u0D05\u0D33\u0D35\u0D4D, \u0D07\u0D37\u0D4D\u0D1F\u0D3E\u0D28\u0D41\u0D38\u0D30\u0D23\u0D02, \u0D21\u0D46\u0D32\u0D3F\u0D35\u0D31\u0D3F \u0D38\u0D2E\u0D2F\u0D02...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0D05\u0D2D\u0D4D\u0D2F\u0D7C\u0D24\u0D4D\u0D25\u0D28 \u0D05\u0D2F\u0D15\u0D4D\u0D15\u0D41\u0D15",
   "marketplace.inquirySent": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D33\u0D41\u0D1F\u0D46 \u0D05\u0D2D\u0D4D\u0D2F\u0D7C\u0D24\u0D4D\u0D25\u0D28 \u0D05\u0D2F\u0D1A\u0D4D\u0D1A\u0D41. \u0D15\u0D3E\u0D7C\u0D17\u0D3F\u0D15\u0D7B \u0D09\u0D1F\u0D7B \u0D2C\u0D28\u0D4D\u0D27\u0D2A\u0D4D\u0D2A\u0D46\u0D1F\u0D41\u0D02.",
   "marketplace.inquiryError": "\u0D05\u0D2D\u0D4D\u0D2F\u0D7C\u0D24\u0D4D\u0D25\u0D28 \u0D05\u0D2F\u0D2F\u0D4D\u0D15\u0D4D\u0D15\u0D3E\u0D7B \u0D15\u0D34\u0D3F\u0D1E\u0D4D\u0D1E\u0D3F\u0D32\u0D4D\u0D32, \u0D35\u0D40\u0D23\u0D4D\u0D1F\u0D41\u0D02 \u0D36\u0D4D\u0D30\u0D2E\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15",
@@ -4826,6 +5253,7 @@ var ml_default = {
   "marketplace.inquiryProductRemoved": "\u0D08 \u0D09\u0D7D\u0D2A\u0D4D\u0D2A\u0D28\u0D4D\u0D28\u0D02 \u0D07\u0D28\u0D3F \u0D32\u0D2D\u0D4D\u0D2F\u0D2E\u0D32\u0D4D\u0D32",
   "marketplace.inquiryStatusOpen": "\u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F \u0D15\u0D3E\u0D24\u0D4D\u0D24\u0D3F\u0D30\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D41",
   "marketplace.inquiryStatusClosed": "\u0D05\u0D1F\u0D1E\u0D4D\u0D1E\u0D41",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -5000,6 +5428,10 @@ var mni_default = {
   "profile.loadError": "\uABC3\uABC5\uABE4\uABC4\uABE8\uABD4 \uABD1\uABC3\uABC1\uABE8\uABE1 \uABD1\uABE3\uABDF\uABD5\uABE4",
   "profile.displayNameLabel": "\uABC3\uABC5\uABE4\uABC4\uABE8\uABD4",
   "profile.shopNameLabel": "\uABC3\uABC5\uABE4\uABC4\uABE8\uABD4 \uABD1\uABC3\uABC1\uABE8\uABE1",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\uABC3\uABC5\uABE4\uABC4\uABE8\uABD4 \uABD1\uABC3\uABC1\uABE8\uABE1",
   "profile.saved": "\uABC8\uABE8\uABDD\uABC1\uABE4\uABE1 \uABC2\uABE3\uABDF\uABD5\uABD2\uABE4 \uABD1\uABC3\uABC1\uABE8\uABE1 \uABD1\uABC3\uABC1\uABE8\uABE1 \uABD1\uABC3\uABC1\uABE8\uABE1",
   "profile.saveError": "\uABC8\uABE8\uABDD\uABC1\uABE4\uABE1 \uABC2\uABE3\uABDF\uABD5\uABD2\uABE4 \uABD1\uABC3\uABC1\uABE8\uABE1 \uABD1\uABC3\uABC1\uABE8\uABE1 \uABD1\uABC3\uABC1\uABE8\uABE1 \uABD1\uABC3\uABC1\uABE8\uABE1 \uABD1\uABC3\uABC1\uABE8\uABE1",
@@ -5031,6 +5463,18 @@ var mni_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -5081,7 +5525,18 @@ var mni_default = {
   "marketplace.artisanSummaryTitle": "\uABCA\uABD5\uABE4\uABC1\uABE4 \uABCA\uABD5\uABE4 \uABCA\uABD5",
   "marketplace.artisanProductCount": "{n} \uABCA\uABD5\uABE4\uABC1\uABE4\uABC7\uABD5\uABE4 KalaSetu \uABCA\uABD5\uABE4",
   "marketplace.inquiryTitle": "\uABCA\uABD5 \uABCD\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\uABCA\uABD5\uABE4\uABC1\uABE4 \uABCD\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4 \uABCD\uABE7\uABD4\uABE4: \uABCA\uABD5\uABE4, \uABCA\uABD5\uABE4, \uABCA\uABD5\uABE4...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\uABCA\uABD5 \uABCD\uABE7\uABD4\uABE4",
   "marketplace.inquirySent": "\uABCA\uABD5 \uABCD\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4. \uABCA\uABD5\uABE4\uABC1\uABE4 \uABCA\uABD5\uABE4 \uABCD\uABE7\uABD4\uABE4.",
   "marketplace.inquiryError": "\uABCA\uABD5 \uABCD\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4 \uABCD\uABE7\uABD4\uABE4, \uABCA\uABD5 \uABCD\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4.",
@@ -5095,6 +5550,7 @@ var mni_default = {
   "marketplace.inquiryProductRemoved": "\uABCA\uABD5\uABE4 \uABCD\uABDF\uABD5\uABE4 \uA351\uABC1\uABE4",
   "marketplace.inquiryStatusOpen": "\uABCD\uABDF\uABD5\uABE4 \uABCA\uABD5\uABE4",
   "marketplace.inquiryStatusClosed": "\uABCD\uABDF\uABD5\uABE4 \uA351\uABC1\uABE4",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -5269,6 +5725,10 @@ var mr_default = {
   "profile.loadError": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0932\u094B\u0921 \u0915\u0930\u0924\u093E \u0906\u0932\u093E \u0928\u093E\u0939\u0940",
   "profile.displayNameLabel": "\u0924\u0941\u092E\u091A\u0947 \u0928\u093E\u0935",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928\u093E\u091A\u0947 \u0928\u093E\u0935",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u091C\u0924\u0928 \u0915\u0930\u093E",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u091C\u0924\u0928 \u091D\u093E\u0932\u0947",
   "profile.saveError": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u091C\u0924\u0928 \u0939\u094B\u090A \u0936\u0915\u0932\u0947 \u0928\u093E\u0939\u0940, \u092A\u0941\u0928\u094D\u0939\u093E \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E",
@@ -5300,6 +5760,18 @@ var mr_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -5350,7 +5822,18 @@ var mr_default = {
   "marketplace.artisanSummaryTitle": "\u0915\u093E\u0930\u093E\u0917\u0940\u0930\u093E\u092C\u0926\u094D\u0926\u0932",
   "marketplace.artisanProductCount": "{n} \u0909\u0924\u094D\u092A\u093E\u0926\u0928\u0947 KalaSetu \u0935\u0930 \u0938\u0942\u091A\u0940\u092C\u0926\u094D\u0927",
   "marketplace.inquiryTitle": "\u092F\u093E \u0909\u0924\u094D\u092A\u093E\u0926\u0928\u093E\u0924 \u0930\u0938 \u0906\u0939\u0947 \u0915\u093E?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0915\u093E\u0930\u093E\u0917\u0940\u0930\u093E\u0932\u093E \u0938\u093E\u0902\u0917\u093E \u0924\u0941\u092E\u094D\u0939\u093E\u0932\u093E \u0915\u093E\u092F \u0939\u0935\u0902 \u0906\u0939\u0947: \u092A\u094D\u0930\u092E\u093E\u0923, \u0938\u093E\u0928\u0941\u0915\u0942\u0932\u0928, \u0935\u093F\u0924\u0930\u0923 \u0935\u0947\u0933...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0935\u093F\u091A\u093E\u0930\u0923\u093E \u092A\u093E\u0920\u0935\u093E",
   "marketplace.inquirySent": "\u0924\u0941\u092E\u091A\u0940 \u0935\u093F\u091A\u093E\u0930\u0923\u093E \u092A\u093E\u0920\u0935\u0932\u0940 \u0917\u0947\u0932\u0940 \u0906\u0939\u0947. \u0915\u093E\u0930\u093E\u0917\u0940\u0930 \u0932\u0935\u0915\u0930\u091A \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0932.",
   "marketplace.inquiryError": "\u0935\u093F\u091A\u093E\u0930\u0923\u093E \u092A\u093E\u0920\u0935\u0924\u093E \u0906\u0932\u0940 \u0928\u093E\u0939\u0940, \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u094D\u0939\u093E \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E",
@@ -5364,6 +5847,7 @@ var mr_default = {
   "marketplace.inquiryProductRemoved": "\u0939\u0947 \u0909\u0924\u094D\u092A\u093E\u0926\u0928 \u0906\u0924\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u093E\u0939\u0940",
   "marketplace.inquiryStatusOpen": "\u092A\u094D\u0930\u0924\u093F\u0938\u093E\u0926\u093E\u091A\u0940 \u0935\u093E\u091F \u092A\u093E\u0939\u0924 \u0906\u0939\u0947",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -5538,6 +6022,10 @@ var ne_default = {
   "profile.loadError": "\u0924\u092A\u093E\u0908\u0902\u0915\u094B \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0932\u094B\u0921 \u0917\u0930\u094D\u0928 \u0938\u0915\u093F\u090F\u0928",
   "profile.displayNameLabel": "\u0924\u092A\u093E\u0908\u0902\u0915\u094B \u0928\u093E\u092E",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928\u0915\u094B \u0928\u093E\u092E",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u092C\u091A\u0924 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u092D\u092F\u094B",
   "profile.saveError": "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u092C\u091A\u0924 \u0917\u0930\u094D\u0928 \u0938\u0915\u093F\u090F\u0928, \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
@@ -5569,6 +6057,18 @@ var ne_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -5619,7 +6119,18 @@ var ne_default = {
   "marketplace.artisanSummaryTitle": "\u0936\u093F\u0932\u094D\u092A\u0940\u0915\u094B \u092C\u093E\u0930\u0947\u092E\u093E",
   "marketplace.artisanProductCount": "{n} \u0909\u0924\u094D\u092A\u093E\u0926\u0928\u0939\u0930\u0942 KalaSetu \u092E\u093E \u0938\u0942\u091A\u0940\u092C\u0926\u094D\u0927",
   "marketplace.inquiryTitle": "\u092F\u094B \u0909\u0924\u094D\u092A\u093E\u0926\u0928\u092E\u093E \u091A\u093E\u0938\u094B \u091B?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0936\u093F\u0932\u094D\u092A\u0940\u0932\u093E\u0908 \u0924\u092A\u093E\u0908\u0902 \u0915\u0947 \u091A\u093E\u0939\u0928\u0941\u0939\u0941\u0928\u094D\u091B \u092D\u0928\u094D\u0928\u0941\u0939\u094B\u0938\u094D: \u092E\u093E\u0924\u094D\u0930\u093E, \u0905\u0928\u0941\u0915\u0942\u0932\u0928, \u0921\u0947\u0932\u093F\u092D\u0930\u0940 \u0938\u092E\u092F\u0938\u0940\u092E\u093E...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u091C\u093E\u0901\u091A \u092A\u0920\u093E\u0909\u0928\u0941\u0939\u094B\u0938\u094D",
   "marketplace.inquirySent": "\u0924\u092A\u093E\u0908\u0902\u0915\u094B \u091C\u093E\u0901\u091A \u092A\u0920\u093E\u0907\u092F\u094B\u0964 \u0936\u093F\u0932\u094D\u092A\u0940 \u0924\u092A\u093E\u0908\u0902\u0932\u093E\u0908 \u0938\u092E\u094D\u092A\u0930\u094D\u0915 \u0917\u0930\u094D\u0928\u0947\u091B\u0964",
   "marketplace.inquiryError": "\u091C\u093E\u0901\u091A \u092A\u0920\u093E\u0909\u0928 \u0938\u0915\u0947\u0928, \u0915\u0943\u092A\u092F\u093E \u092B\u0947\u0930\u093F \u092A\u094D\u0930\u092F\u093E\u0938 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D\u0964",
@@ -5633,6 +6144,7 @@ var ne_default = {
   "marketplace.inquiryProductRemoved": "\u092F\u094B \u0909\u0924\u094D\u092A\u093E\u0926\u0928 \u0905\u092C \u0909\u092A\u0932\u092C\u094D\u0927 \u091B\u0948\u0928",
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092B\u0915\u094B \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E",
   "marketplace.inquiryStatusClosed": "\u092C\u0928\u094D\u0926",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -5807,6 +6319,10 @@ var or_default = {
   "profile.loadError": "\u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15\u0B30 \u0B2A\u0B4D\u0B30\u0B4B\u0B2B\u0B3E\u0B07\u0B32 \u0B32\u0B4B\u0B21 \u0B39\u0B4B\u0B07\u0B2A\u0B3E\u0B30\u0B3F\u0B32\u0B3E \u0B28\u0B3E\u0B39\u0B3F\u0B01",
   "profile.displayNameLabel": "\u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15 \u0B28\u0B3E\u0B2E",
   "profile.shopNameLabel": "\u0B26\u0B4B\u0B15\u0B3E\u0B28 \u0B28\u0B3E\u0B2E",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u0B2A\u0B4D\u0B30\u0B4B\u0B2B\u0B3E\u0B07\u0B32 \u0B38\u0B1E\u0B4D\u0B1A\u0B5F \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41",
   "profile.saved": "\u0B2A\u0B4D\u0B30\u0B4B\u0B2B\u0B3E\u0B07\u0B32 \u0B30\u0B15\u0B4D\u0B37\u0B3F\u0B24 \u0B39\u0B47\u0B32\u0B3E",
   "profile.saveError": "\u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15 \u0B2A\u0B4D\u0B30\u0B4B\u0B2B\u0B3E\u0B07\u0B32 \u0B30\u0B15\u0B4D\u0B37\u0B3F\u0B24 \u0B39\u0B47\u0B32\u0B3E \u0B28\u0B3E\u0B39\u0B3F\u0B01, \u0B26\u0B5F\u0B3E\u0B15\u0B30\u0B3F \u0B2A\u0B41\u0B23\u0B3F \u0B1A\u0B47\u0B37\u0B4D\u0B1F\u0B3E \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41",
@@ -5838,6 +6354,18 @@ var or_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -5888,7 +6416,18 @@ var or_default = {
   "marketplace.artisanSummaryTitle": "\u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30 \u0B2C\u0B3F\u0B37\u0B5F\u0B30\u0B47",
   "marketplace.artisanProductCount": "{n} \u0B2A\u0B4D\u0B30\u0B4B\u0B21\u0B15\u0B4D\u0B1F \u0B15\u0B3E\u0B32\u0B3E\u0B38\u0B47\u0B1F\u0B41\u0B30\u0B47 \u0B24\u0B3E\u0B32\u0B3F\u0B15\u0B3E\u0B2D\u0B41\u0B15\u0B4D\u0B24",
   "marketplace.inquiryTitle": "\u0B0F\u0B39\u0B3F \u0B2A\u0B4D\u0B30\u0B4B\u0B21\u0B15\u0B4D\u0B1F\u0B30\u0B47 \u0B06\u0B17\u0B4D\u0B30\u0B39 \u0B05\u0B1B\u0B3F \u0B15\u0B3F?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30\u0B19\u0B4D\u0B15\u0B41 \u0B06\u0B2A\u0B23 \u0B1A\u0B3E\u0B39\u0B41\u0B01\u0B25\u0B3F\u0B2C\u0B3E \u0B2C\u0B3F\u0B37\u0B5F \u0B15\u0B41\u0B39\u0B28\u0B4D\u0B24\u0B41: \u0B2A\u0B30\u0B3F\u0B2E\u0B3E\u0B23, \u0B15\u0B37\u0B4D\u0B1F\u0B2E\u0B3E\u0B07\u0B1C\u0B47\u0B38\u0B28\u0B4D, \u0B2C\u0B3F\u0B24\u0B30\u0B23 \u0B38\u0B2E\u0B5F...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0B2A\u0B4D\u0B30\u0B36\u0B4D\u0B28 \u0B2A\u0B20\u0B3E\u0B28\u0B4D\u0B24\u0B41",
   "marketplace.inquirySent": "\u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15\u0B30 \u0B2A\u0B4D\u0B30\u0B36\u0B4D\u0B28 \u0B2A\u0B20\u0B3E\u0B2F\u0B3E\u0B07\u0B1B\u0B3F\u0964 \u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30 \u0B36\u0B40\u0B18\u0B4D\u0B30 \u0B2F\u0B4B\u0B17\u0B3E\u0B2F\u0B4B\u0B17 \u0B15\u0B30\u0B3F\u0B2C\u0B47\u0964",
   "marketplace.inquiryError": "\u0B2A\u0B4D\u0B30\u0B36\u0B4D\u0B28 \u0B2A\u0B20\u0B3E\u0B07 \u0B2A\u0B3E\u0B30\u0B3F\u0B32\u0B3E \u0B28\u0B3E\u0B39\u0B3F\u0B01, \u0B26\u0B5F\u0B3E\u0B15\u0B30\u0B3F \u0B2A\u0B41\u0B23\u0B3F \u0B1A\u0B47\u0B37\u0B4D\u0B1F\u0B3E \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41",
@@ -5902,6 +6441,7 @@ var or_default = {
   "marketplace.inquiryProductRemoved": "\u0B0F\u0B39\u0B3F \u0B2A\u0B4D\u0B30\u0B4B\u0B21\u0B15\u0B4D\u0B1F \u0B06\u0B09 \u0B09\u0B2A\u0B32\u0B2C\u0B4D\u0B27 \u0B28\u0B3E\u0B39\u0B3F\u0B01",
   "marketplace.inquiryStatusOpen": "\u0B09\u0B24\u0B4D\u0B24\u0B30 \u0B05\u0B2A\u0B47\u0B15\u0B4D\u0B37\u0B3E\u0B30\u0B24",
   "marketplace.inquiryStatusClosed": "\u0B2C\u0B28\u0B4D\u0B26",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -6076,6 +6616,10 @@ var pa_default = {
   "profile.loadError": "\u0A24\u0A41\u0A39\u0A3E\u0A21\u0A3E \u0A2A\u0A4D\u0A30\u0A4B\u0A2B\u0A3E\u0A08\u0A32 \u0A32\u0A4B\u0A21 \u0A28\u0A39\u0A40\u0A02 \u0A39\u0A4B \u0A38\u0A15\u0A3F\u0A06",
   "profile.displayNameLabel": "\u0A24\u0A41\u0A39\u0A3E\u0A21\u0A3E \u0A28\u0A3E\u0A2E",
   "profile.shopNameLabel": "\u0A26\u0A41\u0A15\u0A3E\u0A28 \u0A26\u0A3E \u0A28\u0A3E\u0A2E",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u0A2A\u0A4D\u0A30\u0A4B\u0A2B\u0A3E\u0A08\u0A32 \u0A38\u0A70\u0A2D\u0A3E\u0A32\u0A4B",
   "profile.saved": "\u0A2A\u0A4D\u0A30\u0A4B\u0A2B\u0A3E\u0A08\u0A32 \u0A38\u0A70\u0A2D\u0A3E\u0A32\u0A3F\u0A06",
   "profile.saveError": "\u0A2A\u0A4D\u0A30\u0A4B\u0A2B\u0A3E\u0A08\u0A32 \u0A38\u0A70\u0A2D\u0A3E\u0A32\u0A3F\u0A06 \u0A28\u0A39\u0A40\u0A02, \u0A2B\u0A3F\u0A30 \u0A15\u0A4B\u0A36\u0A3F\u0A36 \u0A15\u0A30\u0A4B",
@@ -6107,6 +6651,18 @@ var pa_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -6157,7 +6713,18 @@ var pa_default = {
   "marketplace.artisanSummaryTitle": "\u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30 \u0A2C\u0A3E\u0A30\u0A47",
   "marketplace.artisanProductCount": "{n} \u0A09\u0A24\u0A2A\u0A3E\u0A26 \u0A15\u0A3E\u0A32\u0A3E\u0A38\u0A47\u0A1F\u0A42 '\u0A24\u0A47 \u0A32\u0A3F\u0A38\u0A1F \u0A15\u0A40\u0A24\u0A47",
   "marketplace.inquiryTitle": "\u0A07\u0A38 \u0A09\u0A24\u0A2A\u0A3E\u0A26 \u0A35\u0A3F\u0A71\u0A1A \u0A30\u0A41\u0A1A\u0A40?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30 \u0A28\u0A42\u0A70 \u0A26\u0A71\u0A38\u0A4B \u0A15\u0A3F \u0A24\u0A41\u0A38\u0A40\u0A02 \u0A15\u0A40 \u0A1A\u0A3E\u0A39\u0A41\u0A70\u0A26\u0A47 \u0A39\u0A4B: \u0A2E\u0A3E\u0A24\u0A30\u0A3E, \u0A15\u0A38\u0A1F\u0A2E\u0A3E\u0A08\u0A1C\u0A3C\u0A47\u0A38\u0A3C\u0A28, \u0A21\u0A3F\u0A32\u0A3F\u0A35\u0A30\u0A40 \u0A38\u0A2E\u0A3E\u0A02...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0A2A\u0A41\u0A71\u0A1B\u0A17\u0A3F\u0A71\u0A1B \u0A2D\u0A47\u0A1C\u0A4B",
   "marketplace.inquirySent": "\u0A24\u0A41\u0A39\u0A3E\u0A21\u0A40 \u0A2A\u0A41\u0A71\u0A1B\u0A17\u0A3F\u0A71\u0A1B \u0A2D\u0A47\u0A1C\u0A40 \u0A17\u0A08 \u0A39\u0A48\u0964 \u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30 \u0A24\u0A41\u0A39\u0A3E\u0A21\u0A47 \u0A28\u0A3E\u0A32 \u0A38\u0A70\u0A2A\u0A30\u0A15 \u0A15\u0A30\u0A47\u0A17\u0A3E\u0964",
   "marketplace.inquiryError": "\u0A2A\u0A41\u0A71\u0A1B\u0A17\u0A3F\u0A71\u0A1B \u0A28\u0A39\u0A40\u0A02 \u0A2D\u0A47\u0A1C\u0A40 \u0A1C\u0A3E \u0A38\u0A15\u0A40, \u0A15\u0A3F\u0A30\u0A2A\u0A3E \u0A15\u0A30\u0A15\u0A47 \u0A26\u0A41\u0A2C\u0A3E\u0A30\u0A3E \u0A15\u0A4B\u0A38\u0A3C\u0A3F\u0A38\u0A3C \u0A15\u0A30\u0A4B\u0964",
@@ -6171,6 +6738,7 @@ var pa_default = {
   "marketplace.inquiryProductRemoved": "\u0A07\u0A39 \u0A09\u0A24\u0A2A\u0A3E\u0A26 \u0A39\u0A41\u0A23 \u0A09\u0A2A\u0A32\u0A2C\u0A27 \u0A28\u0A39\u0A40\u0A02",
   "marketplace.inquiryStatusOpen": "\u0A1C\u0A35\u0A3E\u0A2C \u0A26\u0A40 \u0A09\u0A21\u0A40\u0A15",
   "marketplace.inquiryStatusClosed": "\u0A2C\u0A70\u0A26",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -6345,6 +6913,10 @@ var sa_default = {
   "profile.loadError": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932\u0902 \u0932\u094B\u0921\u094D \u0928 \u0936\u0915\u094D\u092F\u0924\u0947",
   "profile.displayNameLabel": "\u0924\u0935 \u0928\u093E\u092E",
   "profile.shopNameLabel": "\u0926\u0941\u0915\u093E\u0928\u0938\u094D\u092F \u0928\u093E\u092E",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932\u0902 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924\u0941\u0902",
   "profile.saved": "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924",
   "profile.saveError": "\u0924\u0935 \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0939\u0947\u091C\u093F\u0924\u0941\u0902 \u0928 \u0936\u0915\u094D\u092F\u0924\u0947, \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0903",
@@ -6376,6 +6948,18 @@ var sa_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -6426,7 +7010,18 @@ var sa_default = {
   "marketplace.artisanSummaryTitle": "\u0936\u093F\u0932\u094D\u092A\u0940 \u0935\u093F\u0937\u092F\u0947",
   "marketplace.artisanProductCount": "{n} \u0909\u0924\u094D\u092A\u093E\u0926\u093E\u0903 \u0915\u093E\u0932\u093E\u0938\u0947\u0924\u0941 \u092E\u0927\u094D\u092F\u0947 \u0938\u0942\u091A\u0940\u092D\u0942\u0924\u093E\u0903",
   "marketplace.inquiryTitle": "\u0909\u0924\u094D\u092A\u093E\u0926\u0947 \u0930\u0941\u091A\u093F\u0903?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0936\u093F\u0932\u094D\u092A\u0940\u0923\u093E\u0902 \u0907\u091A\u094D\u091B\u093F\u0924\u0902 \u0932\u093F\u0916\u0924\u0941: \u092E\u093E\u0924\u094D\u0930\u093E, \u0905\u0928\u0941\u0915\u0942\u0932\u0928, \u0935\u093F\u0924\u0930\u0923\u0915\u093E\u0932\u0903...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u092A\u094D\u0930\u0936\u094D\u0928\u0902 \u092A\u094D\u0930\u0947\u0937\u092F",
   "marketplace.inquirySent": "\u0924\u0935 \u092A\u094D\u0930\u0936\u094D\u0928\u0903 \u092A\u094D\u0930\u0947\u0937\u093F\u0924\u0903\u0964 \u0936\u093F\u0932\u094D\u092A\u0940 \u0936\u0940\u0918\u094D\u0930\u0902 \u0938\u092E\u094D\u092A\u0930\u094D\u0915\u0902 \u0915\u0930\u093F\u0937\u094D\u092F\u0924\u093F\u0964",
   "marketplace.inquiryError": "\u092A\u094D\u0930\u0936\u094D\u0928\u0902 \u092A\u094D\u0930\u0947\u0937\u093F\u0924\u0941\u0902 \u0928 \u0936\u0915\u094D\u0928\u094B\u0924\u093F, \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u0924\u094D\u0928\u0902 \u0915\u0941\u0930\u094D\u0935\u0928\u094D\u0924\u0941\u0964",
@@ -6440,6 +7035,7 @@ var sa_default = {
   "marketplace.inquiryProductRemoved": "\u0909\u0924\u094D\u092A\u093E\u0926\u0928\u092E\u094D \u0907\u0926\u093E\u0928\u0940\u0902 \u0928 \u0909\u092A\u0932\u092C\u094D\u0927\u092E\u094D",
   "marketplace.inquiryStatusOpen": "\u0909\u0924\u094D\u0924\u0930\u0938\u094D\u092F \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E",
   "marketplace.inquiryStatusClosed": "\u0938\u092E\u093E\u092A\u094D\u0924\u092E\u094D",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -6614,6 +7210,10 @@ var sat_default = {
   "profile.loadError": "\u1C5F\u1C5E\u1C5F\u1C5C \u1C6F\u1C5F\u1C79\u1C68\u1C65\u1C64 \u1C60\u1C77\u1C5A\u1C71\u1C70\u1C5A\u1C71 \u1C60\u1C5F\u1C71\u1C5F",
   "profile.displayNameLabel": "\u1C5F\u1C5E\u1C5F\u1C5C \u1C62\u1C69\u1C71\u1C69\u1C62",
   "profile.shopNameLabel": "\u1C65\u1C5F\u1C79\u1C5B \u1C62\u1C69\u1C71\u1C69\u1C62",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u1C6F\u1C5F\u1C79\u1C68\u1C65\u1C64 \u1C75\u1C5F\u1C79\u1C71\u1C69\u1C5C",
   "profile.saved": "\u1C6F\u1C77\u1C64\u1C5E\u1C64\u1C5E\u1C64 \u1C65\u1C5F\u1C68\u1C66\u1C5F\u1C63 \u1C5F\u1C60\u1C5F\u1C71\u1C5F",
   "profile.saveError": "\u1C6F\u1C77\u1C64\u1C5E\u1C64\u1C5E\u1C64 \u1C65\u1C5F\u1C68\u1C66\u1C5F\u1C63 \u1C62\u1C5F\u1C71\u1C5F\u1C63 \u1C60\u1C5F\u1C71\u1C5F, \u1C62\u1C5F\u1C68\u1C5F\u1C5D \u1C5E\u1C6E\u1C60\u1C5F \u1C62\u1C5F\u1C71\u1C5F\u1C63 \u1C62\u1C5F\u1C71\u1C5F\u1C63",
@@ -6645,6 +7245,18 @@ var sat_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -6695,7 +7307,18 @@ var sat_default = {
   "marketplace.artisanSummaryTitle": "About the artisan",
   "marketplace.artisanProductCount": "{n} products listed on KalaSetu",
   "marketplace.inquiryTitle": "Interested in this product?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "Tell the artisan what you're looking for: quantity, customisation, delivery timeline...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "Send inquiry",
   "marketplace.inquirySent": "Your inquiry has been sent. The artisan will be in touch.",
   "marketplace.inquiryError": "Could not send your inquiry, please try again",
@@ -6709,6 +7332,7 @@ var sat_default = {
   "marketplace.inquiryProductRemoved": "This product is no longer available",
   "marketplace.inquiryStatusOpen": "Awaiting reply",
   "marketplace.inquiryStatusClosed": "Closed",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -6883,6 +7507,10 @@ var sd_default = {
   "profile.loadError": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0644\u0648\u068A \u0646\u0647 \u067F\u064A \u0633\u06AF\u0647\u064A\u0648",
   "profile.displayNameLabel": "\u062A\u0648\u0647\u0627\u0646\u062C\u0648 \u0646\u0627\u0644\u0648",
   "profile.shopNameLabel": "\u062F\u0648\u06AA\u0627\u0646 \u062C\u0648 \u0646\u0627\u0644\u0648",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638 \u06AA\u0631\u064A\u0648",
   "profile.saved": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638 \u067F\u064A\u0648",
   "profile.saveError": "\u062A\u0648\u0647\u0627\u0646 \u062C\u0648 \u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638 \u0646\u0647 \u067F\u064A \u0633\u06AF\u0647\u064A\u0648\u060C \u0645\u0647\u0631\u0628\u0627\u0646\u064A \u06AA\u0631\u064A \u067B\u064A\u0647\u0631 \u06AA\u0648\u0634\u0634 \u06AA\u0631\u064A\u0648",
@@ -6914,6 +7542,18 @@ var sd_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -6964,7 +7604,18 @@ var sd_default = {
   "marketplace.artisanSummaryTitle": "\u06AA\u0627\u0631\u06AF\u0631 \u0628\u0627\u0628\u062A",
   "marketplace.artisanProductCount": "{n} \u067E\u0631\u0648\u068A\u06AA\u067D\u0633 KalaSetu \u062A\u064A \u0644\u0633\u067D \u067F\u064A\u0644",
   "marketplace.inquiryTitle": "\u0647\u0646 \u067E\u0631\u0648\u068A\u06AA\u067D \u06FE \u062F\u0644\u0686\u0633\u067E\u064A \u0622\u0647\u064A\u061F",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u06AA\u0627\u0631\u06AF\u0631 \u06A9\u064A \u067B\u068C\u0627\u064A\u0648 \u062A\u0647 \u062A\u0648\u0647\u0627\u0646 \u0687\u0627 \u0686\u0627\u0647\u064A\u0648 \u067F\u0627: \u0645\u0642\u062F\u0627\u0631\u060C \u062D\u0633\u0628 \u0636\u0631\u0648\u0631\u062A\u060C \u067E\u0647\u0686\u0627\u0626\u06BB \u062C\u0648 \u0648\u0642\u062A...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0627\u0646\u06AA\u0648\u0627\u0626\u0631\u064A \u0645\u0648\u06AA\u0644\u0648",
   "marketplace.inquirySent": "\u062A\u0648\u0647\u0627\u0646 \u062C\u064A \u0627\u0646\u06AA\u0648\u0627\u0626\u0631\u064A \u0645\u0648\u06AA\u0644\u064A \u0648\u0626\u064A \u0622\u0647\u064A. \u06AA\u0627\u0631\u06AF\u0631 \u062A\u0648\u0647\u0627\u0646 \u0633\u0627\u0646 \u0631\u0627\u0628\u0637\u0648 \u06AA\u0646\u062F\u0648.",
   "marketplace.inquiryError": "\u0627\u0646\u06AA\u0648\u0627\u0626\u0631\u064A \u0645\u0648\u06AA\u0644\u06BB \u06FE \u0646\u0627\u06AA\u0627\u0645\u060C \u0645\u0647\u0631\u0628\u0627\u0646\u064A \u06AA\u0631\u064A \u067B\u064A\u0647\u0631 \u06AA\u0648\u0634\u0634 \u06AA\u0631\u064A\u0648",
@@ -6978,6 +7629,7 @@ var sd_default = {
   "marketplace.inquiryProductRemoved": "\u06BE\u064A \u067E\u0631\u0627\u068A\u06AA\u067D \u06BE\u0627\u06BB\u064A \u062F\u0633\u062A\u064A\u0627\u0628 \u0646\u0627\u06BE\u064A",
   "marketplace.inquiryStatusOpen": "\u062C\u0648\u0627\u0628 \u062C\u064A \u0627\u0646\u062A\u0638\u0627\u0631",
   "marketplace.inquiryStatusClosed": "\u0628\u0646\u062F",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -7152,6 +7804,10 @@ var ta_default = {
   "profile.loadError": "\u0B9A\u0BC1\u0BAF\u0BB5\u0BBF\u0BB5\u0BB0\u0BA4\u0BCD\u0BA4\u0BC8 \u0B8F\u0BB1\u0BCD\u0BB1 \u0BAE\u0BC1\u0B9F\u0BBF\u0BAF\u0BB5\u0BBF\u0BB2\u0BCD\u0BB2\u0BC8",
   "profile.displayNameLabel": "\u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BAA\u0BC6\u0BAF\u0BB0\u0BCD",
   "profile.shopNameLabel": "\u0B95\u0B9F\u0BC8 \u0BAA\u0BC6\u0BAF\u0BB0\u0BCD",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u0B9A\u0BC1\u0BAF\u0BB5\u0BBF\u0BB5\u0BB0\u0BA4\u0BCD\u0BA4\u0BC8 \u0B9A\u0BC7\u0BAE\u0BBF",
   "profile.saved": "\u0B9A\u0BC1\u0BAF\u0BB5\u0BBF\u0BB5\u0BB0\u0BAE\u0BCD \u0B9A\u0BC7\u0BAE\u0BBF\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
   "profile.saveError": "\u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0B9A\u0BC1\u0BAF\u0BB5\u0BBF\u0BB5\u0BB0\u0BA4\u0BCD\u0BA4\u0BC8 \u0B9A\u0BC7\u0BAE\u0BBF\u0B95\u0BCD\u0B95 \u0BAE\u0BC1\u0B9F\u0BBF\u0BAF\u0BB5\u0BBF\u0BB2\u0BCD\u0BB2\u0BC8, \u0BAE\u0BC0\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD \u0BAE\u0BC1\u0BAF\u0BB1\u0BCD\u0B9A\u0BBF\u0B95\u0BCD\u0B95\u0BB5\u0BC1\u0BAE\u0BCD",
@@ -7183,6 +7839,18 @@ var ta_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -7233,7 +7901,18 @@ var ta_default = {
   "marketplace.artisanSummaryTitle": "\u0B95\u0BC8\u0BB5\u0BBF\u0BA9\u0BC8\u0BAF\u0BBE\u0BB3\u0BB0\u0BCD \u0BAA\u0BB1\u0BCD\u0BB1\u0BBF",
   "marketplace.artisanProductCount": "{n} \u0BAA\u0BCA\u0BB0\u0BC1\u0B9F\u0BCD\u0B95\u0BB3\u0BCD KalaSetu-\u0BB2\u0BCD \u0BAA\u0B9F\u0BCD\u0B9F\u0BBF\u0BAF\u0BB2\u0BBF\u0B9F\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BC1\u0BB3\u0BCD\u0BB3\u0BA9",
   "marketplace.inquiryTitle": "\u0B87\u0BA8\u0BCD\u0BA4\u0BAA\u0BCD \u0BAA\u0BCA\u0BB0\u0BC1\u0BB3\u0BBF\u0BB2\u0BCD \u0B86\u0BB0\u0BCD\u0BB5\u0BAE\u0BBE?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0BA8\u0BC0\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BA4\u0BC7\u0B9F\u0BC1\u0B95\u0BBF\u0BB1\u0BA4\u0BC8 \u0B95\u0BC8\u0BB5\u0BBF\u0BA9\u0BC8\u0BAF\u0BBE\u0BB3\u0BB0\u0BC1\u0B95\u0BCD\u0B95\u0BC1 \u0B9A\u0BCA\u0BB2\u0BCD\u0BB2\u0BC1\u0B99\u0BCD\u0B95\u0BB3\u0BCD: \u0B85\u0BB3\u0BB5\u0BC1, \u0BA4\u0BA9\u0BBF\u0BAA\u0BCD\u0BAA\u0BAF\u0BA9\u0BCD, \u0BB5\u0BBF\u0BA8\u0BBF\u0BAF\u0BCB\u0B95 \u0B95\u0BBE\u0BB2\u0BAE\u0BCD...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0BB5\u0BBF\u0BA9\u0BB5\u0BB2\u0BC8 \u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1",
   "marketplace.inquirySent": "\u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BB5\u0BBF\u0BA9\u0BB5\u0BB2\u0BCD \u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1. \u0B95\u0BC8\u0BB5\u0BBF\u0BA9\u0BC8\u0BAF\u0BBE\u0BB3\u0BB0\u0BCD \u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BC8\u0BA4\u0BCD \u0BA4\u0BCA\u0B9F\u0BB0\u0BCD\u0BAA\u0BC1 \u0B95\u0BCA\u0BB3\u0BCD\u0BB5\u0BBE\u0BB0\u0BCD.",
   "marketplace.inquiryError": "\u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BB5\u0BBF\u0BA9\u0BB5\u0BB2\u0BC8 \u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA \u0BAE\u0BC1\u0B9F\u0BBF\u0BAF\u0BB5\u0BBF\u0BB2\u0BCD\u0BB2\u0BC8, \u0BAE\u0BC0\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD \u0BAE\u0BC1\u0BAF\u0BB1\u0BCD\u0B9A\u0BBF\u0B95\u0BCD\u0B95\u0BB5\u0BC1\u0BAE\u0BCD",
@@ -7247,6 +7926,7 @@ var ta_default = {
   "marketplace.inquiryProductRemoved": "\u0B87\u0BA8\u0BCD\u0BA4 \u0BA4\u0BAF\u0BBE\u0BB0\u0BBF\u0BAA\u0BCD\u0BAA\u0BC1 \u0B87\u0BA9\u0BBF \u0B95\u0BBF\u0B9F\u0BC8\u0B95\u0BCD\u0B95\u0BBE\u0BA4\u0BC1",
   "marketplace.inquiryStatusOpen": "\u0BAA\u0BA4\u0BBF\u0BB2\u0BCD \u0B95\u0BBE\u0BA4\u0BCD\u0BA4\u0BBF\u0BB0\u0BC1\u0B95\u0BCD\u0B95\u0BBF\u0BB1\u0BA4\u0BC1",
   "marketplace.inquiryStatusClosed": "\u0BAE\u0BC2\u0B9F\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -7421,6 +8101,10 @@ var te_default = {
   "profile.loadError": "\u0C2E\u0C40 \u0C2A\u0C4D\u0C30\u0C4A\u0C2B\u0C48\u0C32\u0C4D \u0C32\u0C4B\u0C21\u0C4D \u0C1A\u0C47\u0C2F\u0C32\u0C47\u0C15\u0C2A\u0C4B\u0C2F\u0C3E\u0C02",
   "profile.displayNameLabel": "\u0C2E\u0C40 \u0C2A\u0C47\u0C30\u0C41",
   "profile.shopNameLabel": "\u0C26\u0C41\u0C15\u0C3E\u0C23 \u0C2A\u0C47\u0C30\u0C41",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u0C2A\u0C4D\u0C30\u0C4A\u0C2B\u0C48\u0C32\u0C4D \u0C38\u0C47\u0C35\u0C4D \u0C1A\u0C47\u0C2F\u0C02\u0C21\u0C3F",
   "profile.saved": "\u0C2A\u0C4D\u0C30\u0C4A\u0C2B\u0C48\u0C32\u0C4D \u0C38\u0C47\u0C35\u0C4D \u0C05\u0C2F\u0C3F\u0C02\u0C26\u0C3F",
   "profile.saveError": "\u0C2A\u0C4D\u0C30\u0C4A\u0C2B\u0C48\u0C32\u0C4D \u0C38\u0C47\u0C35\u0C4D \u0C1A\u0C47\u0C2F\u0C32\u0C47\u0C15\u0C2A\u0C4B\u0C2F\u0C3E\u0C02, \u0C2E\u0C33\u0C4D\u0C32\u0C40 \u0C2A\u0C4D\u0C30\u0C2F\u0C24\u0C4D\u0C28\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F",
@@ -7452,6 +8136,18 @@ var te_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -7502,7 +8198,18 @@ var te_default = {
   "marketplace.artisanSummaryTitle": "\u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C41\u0C21\u0C3F \u0C17\u0C41\u0C30\u0C3F\u0C02\u0C1A\u0C3F",
   "marketplace.artisanProductCount": "KalaSetu \u0C32\u0C4B {n} \u0C09\u0C24\u0C4D\u0C2A\u0C24\u0C4D\u0C24\u0C41\u0C32\u0C41",
   "marketplace.inquiryTitle": "\u0C08 \u0C09\u0C24\u0C4D\u0C2A\u0C24\u0C4D\u0C24\u0C3F\u0C32\u0C4B \u0C06\u0C38\u0C15\u0C4D\u0C24\u0C3F \u0C09\u0C02\u0C26\u0C3E?",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C41\u0C21\u0C3F\u0C15\u0C3F \u0C2E\u0C40\u0C30\u0C41 \u0C0F\u0C2E\u0C3F \u0C15\u0C3E\u0C35\u0C3E\u0C32\u0C4B \u0C1A\u0C46\u0C2A\u0C4D\u0C2A\u0C02\u0C21\u0C3F: \u0C2A\u0C30\u0C3F\u0C2E\u0C3E\u0C23\u0C02, \u0C05\u0C28\u0C41\u0C15\u0C42\u0C32\u0C40\u0C15\u0C30\u0C23, \u0C21\u0C46\u0C32\u0C3F\u0C35\u0C30\u0C40 \u0C38\u0C2E\u0C2F\u0C02...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0C35\u0C3F\u0C28\u0C24\u0C3F \u0C2A\u0C02\u0C2A\u0C02\u0C21\u0C3F",
   "marketplace.inquirySent": "\u0C2E\u0C40 \u0C35\u0C3F\u0C28\u0C24\u0C3F \u0C2A\u0C02\u0C2A\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F. \u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C41\u0C21\u0C41 \u0C2E\u0C40\u0C24\u0C4B \u0C38\u0C02\u0C2A\u0C4D\u0C30\u0C26\u0C3F\u0C38\u0C4D\u0C24\u0C3E\u0C30\u0C41.",
   "marketplace.inquiryError": "\u0C35\u0C3F\u0C28\u0C24\u0C3F \u0C2A\u0C02\u0C2A\u0C32\u0C47\u0C15\u0C2A\u0C4B\u0C2F\u0C3E\u0C02, \u0C26\u0C2F\u0C1A\u0C47\u0C38\u0C3F \u0C2E\u0C33\u0C4D\u0C32\u0C40 \u0C2A\u0C4D\u0C30\u0C2F\u0C24\u0C4D\u0C28\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F",
@@ -7516,6 +8223,7 @@ var te_default = {
   "marketplace.inquiryProductRemoved": "\u0C08 \u0C09\u0C24\u0C4D\u0C2A\u0C24\u0C4D\u0C24\u0C3F \u0C07\u0C15 \u0C05\u0C02\u0C26\u0C41\u0C2C\u0C3E\u0C1F\u0C41\u0C32\u0C4B \u0C32\u0C47\u0C26\u0C41",
   "marketplace.inquiryStatusOpen": "\u0C2A\u0C4D\u0C30\u0C24\u0C3F\u0C38\u0C4D\u0C2A\u0C02\u0C26\u0C28 \u0C15\u0C4B\u0C38\u0C02 \u0C35\u0C47\u0C1A\u0C3F\u0C35\u0C41\u0C02\u0C26\u0C3F",
   "marketplace.inquiryStatusClosed": "\u0C2E\u0C42\u0C38\u0C3F\u0C35\u0C47\u0C2F\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -7690,6 +8398,10 @@ var ur_default = {
   "profile.loadError": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0644\u0648\u0688 \u0646\u06C1\u06CC\u06BA \u06C1\u0648 \u0633\u06A9\u0627",
   "profile.displayNameLabel": "\u0622\u067E \u06A9\u0627 \u0646\u0627\u0645",
   "profile.shopNameLabel": "\u062F\u06A9\u0627\u0646 \u06A9\u0627 \u0646\u0627\u0645",
+  "profile.whatsappLabel": "WhatsApp number (optional)",
+  "profile.whatsappPlaceholder": "e.g. 98765 43210",
+  "profile.whatsappNote": "Buyers will see a WhatsApp button on your listings if you add this.",
+  "profile.whatsappInvalid": "Enter a valid phone number",
   "profile.save": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638 \u06A9\u0631\u06CC\u06BA",
   "profile.saved": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638 \u06C1\u0648 \u06AF\u06CC\u0627",
   "profile.saveError": "\u067E\u0631\u0648\u0641\u0627\u0626\u0644 \u0645\u062D\u0641\u0648\u0638 \u0646\u06C1\u06CC\u06BA \u06C1\u0648 \u0633\u06A9\u0627\u060C \u062F\u0648\u0628\u0627\u0631\u06C1 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u06CC\u06BA",
@@ -7721,6 +8433,18 @@ var ur_default = {
   "pricing.overchargeBannerBody": "Suggested range: \u20B9{min}\u2013\u20B9{max}. You can still list at this price, buyers will see the same note.",
   "pricing.priceNoteBadge": "Pricing note",
   "home.viewAnalytics": "View analytics",
+  "home.viewInquiries": "Inquiries",
+  "inquiries.title": "Inquiries",
+  "inquiries.loadError": "Could not load your inquiries",
+  "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
+  "inquiries.badgeNew": "New",
+  "inquiries.badgeResponded": "Responded",
+  "inquiries.quantityLine": "Quantity interested in: {n}",
+  "inquiries.contactLine": "Preferred contact: {preference} ({value})",
+  "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
+  "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
+  "inquiries.markResponded": "Mark as responded",
+  "inquiries.close": "Close inquiry",
   "analytics.backToShop": "My Shop",
   "analytics.title": "Analytics",
   "analytics.loadError": "Could not load your analytics",
@@ -7771,7 +8495,18 @@ var ur_default = {
   "marketplace.artisanSummaryTitle": "\u0641\u0646\u06A9\u0627\u0631 \u06A9\u06D2 \u0628\u0627\u0631\u06D2 \u0645\u06CC\u06BA",
   "marketplace.artisanProductCount": "{n} \u067E\u0631\u0648\u0688\u06A9\u0679\u0633 KalaSetu \u067E\u0631 \u062F\u0631\u062C \u06C1\u06CC\u06BA",
   "marketplace.inquiryTitle": "\u06A9\u06CC\u0627 \u0622\u067E \u0627\u0633 \u067E\u0631\u0648\u0688\u06A9\u0679 \u0645\u06CC\u06BA \u062F\u0644\u0686\u0633\u067E\u06CC \u0631\u06A9\u06BE\u062A\u06D2 \u06C1\u06CC\u06BA\u061F",
+  "marketplace.inquirySubtitle": "Send a message to the artisan, or reach out on WhatsApp above.",
   "marketplace.inquiryPlaceholder": "\u0641\u0646\u06A9\u0627\u0631 \u06A9\u0648 \u0628\u062A\u0627\u0626\u06CC\u06BA \u06A9\u06C1 \u0622\u067E \u06A9\u06CC\u0627 \u0686\u0627\u06C1\u062A\u06D2 \u06C1\u06CC\u06BA: \u0645\u0642\u062F\u0627\u0631\u060C \u062A\u062E\u0635\u06CC\u0635\u060C \u0688\u06CC\u0644\u06CC\u0648\u0631\u06CC \u06A9\u0627 \u0648\u0642\u062A...",
+  "marketplace.inquiryQuantityLabel": "Quantity interested in",
+  "marketplace.inquiryQuantityPlaceholder": "e.g. 2",
+  "marketplace.contactPreferenceLabel": "How should the artisan reach you?",
+  "marketplace.contactPreference.email": "Email",
+  "marketplace.contactPreference.phone": "Phone",
+  "marketplace.contactPreference.whatsapp": "WhatsApp",
+  "marketplace.contactValueLabel": "Your number",
+  "marketplace.contactValuePlaceholder": "e.g. 98765 43210",
+  "marketplace.whatsappButton": "Message on WhatsApp",
+  "marketplace.whatsappPrefill": "Hi! I'm interested in {product} ({passportId}) on KalaSetu.",
   "marketplace.inquirySend": "\u0627\u0633\u062A\u0641\u0633\u0627\u0631 \u0628\u06BE\u06CC\u062C\u06CC\u06BA",
   "marketplace.inquirySent": "\u0622\u067E \u06A9\u0627 \u0627\u0633\u062A\u0641\u0633\u0627\u0631 \u0628\u06BE\u06CC\u062C \u062F\u06CC\u0627 \u06AF\u06CC\u0627 \u06C1\u06D2\u06D4 \u0641\u0646\u06A9\u0627\u0631 \u0622\u067E \u0633\u06D2 \u0631\u0627\u0628\u0637\u06C1 \u06A9\u0631\u06D2 \u06AF\u0627\u06D4",
   "marketplace.inquiryError": "\u0627\u0633\u062A\u0641\u0633\u0627\u0631 \u0646\u06C1\u06CC\u06BA \u0628\u06BE\u06CC\u062C \u0633\u06A9\u0627\u060C \u062F\u0648\u0628\u0627\u0631\u06C1 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u06CC\u06BA",
@@ -7785,6 +8520,7 @@ var ur_default = {
   "marketplace.inquiryProductRemoved": "\u06CC\u06C1 \u0645\u0635\u0646\u0648\u0639\u0627\u062A \u0627\u0628 \u062F\u0633\u062A\u06CC\u0627\u0628 \u0646\u06C1\u06CC\u06BA \u06C1\u06D2",
   "marketplace.inquiryStatusOpen": "\u062C\u0648\u0627\u0628 \u06A9\u0627 \u0627\u0646\u062A\u0638\u0627\u0631",
   "marketplace.inquiryStatusClosed": "\u0628\u0646\u062F",
+  "marketplace.inquiryResponded": "Artisan responded",
   "heritage.title": "A few more details (optional)",
   "heritage.subtitle": "These help tell your product's story on its Heritage Passport. Skip anything you're not sure about.",
   "heritage.techniqueLabel": "Technique",
@@ -8153,7 +8889,12 @@ router4.get(
       res.status(404).json({ error: "Product not found" });
       return;
     }
-    const { data: artisan, error: artisanError } = await supabase.from("users").select("id, shop_name, display_name, region, total_products").eq("id", product.user_id).maybeSingle();
+    let { data: artisan, error: artisanError } = await supabase.from("users").select("id, shop_name, display_name, region, whatsapp_number, total_products").eq("id", product.user_id).maybeSingle();
+    if (artisanError?.code === "42703") {
+      const fallback = await supabase.from("users").select("id, shop_name, display_name, region, total_products").eq("id", product.user_id).maybeSingle();
+      artisan = fallback.data ? { ...fallback.data, whatsapp_number: null } : null;
+      artisanError = fallback.error;
+    }
     if (artisanError) throw new Error(`Could not load the artisan profile: ${artisanError.message}`);
     const result = {
       ...toProduct(product),
@@ -8162,6 +8903,7 @@ router4.get(
         shopName: artisan?.shop_name ?? null,
         displayName: artisan?.display_name ?? null,
         region: artisan?.region ?? null,
+        whatsappNumber: artisan?.whatsapp_number ?? null,
         totalProducts: artisan?.total_products ?? 0
       }
     };
@@ -8930,41 +9672,64 @@ var pricing_default = router8;
 import { Router as Router9 } from "express";
 import { z as z10 } from "zod";
 var router9 = Router9();
-var INQUIRY_COLUMNS = "id, product_id, buyer_id, artisan_id, message, status, created_at";
-function toInquiry(row, product) {
+var INQUIRY_COLUMNS = "id, product_id, buyer_id, artisan_id, message, quantity, contact_preference, contact_value, status, read_at, responded_at, notified_at, created_at";
+function toInquiry(row, product, buyerEmail) {
   return {
     inquiryId: row.id,
     productId: row.product_id,
     buyerId: row.buyer_id,
+    buyerEmail,
     artisanId: row.artisan_id,
     message: row.message,
+    quantity: row.quantity,
+    contactPreference: row.contact_preference ?? "email",
+    contactValue: row.contact_value,
     status: row.status,
+    readAt: row.read_at,
+    respondedAt: row.responded_at,
+    notifiedAt: row.notified_at,
     createdAt: row.created_at,
     product
   };
 }
-async function attachProducts(rows) {
+async function enrichInquiries(rows) {
+  if (rows.length === 0) return [];
   const productIds = [...new Set(rows.map((row) => row.product_id))];
-  if (productIds.length === 0) return rows.map((row) => toInquiry(row, null));
-  const { data, error } = await getSupabase().from("products").select("id, title_en, title_local, local_language, image_url, price").in("id", productIds);
-  if (error) throw new Error(`Could not load inquiry products: ${error.message}`);
-  const byId = new Map(
-    (data ?? []).map((product) => [
+  const buyerIds = [...new Set(rows.map((row) => row.buyer_id))];
+  const supabase = getSupabase();
+  const [productsResult, buyersResult] = await Promise.all([
+    supabase.from("products").select("id, title_en, title_local, local_language, image_url, price, passport_id").in("id", productIds),
+    supabase.from("users").select("id, email").in("id", buyerIds)
+  ]);
+  if (productsResult.error) throw new Error(`Could not load inquiry products: ${productsResult.error.message}`);
+  if (buyersResult.error) throw new Error(`Could not load inquiry buyers: ${buyersResult.error.message}`);
+  const productById = new Map(
+    (productsResult.data ?? []).map((product) => [
       product.id,
       {
         titleEn: product.title_en,
         titleLocal: product.title_local,
         localLanguage: product.local_language,
         imageUrl: product.image_url,
-        price: Number(product.price)
+        price: Number(product.price),
+        passportId: product.passport_id
       }
     ])
   );
-  return rows.map((row) => toInquiry(row, byId.get(row.product_id) ?? null));
+  const emailByBuyerId = new Map((buyersResult.data ?? []).map((buyer) => [buyer.id, buyer.email]));
+  return rows.map(
+    (row) => toInquiry(row, productById.get(row.product_id) ?? null, emailByBuyerId.get(row.buyer_id) ?? null)
+  );
 }
 var CreateInquirySchema = z10.object({
   productId: z10.string().uuid(),
-  message: z10.string().min(1).max(2e3)
+  message: z10.string().min(1).max(2e3),
+  quantity: z10.number().int().positive().optional(),
+  contactPreference: z10.enum(["email", "phone", "whatsapp"]),
+  contactValue: z10.string().trim().min(1).max(40).optional()
+}).refine((data) => data.contactPreference === "email" || Boolean(data.contactValue), {
+  message: "Enter a phone number for this contact preference",
+  path: ["contactValue"]
 });
 router9.post(
   "/",
@@ -8977,20 +9742,51 @@ router9.post(
       return;
     }
     const supabase = getSupabase();
-    const { data: product, error: productError } = await supabase.from("products").select("id, user_id, status, flagged").eq("id", parsed.data.productId).maybeSingle();
+    const { data: product, error: productError } = await supabase.from("products").select("id, user_id, status, flagged, title_en, image_url, passport_id").eq("id", parsed.data.productId).maybeSingle();
     if (productError) throw new Error(`Could not look up the product: ${productError.message}`);
     if (!product || product.status !== "published" || product.flagged) {
       res.status(404).json({ error: "Product not found" });
       return;
     }
-    const { data, error } = await supabase.from("inquiries").insert({
+    const { data: inserted, error } = await supabase.from("inquiries").insert({
       product_id: product.id,
       buyer_id: req.uid,
       artisan_id: product.user_id,
-      message: parsed.data.message
+      message: parsed.data.message,
+      quantity: parsed.data.quantity ?? null,
+      contact_preference: parsed.data.contactPreference,
+      contact_value: parsed.data.contactValue ?? null
     }).select("id").single();
     if (error) throw new Error(`Could not create the inquiry: ${error.message}`);
-    res.status(201).json({ inquiryId: data.id });
+    const [artisanResult, buyerResult] = await Promise.all([
+      supabase.from("users").select("email").eq("id", product.user_id).maybeSingle(),
+      supabase.from("users").select("email").eq("id", req.uid).maybeSingle()
+    ]);
+    let emailDelivered = false;
+    if (artisanResult.data?.email && buyerResult.data?.email) {
+      const env = loadEnv();
+      const mailResult = await sendInquiryEmail({
+        artisanEmail: artisanResult.data.email,
+        productTitle: product.title_en,
+        productImageUrl: product.image_url,
+        passportId: product.passport_id,
+        buyerMessage: parsed.data.message,
+        quantity: parsed.data.quantity ?? null,
+        contactPreference: parsed.data.contactPreference,
+        contactValue: parsed.data.contactValue ?? null,
+        buyerEmail: buyerResult.data.email,
+        inboxUrl: `${env.PUBLIC_APP_URL}/inquiries`
+      });
+      emailDelivered = mailResult.delivered;
+      if (emailDelivered) {
+        await supabase.from("inquiries").update({ notified_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", inserted.id);
+      }
+    } else {
+      console.warn("[inquiries] could not resolve an email address for the artisan or buyer, skipping notification", {
+        inquiryId: inserted.id
+      });
+    }
+    res.status(201).json({ inquiryId: inserted.id, emailDelivered });
   })
 );
 router9.get(
@@ -9000,7 +9796,7 @@ router9.get(
   asyncRoute(async (req, res) => {
     const { data, error } = await getSupabase().from("inquiries").select(INQUIRY_COLUMNS).eq("buyer_id", req.uid).order("created_at", { ascending: false });
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
-    res.json(await attachProducts(data));
+    res.json(await enrichInquiries(data));
   })
 );
 router9.get(
@@ -9008,9 +9804,18 @@ router9.get(
   requireAuth,
   requireRole("artisan"),
   asyncRoute(async (req, res) => {
-    const { data, error } = await getSupabase().from("inquiries").select(INQUIRY_COLUMNS).eq("artisan_id", req.uid).order("created_at", { ascending: false });
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("inquiries").select(INQUIRY_COLUMNS).eq("artisan_id", req.uid).order("created_at", { ascending: false });
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
-    res.json(await attachProducts(data));
+    const rows = data;
+    const unreadIds = rows.filter((row) => !row.read_at).map((row) => row.id);
+    if (unreadIds.length > 0) {
+      const { error: readError } = await supabase.from("inquiries").update({ read_at: (/* @__PURE__ */ new Date()).toISOString() }).in("id", unreadIds);
+      if (readError) {
+        console.warn("[inquiries] could not mark inquiries as read", { message: readError.message });
+      }
+    }
+    res.json(await enrichInquiries(rows));
   })
 );
 var CloseInquirySchema = z10.object({
@@ -9026,6 +9831,20 @@ router9.patch(
       return;
     }
     const { data, error } = await getSupabase().from("inquiries").update({ status: parsed.data.status }).eq("id", req.params.id).or(`buyer_id.eq.${req.uid},artisan_id.eq.${req.uid}`).select("id");
+    if (error) throw new Error(`Could not update the inquiry: ${error.message}`);
+    if (!data || data.length === 0) {
+      res.status(404).json({ error: "Inquiry not found" });
+      return;
+    }
+    res.json({ success: true });
+  })
+);
+router9.patch(
+  "/:id/responded",
+  requireAuth,
+  requireRole("artisan"),
+  asyncRoute(async (req, res) => {
+    const { data, error } = await getSupabase().from("inquiries").update({ responded_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", req.params.id).eq("artisan_id", req.uid).select("id");
     if (error) throw new Error(`Could not update the inquiry: ${error.message}`);
     if (!data || data.length === 0) {
       res.status(404).json({ error: "Inquiry not found" });

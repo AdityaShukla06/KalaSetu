@@ -12,6 +12,13 @@
   gap: var(--space-3);
 }
 
+.home-header-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
 .home-analytics-link {
   min-height: var(--hit-min);
   background: none;

@@ -39,6 +39,11 @@
   font-weight: 600;
 }
 
+.profile-whatsapp-note {
+  margin-top: calc(-1 * var(--space-2));
+  color: var(--color-text-muted);
+}
+
 .profile-relocalise {
   margin-top: var(--space-2);
 }

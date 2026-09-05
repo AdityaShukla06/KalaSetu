@@ -10,6 +10,7 @@ create table if not exists users (
   display_name   text,
   shop_name      text,
   region         text,
+  whatsapp_number text,
   language       text not null default 'en',
   role           text not null default 'artisan' check (role in ('artisan', 'buyer', 'admin')),
   is_active      boolean not null default true,
@@ -82,7 +83,13 @@ create table if not exists inquiries (
   buyer_id    uuid not null references users(id) on delete cascade,
   artisan_id  uuid not null references users(id) on delete cascade,
   message     text not null,
+  quantity    integer check (quantity is null or quantity > 0),
+  contact_preference text check (contact_preference in ('email', 'phone', 'whatsapp')),
+  contact_value text,
   status      text not null default 'open' check (status in ('open', 'closed')),
+  read_at      timestamptz,
+  responded_at timestamptz,
+  notified_at  timestamptz,
   created_at  timestamptz not null default now()
 );
 

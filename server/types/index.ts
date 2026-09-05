@@ -70,6 +70,7 @@ export interface ArtisanSummary {
   shopName: string | null;
   displayName: string | null;
   region: string | null;
+  whatsappNumber: string | null;
   totalProducts: number;
 }
 
@@ -82,6 +83,11 @@ export interface ProductWithViewCount extends Product {
 }
 
 export type InquiryStatus = "open" | "closed";
+export type InquiryContactPreference = "email" | "phone" | "whatsapp";
+
+export function isInquiryContactPreference(value: unknown): value is InquiryContactPreference {
+  return value === "email" || value === "phone" || value === "whatsapp";
+}
 
 export interface InquiryProductSummary {
   titleEn: string;
@@ -89,15 +95,23 @@ export interface InquiryProductSummary {
   localLanguage: string;
   imageUrl: string;
   price: number;
+  passportId: string;
 }
 
 export interface Inquiry {
   inquiryId: string;
   productId: string;
   buyerId: string;
+  buyerEmail: string | null;
   artisanId: string;
   message: string;
+  quantity: number | null;
+  contactPreference: InquiryContactPreference;
+  contactValue: string | null;
   status: InquiryStatus;
+  readAt: string | null;
+  respondedAt: string | null;
+  notifiedAt: string | null;
   createdAt: string;
   product: InquiryProductSummary | null;
 }
@@ -108,6 +122,7 @@ export interface UserProfile {
   displayName: string | null;
   shopName: string | null;
   region: string | null;
+  whatsappNumber: string | null;
   language: string;
   role: UserRole;
   totalProducts: number;

@@ -5,6 +5,7 @@ import { Input } from "../../components/Input";
 import { LanguageSelect } from "../../components/LanguageSelect";
 import { RegionSelect } from "../../components/RegionSelect";
 import { getMyProfile, updateMyProfile, relocaliseProducts, type UserProfile } from "../../services/api";
+import { isValidWhatsAppNumber } from "../../../shared/whatsapp";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Profile.css";
@@ -61,6 +62,8 @@ export function ProfileScreen() {
   const [displayName, setDisplayName] = useState("");
   const [shopName, setShopName] = useState("");
   const [region, setRegion] = useState("");
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [whatsappError, setWhatsappError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -76,6 +79,7 @@ export function ProfileScreen() {
       setDisplayName(result.displayName ?? "");
       setShopName(result.shopName ?? "");
       setRegion(result.region ?? "");
+      setWhatsappNumber(result.whatsappNumber ?? "");
       setState("loaded");
     } catch {
       setState("error");
@@ -120,9 +124,15 @@ export function ProfileScreen() {
     profile !== null &&
     (displayName.trim() !== (profile.displayName ?? "") ||
       shopName.trim() !== (profile.shopName ?? "") ||
-      region !== (profile.region ?? ""));
+      region !== (profile.region ?? "") ||
+      whatsappNumber.trim() !== (profile.whatsappNumber ?? ""));
 
   async function handleSave() {
+    if (whatsappNumber.trim() && !isValidWhatsAppNumber(whatsappNumber.trim())) {
+      setWhatsappError(true);
+      return;
+    }
+    setWhatsappError(false);
     setSaving(true);
     setSaveError(false);
     setSaved(false);
@@ -131,10 +141,17 @@ export function ProfileScreen() {
         displayName: displayName.trim(),
         shopName: shopName.trim(),
         region: region || undefined,
+        whatsappNumber: whatsappNumber.trim(),
       });
       setProfile((prev) =>
         prev
-          ? { ...prev, displayName: displayName.trim(), shopName: shopName.trim(), region: region || null }
+          ? {
+              ...prev,
+              displayName: displayName.trim(),
+              shopName: shopName.trim(),
+              region: region || null,
+              whatsappNumber: whatsappNumber.trim() || null,
+            }
           : prev,
       );
       setSaved(true);
@@ -210,6 +227,19 @@ export function ProfileScreen() {
                 setSaved(false);
               }}
             />
+            <Input
+              label={t("profile.whatsappLabel")}
+              type="tel"
+              placeholder={t("profile.whatsappPlaceholder")}
+              value={whatsappNumber}
+              error={whatsappError ? t("profile.whatsappInvalid") : undefined}
+              onChange={(event) => {
+                setWhatsappNumber(event.target.value);
+                setWhatsappError(false);
+                setSaved(false);
+              }}
+            />
+            <p className="caption profile-whatsapp-note">{t("profile.whatsappNote")}</p>
 
             {saveError && (
               <p className="onboarding-error" role="alert">

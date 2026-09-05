@@ -20,7 +20,13 @@ export type {
   MaterialCostStatus,
 } from "./api/pricing";
 export type { UserRole, SelfServeRole, VerifyOtpResult } from "./api/auth";
-export type { InquiryStatus, Inquiry, InquiryProductSummary } from "./api/inquiries";
+export type {
+  InquiryStatus,
+  InquiryContactPreference,
+  Inquiry,
+  InquiryProductSummary,
+  CreateInquiryInput,
+} from "./api/inquiries";
 export type {
   EnhanceResult,
   RemoveBackgroundResult,
@@ -58,7 +64,13 @@ export {
   getMarketplaceProduct,
 } from "./api/products";
 export { getMyProfile, updateMyProfile } from "./api/users";
-export { createInquiry, listMyInquiries, closeInquiry } from "./api/inquiries";
+export {
+  createInquiry,
+  listMyInquiries,
+  listReceivedInquiries,
+  closeInquiry,
+  markInquiryResponded,
+} from "./api/inquiries";
 export {
   getDashboardStats,
   listArtisans,

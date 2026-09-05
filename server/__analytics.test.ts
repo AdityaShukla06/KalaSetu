@@ -192,7 +192,7 @@ suite("view tracking and artisan analytics", () => {
     await fetch(`${base}/api/inquiries`, {
       method: "POST",
       headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, message: "Is this available in blue?" }),
+      body: JSON.stringify({ productId, message: "Is this available in blue?", contactPreference: "email" }),
     });
 
     const res = await fetch(`${base}/api/analytics/summary`, { headers: auth(artisan.token) });

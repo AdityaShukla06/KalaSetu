@@ -15,6 +15,7 @@ const envSchema = z
 
   RESEND_API_KEY: z.string().optional(),
   OTP_FROM_EMAIL: z.string().default("KalaSetu <onboarding@resend.dev>"),
+  PUBLIC_APP_URL: z.string().url().default("http://localhost:5173"),
 
   DEMO_FALLBACK_OTP: z.string().default("5741"),
   DEMO_FALLBACK_OTP_ENABLED: z

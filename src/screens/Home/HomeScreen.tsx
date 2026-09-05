@@ -101,9 +101,14 @@ export function HomeScreen() {
     <div className="screen home-screen">
       <div className="home-header-row">
         <h1>{t("home.title")}</h1>
-        <button type="button" className="home-analytics-link" onClick={() => navigate("/analytics")}>
-          {t("home.viewAnalytics")}
-        </button>
+        <div className="home-header-links">
+          <button type="button" className="home-analytics-link" onClick={() => navigate("/inquiries")}>
+            {t("home.viewInquiries")}
+          </button>
+          <button type="button" className="home-analytics-link" onClick={() => navigate("/analytics")}>
+            {t("home.viewAnalytics")}
+          </button>
+        </div>
       </div>
 
       <GemOndcBanner />
