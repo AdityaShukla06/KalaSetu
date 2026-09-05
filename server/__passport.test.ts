@@ -121,7 +121,6 @@ suite("heritage passport", () => {
     const { passportId } = await createProduct(artisan.token, {
       technique: "Hand-thrown on a potter's wheel",
       timeTaken: "3 days",
-      giTag: "",
       careInstructions: "Wipe with a dry cloth",
     });
 

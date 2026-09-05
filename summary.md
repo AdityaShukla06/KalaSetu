@@ -72,17 +72,16 @@ A separate, deliberately hidden part of the app for platform oversight, reachabl
 - Express API, deployed as a single Vercel serverless function.
 - Supabase (Postgres + file storage), with row-level security enabled on every table.
 - Groq (Whisper for speech, gpt-oss-120b for text) as the default AI provider, Gemini as a swappable fallback, remove.bg as the swappable background-removal provider.
-- Five schema migrations so far: multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), and the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story). The first four are live on the project's Supabase database; **the fifth, `supabase/migrations/005-heritage-passport.sql`, has not been run yet** and needs to be applied in the Supabase SQL Editor before product creation or the passport feature will work live.
+- Five schema migrations so far: multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), and the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story). All five are live on the project's Supabase database as of this writing.
 
 ## Testing
 
-- 231 automated tests (7 of them for the passport feature, currently skipping until migration 005 is applied) run against a real Supabase project, covering login, the full artisan publish flow, role and permission boundaries, the marketplace search and filters, the entire admin console (access control, deactivation, moderation, the audit trail), and the heritage passport (id format, public visibility rules, story stability).
+- 231 automated tests run against a real Supabase project, covering login, the full artisan publish flow, role and permission boundaries, the marketplace search and filters, the entire admin console (access control, deactivation, moderation, the audit trail), and the heritage passport (id format, public visibility rules, story stability).
 - A separate script checks the row-level security policies directly against Postgres, independent of the API.
 - Full lint and type checks pass across both the frontend and the server.
 
 ## What is deliberately not built yet
 
-- **Migration 005 has not been run against the live database yet.** `supabase/migrations/005-heritage-passport.sql` adds the passport columns and the passport-number function; until it's run in the Supabase dashboard, product creation itself will fail (it now always assigns a passport id), and the seven passport tests skip themselves rather than fail.
 - **The pricing overcharge check** that would auto-flag suspiciously priced listings (Section 6 of the original plan). The admin console's Flagged Listings screen is ready for it but has nothing to show until it exists.
 - **Multi-image galleries.** Each product still stores exactly one photo. The buyer-facing product page is built to show a gallery, but there's only ever one image in it today.
 - **An artisan-facing "resubmit" flow.** If an admin rejects a listing, it returns to draft with no listing UI on the artisan's side to see why or republish it; that data exists (the review reason is stored) but there's no screen for the artisan to read it yet.
