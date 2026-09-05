@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   GroqKeyPool,
   parseGroqApiKeys,
+  collectGroqApiKeys,
   isDailyQuotaMessage,
   retryAfterMsFromDetail,
   cooldownForDetail,
@@ -50,6 +51,48 @@ describe("parseGroqApiKeys", () => {
 
   it("works with only fallback keys set", () => {
     expect(parseGroqApiKeys(undefined, "gsk_two")).toEqual(["gsk_two"]);
+  });
+});
+
+describe("collectGroqApiKeys", () => {
+  it("reads the numbered slots in order after the primary key", () => {
+    expect(
+      collectGroqApiKeys({
+        GROQ_API_KEY: "gsk_one",
+        GROQ_API_KEY_2: "gsk_two",
+        GROQ_API_KEY_3: "gsk_three",
+      }),
+    ).toEqual(["gsk_one", "gsk_two", "gsk_three"]);
+  });
+
+  it("ignores slots left blank, so an unused slot costs nothing", () => {
+    expect(
+      collectGroqApiKeys({ GROQ_API_KEY: "gsk_one", GROQ_API_KEY_2: "  ", GROQ_API_KEY_3: "gsk_three" }),
+    ).toEqual(["gsk_one", "gsk_three"]);
+  });
+
+  it("merges the numbered slots with the comma separated list", () => {
+    expect(
+      collectGroqApiKeys({
+        GROQ_API_KEY: "gsk_one",
+        GROQ_API_KEY_2: "gsk_two",
+        GROQ_FALLBACK_API_KEYS: "gsk_four,gsk_five",
+      }),
+    ).toEqual(["gsk_one", "gsk_two", "gsk_four", "gsk_five"]);
+  });
+
+  it("does not count the same key twice across spellings", () => {
+    expect(
+      collectGroqApiKeys({
+        GROQ_API_KEY: "gsk_one",
+        GROQ_API_KEY_2: "gsk_two",
+        GROQ_FALLBACK_API_KEYS: "gsk_two",
+      }),
+    ).toEqual(["gsk_one", "gsk_two"]);
+  });
+
+  it("returns nothing when no key is set at all", () => {
+    expect(collectGroqApiKeys({})).toEqual([]);
   });
 });
 

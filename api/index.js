@@ -61,6 +61,10 @@ function loadEnv() {
 var DAILY_COOLDOWN_MS = 15 * 60 * 1e3;
 var SHORT_COOLDOWN_MS = 60 * 1e3;
 var MAX_COOLDOWN_MS = 60 * 60 * 1e3;
+function collectGroqApiKeys(env) {
+  const fallbacks = [env.GROQ_API_KEY_2, env.GROQ_API_KEY_3, env.GROQ_FALLBACK_API_KEYS].filter((value) => typeof value === "string" && value.trim() !== "").join(",");
+  return parseGroqApiKeys(env.GROQ_API_KEY, fallbacks);
+}
 function parseGroqApiKeys(primary, fallbacks) {
   const raw = [primary ?? "", ...(fallbacks ?? "").split(",")];
   const seen = /* @__PURE__ */ new Set();
@@ -124,7 +128,14 @@ var GroqKeyPool = class {
 
 // server/routes/health.ts
 var BASE_REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET"];
-var OPTIONAL_EXTRA = ["VOICE_AI_PROVIDER", "GROQ_API_KEY", "GROQ_FALLBACK_API_KEYS", "GEMINI_API_KEY"];
+var OPTIONAL_EXTRA = [
+  "VOICE_AI_PROVIDER",
+  "GROQ_API_KEY",
+  "GROQ_API_KEY_2",
+  "GROQ_API_KEY_3",
+  "GROQ_FALLBACK_API_KEYS",
+  "GEMINI_API_KEY"
+];
 var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED", ...OPTIONAL_EXTRA];
 var router = Router();
 function isSet(name) {
@@ -150,7 +161,7 @@ router.get("/", (_req, res) => {
       missing,
       provider,
       present: [.../* @__PURE__ */ new Set([...required, ...OPTIONAL])].filter(isSet),
-      groqKeys: parseGroqApiKeys(process.env.GROQ_API_KEY, process.env.GROQ_FALLBACK_API_KEYS).length,
+      groqKeys: collectGroqApiKeys(process.env).length,
       valid: configValid,
       ...configError ? { error: configError } : {}
     }
@@ -736,6 +747,8 @@ import { z as z4 } from "zod";
 var envSchema2 = z4.object({
   VOICE_AI_PROVIDER: z4.enum(["groq", "gemini"]).default("groq"),
   GROQ_API_KEY: z4.string().optional(),
+  GROQ_API_KEY_2: z4.string().optional(),
+  GROQ_API_KEY_3: z4.string().optional(),
   GROQ_FALLBACK_API_KEYS: z4.string().optional(),
   GROQ_STT_MODEL: z4.string().default("whisper-large-v3"),
   GROQ_LLM_MODEL: z4.string().default("openai/gpt-oss-120b"),
@@ -884,7 +897,7 @@ var GroqSttService = class {
   keyPool;
   model;
   constructor(env) {
-    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    const keys = collectGroqApiKeys(env);
     if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
@@ -1016,7 +1029,7 @@ var GroqTranslationService = class {
   model;
   fallbackModel;
   constructor(env) {
-    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    const keys = collectGroqApiKeys(env);
     if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
@@ -1116,7 +1129,7 @@ var GroqDescriptionService = class {
   model;
   fallbackModel;
   constructor(env) {
-    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    const keys = collectGroqApiKeys(env);
     if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }

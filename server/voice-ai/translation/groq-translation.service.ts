@@ -2,7 +2,7 @@ import { TranslationService, SupportedLanguageCode, SUPPORTED_LANGUAGES } from "
 import { TranslationFailedError, MalformedModelResponseError } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
 import { groqChat } from "../groq/chat";
-import { GroqKeyPool, parseGroqApiKeys } from "../groq/keyPool";
+import { GroqKeyPool, collectGroqApiKeys } from "../groq/keyPool";
 
 export class GroqTranslationService implements TranslationService {
   private readonly keyPool: GroqKeyPool;
@@ -11,9 +11,9 @@ export class GroqTranslationService implements TranslationService {
 
   constructor(
     env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_LLM_MODEL" | "GROQ_LLM_FALLBACK_MODEL"> &
-      Partial<Pick<VoiceAiEnv, "GROQ_FALLBACK_API_KEYS">>,
+      Partial<Pick<VoiceAiEnv, "GROQ_API_KEY_2" | "GROQ_API_KEY_3" | "GROQ_FALLBACK_API_KEYS">>,
   ) {
-    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    const keys = collectGroqApiKeys(env);
     if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }

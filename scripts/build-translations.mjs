@@ -7,7 +7,12 @@ const MODEL = process.env.GROQ_LLM_MODEL || "openai/gpt-oss-120b";
 const BATCH = 12;
 const PACE_MS = 9000;
 
-const API_KEYS = [process.env.GROQ_API_KEY ?? "", ...(process.env.GROQ_FALLBACK_API_KEYS ?? "").split(",")]
+const API_KEYS = [
+  process.env.GROQ_API_KEY ?? "",
+  process.env.GROQ_API_KEY_2 ?? "",
+  process.env.GROQ_API_KEY_3 ?? "",
+  ...(process.env.GROQ_FALLBACK_API_KEYS ?? "").split(","),
+]
   .map((key) => key.trim())
   .filter((key, index, all) => key && all.indexOf(key) === index);
 

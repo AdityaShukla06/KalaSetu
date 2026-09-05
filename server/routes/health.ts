@@ -1,9 +1,16 @@
 import { Router } from "express";
 import { loadEnv } from "../lib/env";
-import { parseGroqApiKeys } from "../voice-ai/groq/keyPool";
+import { collectGroqApiKeys } from "../voice-ai/groq/keyPool";
 
 const BASE_REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET"];
-const OPTIONAL_EXTRA = ["VOICE_AI_PROVIDER", "GROQ_API_KEY", "GROQ_FALLBACK_API_KEYS", "GEMINI_API_KEY"];
+const OPTIONAL_EXTRA = [
+  "VOICE_AI_PROVIDER",
+  "GROQ_API_KEY",
+  "GROQ_API_KEY_2",
+  "GROQ_API_KEY_3",
+  "GROQ_FALLBACK_API_KEYS",
+  "GEMINI_API_KEY",
+];
 const OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED", ...OPTIONAL_EXTRA];
 
 const router = Router();
@@ -35,7 +42,7 @@ router.get("/", (_req, res) => {
       missing,
       provider,
       present: [...new Set([...required, ...OPTIONAL])].filter(isSet),
-      groqKeys: parseGroqApiKeys(process.env.GROQ_API_KEY, process.env.GROQ_FALLBACK_API_KEYS).length,
+      groqKeys: collectGroqApiKeys(process.env).length,
       valid: configValid,
       ...(configError ? { error: configError } : {}),
     },

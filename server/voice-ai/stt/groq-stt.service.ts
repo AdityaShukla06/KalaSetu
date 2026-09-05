@@ -9,7 +9,7 @@ import {
   MalformedModelResponseError,
 } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
-import { GroqKeyPool, parseGroqApiKeys } from "../groq/keyPool";
+import { GroqKeyPool, collectGroqApiKeys } from "../groq/keyPool";
 import { normaliseAudioMimeType, extensionForAudio } from "./audio-mime";
 
 const GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
@@ -55,9 +55,9 @@ export class GroqSttService implements SpeechToTextService {
 
   constructor(
     env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_STT_MODEL"> &
-      Partial<Pick<VoiceAiEnv, "GROQ_FALLBACK_API_KEYS">>,
+      Partial<Pick<VoiceAiEnv, "GROQ_API_KEY_2" | "GROQ_API_KEY_3" | "GROQ_FALLBACK_API_KEYS">>,
   ) {
-    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    const keys = collectGroqApiKeys(env);
     if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }

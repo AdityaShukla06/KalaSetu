@@ -31,10 +31,17 @@ Gemini is supported as a fallback: set `VOICE_AI_PROVIDER=gemini` and supply `GE
 
 ### Extra Groq keys, so a spent quota does not stop the app
 
-`GROQ_FALLBACK_API_KEYS` takes a comma-separated list of additional keys, used automatically once `GROQ_API_KEY` is out of quota for the day:
+There are two spare key slots in `.env`, used automatically once `GROQ_API_KEY` is out of quota for the day. Paste a key into each and restart:
 
 ```
-GROQ_FALLBACK_API_KEYS=gsk_second...,gsk_third...,gsk_fourth...
+GROQ_API_KEY_2=gsk_second...
+GROQ_API_KEY_3=gsk_third...
+```
+
+Leave either blank if you don't have it, that costs nothing. If you want more than two spares, `GROQ_FALLBACK_API_KEYS` takes a comma-separated list that gets merged with the slots above:
+
+```
+GROQ_FALLBACK_API_KEYS=gsk_fourth...,gsk_fifth...
 ```
 
 **This only works if each key comes from a different Groq account.** Groq counts the daily token quota per organisation, so three keys generated inside one account share one allowance and rotating between them changes nothing. If you are pooling keys, they have to be genuinely separate accounts (for a team, each member's own account). Check Groq's terms before creating extra accounts purely to raise a limit.
@@ -140,7 +147,8 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 | `Invalid server environment configuration` | Same as above | The error lists every missing or invalid variable. |
 | Sign in says the code is wrong | No email arrived and you typed a guess | Use `5741`, or set `RESEND_API_KEY` to receive real codes. |
 | Voice returns 500 with `stage: "stt"` | Provider key, model, or rate limit | The function logs carry the provider's own error. |
-| Voice or translation stops working partway through a busy day | Groq's daily token quota is spent | Expected on the free tier. Add more keys from separate Groq accounts to `GROQ_FALLBACK_API_KEYS` (see section 2), or wait for the quota to reset. Extra keys from the same account do not help. |
+| Voice or translation stops working partway through a busy day | Groq's daily token quota is spent | Expected on the free tier. Fill `GROQ_API_KEY_2` / `GROQ_API_KEY_3` with keys from separate Groq accounts (see section 2), or wait for the quota to reset. Extra keys from the same account do not help. |
+| Added more keys but it still runs out | All the keys belong to one Groq account | The daily quota is per account, not per key. Check `/api/health`'s `config.groqKeys` to confirm they were picked up, then confirm each key really is from a different account. |
 | Images 404 after upload | Storage bucket missing or private | Re-run `supabase/schema.sql`, then confirm `product-images` exists and is public. |
 | "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, or the key is missing/wrong, or your remove.bg credits ran out | Check section 3, and your remove.bg dashboard for remaining credits. Everything else in the studio still works either way. |
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |

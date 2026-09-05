@@ -280,7 +280,7 @@ Two independent allowances are worked through before a Groq request is allowed t
 
 **Model fallback** is the first (above): each model has its own daily allowance, so a 429 on the primary model retries on `GROQ_LLM_FALLBACK_MODEL`.
 
-**Key rotation** is the second. `GROQ_FALLBACK_API_KEYS` takes a comma-separated list of extra keys, tried in order after `GROQ_API_KEY`. [`server/voice-ai/groq/keyPool.ts`](server/voice-ai/groq/keyPool.ts) owns the pool and is shared by all three Groq paths (transcription, translation, description/heritage story) plus `scripts/build-translations.mjs`, which is where the quota actually gets burned in practice.
+**Key rotation** is the second. `GROQ_API_KEY_2` and `GROQ_API_KEY_3` are spare key slots tried in order after `GROQ_API_KEY`, and `GROQ_FALLBACK_API_KEYS` takes the same thing as a comma-separated list for anyone who wants more than two spares or prefers one line. The two spellings merge, in that order, and a duplicate key is only counted once; a blank slot costs nothing. [`server/voice-ai/groq/keyPool.ts`](server/voice-ai/groq/keyPool.ts) owns the pool and is shared by all three Groq paths (transcription, translation, description/heritage story) plus `scripts/build-translations.mjs`, which is where the quota actually gets burned in practice.
 
 **The catch, and it is the whole story here: Groq counts the daily quota per organisation, not per key.** The 429 body says so itself ("in organization `org_...`"). Extra keys minted inside one Groq account all draw down the same allowance, so rotating between them buys exactly nothing. This only helps when each key belongs to a **separate Groq account**.
 

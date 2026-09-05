@@ -16,6 +16,27 @@ const DAILY_COOLDOWN_MS = 15 * 60 * 1000;
 const SHORT_COOLDOWN_MS = 60 * 1000;
 const MAX_COOLDOWN_MS = 60 * 60 * 1000;
 
+export interface GroqKeyEnv {
+  GROQ_API_KEY?: string;
+  GROQ_API_KEY_2?: string;
+  GROQ_API_KEY_3?: string;
+  GROQ_FALLBACK_API_KEYS?: string;
+}
+
+/**
+ * Numbered slots and the comma-separated list are two spellings of the same
+ * thing, both supported because one key per line is far easier to manage in a
+ * .env file and in Vercel's environment UI, while a single list is easier to
+ * paste around. They merge, in slot order, and duplicates are dropped.
+ */
+export function collectGroqApiKeys(env: GroqKeyEnv): string[] {
+  const fallbacks = [env.GROQ_API_KEY_2, env.GROQ_API_KEY_3, env.GROQ_FALLBACK_API_KEYS]
+    .filter((value): value is string => typeof value === "string" && value.trim() !== "")
+    .join(",");
+
+  return parseGroqApiKeys(env.GROQ_API_KEY, fallbacks);
+}
+
 export function parseGroqApiKeys(primary: string | undefined, fallbacks: string | undefined): string[] {
   const raw = [primary ?? "", ...(fallbacks ?? "").split(",")];
   const seen = new Set<string>();
