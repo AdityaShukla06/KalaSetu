@@ -37,3 +37,5 @@ functions/.runtimeconfig.json
 *.sw?
 
 commit.md
+
+supabase/.temp

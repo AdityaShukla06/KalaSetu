@@ -54,7 +54,7 @@ set search_path = public
 as $$
 begin
   if (new.flagged is distinct from old.flagged or new.flag_reason is distinct from old.flag_reason)
-     and app_current_role() is distinct from 'admin' then
+     and app_current_role() is not null and app_current_role() <> 'admin' then
     raise exception 'Only an admin can change moderation fields';
   end if;
   return new;
