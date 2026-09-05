@@ -156,7 +156,9 @@ suite("view tracking and artisan analytics", () => {
   }, 15000);
 
   it("PASS/FAIL: an artisan with no products gets an honest, zeroed summary", async () => {
-    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const EMAIL_EMPTY = `analytics-empty-${Date.now()}@example.com`;
+    created.emails.push(EMAIL_EMPTY);
+    const artisan = await signInAs(EMAIL_EMPTY, "artisan");
 
     const res = await fetch(`${base}/api/analytics/summary`, { headers: auth(artisan.token) });
     const body = await json<{
@@ -182,7 +184,9 @@ suite("view tracking and artisan analytics", () => {
   }, 15000);
 
   it("PASS/FAIL: summary totals and per-listing stats reflect real recorded views and inquiries", async () => {
-    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const EMAIL_TOTALS = `analytics-totals-${Date.now()}@example.com`;
+    created.emails.push(EMAIL_TOTALS);
+    const artisan = await signInAs(EMAIL_TOTALS, "artisan");
     const buyer = await signInAs(EMAIL_BUYER, "buyer");
     const productId = await createProduct(artisan.token);
 
