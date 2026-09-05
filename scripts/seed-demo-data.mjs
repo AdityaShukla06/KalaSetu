@@ -933,6 +933,9 @@ async function main() {
       const imageUrl = pickImage(imagesByFolder, artisan.craftFolder, productIndexInFolder, CRAFT_FOLDERS[artisan.craftFolder]);
       const isPending = globalProductIndex % 5 === 4;
       const title = product.color ? `${product.noun}, ${product.color}` : product.noun;
+      const createdDaysAgo = 3 + Math.random() * 42;
+      const updatedDaysAgo = Math.random() * Math.min(createdDaysAgo, 3);
+      const reviewedDaysAgo = isPending ? null : Math.random() * Math.min(createdDaysAgo, 25);
 
       const { data: productRow, error: productError } = await supabase
         .from("products")
@@ -954,7 +957,7 @@ async function main() {
           flagged: false,
           auto_flag_reason: product.autoFlagReason ?? null,
           review_status: isPending ? "pending" : "approved",
-          reviewed_at: isPending ? null : pastTimestamp(1, 25),
+          reviewed_at: isPending ? null : pastTimestamp(reviewedDaysAgo, reviewedDaysAgo),
           reviewed_by: null,
           review_reason: null,
           passport_id: passportId,
@@ -964,8 +967,8 @@ async function main() {
           care_instructions: artisan.careInstructions,
           weight_kg: product.weightKg,
           is_seed: true,
-          created_at: pastTimestamp(3, 45),
-          updated_at: pastTimestamp(1, 3),
+          created_at: pastTimestamp(createdDaysAgo, createdDaysAgo),
+          updated_at: pastTimestamp(updatedDaysAgo, updatedDaysAgo),
         })
         .select("id")
         .single();
@@ -1023,9 +1026,12 @@ async function main() {
     const productId = publishedProductIds[Math.floor(Math.random() * publishedProductIds.length)];
     const artisanId = artisanIdByProductId.get(productId);
     const preference = contactPreferences[i % contactPreferences.length];
-    const createdAt = pastTimestamp(0.2, 10);
+    const createdDaysAgo = 0.2 + Math.random() * 9.8;
+    const createdAt = pastTimestamp(createdDaysAgo, createdDaysAgo);
     const isRead = i % 3 !== 0;
-    const isResponded = i % 4 === 0;
+    const isResponded = isRead && i % 4 === 0;
+    const readDaysAgo = isRead ? Math.random() * createdDaysAgo : null;
+    const respondedDaysAgo = isResponded ? Math.random() * readDaysAgo : null;
     inquiryRows.push({
       product_id: productId,
       buyer_id: buyerId,
@@ -1035,8 +1041,8 @@ async function main() {
       contact_preference: preference,
       contact_value: preference === "email" ? null : fakeMobileNumber(i + 1),
       status: i % 6 === 5 ? "closed" : "open",
-      read_at: isRead ? pastTimestamp(0, 9) : null,
-      responded_at: isResponded ? pastTimestamp(0, 8) : null,
+      read_at: isRead ? pastTimestamp(readDaysAgo, readDaysAgo) : null,
+      responded_at: isResponded ? pastTimestamp(respondedDaysAgo, respondedDaysAgo) : null,
       notified_at: null,
       created_at: createdAt,
     });

@@ -109,6 +109,7 @@ A script that fills the app with realistic content for judging, so the marketpla
 - **A realistic moderation queue too.** Roughly one in five seeded products is left waiting for admin review, so the moderation queue has something in it, not just an empty state.
 - **Clearly marked and easy to remove.** Every row this script creates is flagged internally as demo data, so it can be wiped out completely with one command, without touching any real account or listing.
 - **Photos**, ideally real craft photographs the team supplies in a folder per craft type; any craft without photos yet gets an obvious "photo pending" placeholder instead of a broken image, so the demo still runs before all photos are sourced.
+- **Run and verified against the live database.** Migration 010 is applied, and the script has been run end to end: 45 products across 14 artisans, 5 buyers, 13 inquiries, and over a thousand view records, all correctly counted, all pointing at real category/region/material/language values the app actually recognises. Re-running it twice in a row (including recovering cleanly from one mid-run network failure) confirmed the wipe-and-regenerate cycle leaves no leftover or duplicate rows.
 
 ## Shared platform features
 
@@ -123,7 +124,7 @@ A script that fills the app with realistic content for judging, so the marketpla
 - Express API, deployed as a single Vercel serverless function.
 - Supabase (Postgres + file storage), with row-level security enabled on every table.
 - Groq (Whisper for speech, gpt-oss-120b for text) as the default AI provider, Gemini as a swappable fallback, remove.bg as the swappable background-removal provider.
-- Ten schema migrations: nine already live on the project's Supabase database (multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story), the pricing overcharge auto-flag (`products.auto_flag_reason`), view tracking (the `product_views` table), inquiry details plus a WhatsApp number (`inquiries.quantity/contact_preference/contact_value/read_at/responded_at/notified_at`, `users.whatsapp_number`), and the shipping estimate (`products.weight_kg`, `users.pincode`)), plus a tenth (an `is_seed` flag on artisans/buyers and products, for the demo seed script above) written but not yet applied.
+- Ten schema migrations, all live on the project's Supabase database as of this writing: multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story), the pricing overcharge auto-flag (`products.auto_flag_reason`), view tracking (the `product_views` table), inquiry details plus a WhatsApp number (`inquiries.quantity/contact_preference/contact_value/read_at/responded_at/notified_at`, `users.whatsapp_number`), the shipping estimate (`products.weight_kg`, `users.pincode`), and an `is_seed` flag on artisans/buyers and products for the demo seed script above.
 - The ONDC catalog export needs no new schema at all; it's computed entirely from data already in `products`.
 
 ## Testing
@@ -143,4 +144,4 @@ A script that fills the app with realistic content for judging, so the marketpla
 
 - Artisan or buyer: open the app, pick a role on the email screen, sign in with the demo code (see `.env`'s `DEMO_FALLBACK_OTP`).
 - Admin: `npm run seed:demo-admin -- you@example.com`, then sign in with that email the same way. You'll land on the hidden console automatically.
-- A populated marketplace for judging: run migration 010 once, then `npm run seed:demo-data`. Remove it later with `npm run seed:demo-data:wipe`.
+- A populated marketplace for judging: `npm run seed:demo-data` (migration 010 is already applied). Remove it later with `npm run seed:demo-data:wipe`.
