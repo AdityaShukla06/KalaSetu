@@ -1,7 +1,9 @@
+import { GroqKeyPool } from "./keyPool";
+
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export interface GroqChatOptions {
-  apiKey: string;
+  keyPool: GroqKeyPool;
   model: string;
   fallbackModel?: string;
   prompt: string;
@@ -9,17 +11,20 @@ export interface GroqChatOptions {
 }
 
 export class GroqRateLimitError extends Error {
+  readonly detail: string;
+
   constructor(model: string, detail: string) {
     super(`Groq rate limit reached for ${model}: ${detail}`);
     this.name = "GroqRateLimitError";
+    this.detail = detail;
   }
 }
 
-async function callModel(options: GroqChatOptions, model: string): Promise<string> {
+async function callModel(options: GroqChatOptions, model: string, apiKey: string): Promise<string> {
   const response = await fetch(GROQ_CHAT_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${options.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -52,24 +57,34 @@ async function callModel(options: GroqChatOptions, model: string): Promise<strin
 }
 
 /**
- * Groq's free tier caps tokens per day per model, so a busy day on one model
- * takes the feature down entirely. Each model has its own allowance, so a rate
- * limit falls through to a second model rather than failing the request.
+ * Groq's free tier caps tokens per day per model, so a busy day takes the
+ * feature down entirely. Two separate allowances are worked through before
+ * giving up: each model has its own quota, and each configured API key has its
+ * own (as long as the keys belong to different Groq accounts, see keyPool.ts).
+ * Only a rate limit rotates; a genuine error fails immediately rather than
+ * replaying a broken request against every key in turn.
  */
 export async function groqChat(options: GroqChatOptions): Promise<string> {
-  try {
-    return await callModel(options, options.model);
-  } catch (err) {
-    const fallback = options.fallbackModel;
-    if (!(err instanceof GroqRateLimitError) || !fallback || fallback === options.model) {
-      throw err;
+  const models = [options.model];
+  if (options.fallbackModel && options.fallbackModel !== options.model) {
+    models.push(options.fallbackModel);
+  }
+
+  const keys = options.keyPool.usableKeys();
+  let lastRateLimit: GroqRateLimitError | undefined;
+
+  for (const apiKey of keys) {
+    for (const model of models) {
+      try {
+        return await callModel(options, model, apiKey);
+      } catch (err) {
+        if (!(err instanceof GroqRateLimitError)) throw err;
+        lastRateLimit = err;
+      }
     }
 
-    console.warn("[voice-ai] primary model rate limited, falling back", {
-      from: options.model,
-      to: fallback,
-    });
-
-    return await callModel(options, fallback);
+    if (lastRateLimit) options.keyPool.rest(apiKey, lastRateLimit.detail);
   }
+
+  throw lastRateLimit ?? new Error("Groq had no usable API key configured");
 }

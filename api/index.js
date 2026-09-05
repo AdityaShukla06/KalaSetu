@@ -57,9 +57,74 @@ function loadEnv() {
   return cached;
 }
 
+// server/voice-ai/groq/keyPool.ts
+var DAILY_COOLDOWN_MS = 15 * 60 * 1e3;
+var SHORT_COOLDOWN_MS = 60 * 1e3;
+var MAX_COOLDOWN_MS = 60 * 60 * 1e3;
+function parseGroqApiKeys(primary, fallbacks) {
+  const raw = [primary ?? "", ...(fallbacks ?? "").split(",")];
+  const seen = /* @__PURE__ */ new Set();
+  const keys = [];
+  for (const entry of raw) {
+    const key = entry.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys;
+}
+function isDailyQuotaMessage(detail) {
+  return /tokens per day|TPD|requests per day|RPD/i.test(detail);
+}
+function retryAfterMsFromDetail(detail) {
+  const match = /try again in ([0-9.]+)(ms|s|m|h)?/i.exec(detail);
+  if (!match) return void 0;
+  const value = Number.parseFloat(match[1]);
+  if (!Number.isFinite(value) || value < 0) return void 0;
+  const unit = (match[2] ?? "s").toLowerCase();
+  const multiplier = unit === "ms" ? 1 : unit === "m" ? 6e4 : unit === "h" ? 36e5 : 1e3;
+  return Math.min(MAX_COOLDOWN_MS, Math.ceil(value * multiplier) + 1500);
+}
+function cooldownForDetail(detail) {
+  return retryAfterMsFromDetail(detail) ?? (isDailyQuotaMessage(detail) ? DAILY_COOLDOWN_MS : SHORT_COOLDOWN_MS);
+}
+function maskKey(key) {
+  return key.length <= 8 ? "****" : `${key.slice(0, 4)}...${key.slice(-4)}`;
+}
+var GroqKeyPool = class {
+  keys;
+  restingUntil = /* @__PURE__ */ new Map();
+  constructor(keys) {
+    this.keys = keys;
+  }
+  get size() {
+    return this.keys.length;
+  }
+  /**
+   * Keys that are not currently resting, in configured order, falling back to
+   * every key when they are all resting. Never returning an empty list matters:
+   * an expired cooldown we mis-timed should cost a failed attempt, not turn a
+   * recoverable request into an instant failure.
+   */
+  usableKeys(now = Date.now()) {
+    const usable = this.keys.filter((key) => (this.restingUntil.get(key) ?? 0) <= now);
+    return usable.length > 0 ? usable : this.keys;
+  }
+  rest(key, detail, now = Date.now()) {
+    const cooldown = cooldownForDetail(detail);
+    this.restingUntil.set(key, now + cooldown);
+    console.warn("[voice-ai] Groq key rate limited, resting it", {
+      key: maskKey(key),
+      forSeconds: Math.round(cooldown / 1e3),
+      dailyQuota: isDailyQuotaMessage(detail),
+      remainingKeys: this.usableKeys(now).length
+    });
+  }
+};
+
 // server/routes/health.ts
 var BASE_REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET"];
-var OPTIONAL_EXTRA = ["VOICE_AI_PROVIDER", "GROQ_API_KEY", "GEMINI_API_KEY"];
+var OPTIONAL_EXTRA = ["VOICE_AI_PROVIDER", "GROQ_API_KEY", "GROQ_FALLBACK_API_KEYS", "GEMINI_API_KEY"];
 var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED", ...OPTIONAL_EXTRA];
 var router = Router();
 function isSet(name) {
@@ -85,6 +150,7 @@ router.get("/", (_req, res) => {
       missing,
       provider,
       present: [.../* @__PURE__ */ new Set([...required, ...OPTIONAL])].filter(isSet),
+      groqKeys: parseGroqApiKeys(process.env.GROQ_API_KEY, process.env.GROQ_FALLBACK_API_KEYS).length,
       valid: configValid,
       ...configError ? { error: configError } : {}
     }
@@ -670,6 +736,7 @@ import { z as z4 } from "zod";
 var envSchema2 = z4.object({
   VOICE_AI_PROVIDER: z4.enum(["groq", "gemini"]).default("groq"),
   GROQ_API_KEY: z4.string().optional(),
+  GROQ_FALLBACK_API_KEYS: z4.string().optional(),
   GROQ_STT_MODEL: z4.string().default("whisper-large-v3"),
   GROQ_LLM_MODEL: z4.string().default("openai/gpt-oss-120b"),
   GROQ_LLM_FALLBACK_MODEL: z4.string().default("openai/gpt-oss-20b"),
@@ -814,13 +881,14 @@ function toSupportedLanguage(reported) {
   return NAME_TO_CODE[key] ?? key;
 }
 var GroqSttService = class {
-  apiKey;
+  keyPool;
   model;
   constructor(env) {
-    if (!env.GROQ_API_KEY) {
+    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
-    this.apiKey = env.GROQ_API_KEY;
+    this.keyPool = new GroqKeyPool(keys);
     this.model = env.GROQ_STT_MODEL;
   }
   async transcribe(audio, mimeType) {
@@ -828,32 +896,49 @@ var GroqSttService = class {
       throw new InvalidAudioError();
     }
     const audioMimeType = normaliseAudioMimeType(mimeType, GROQ_SUPPORTED_AUDIO_TYPES);
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(audio)], { type: audioMimeType }), `recording.${extensionForAudio(audioMimeType)}`);
-    form.append("model", this.model);
-    form.append("response_format", "verbose_json");
-    form.append(
-      "prompt",
-      "An Indian artisan describing a handmade product in their own language."
-    );
+    const buildForm = () => {
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob([new Uint8Array(audio)], { type: audioMimeType }),
+        `recording.${extensionForAudio(audioMimeType)}`
+      );
+      form.append("model", this.model);
+      form.append("response_format", "verbose_json");
+      form.append("prompt", "An Indian artisan describing a handmade product in their own language.");
+      return form;
+    };
     let payload;
-    try {
-      const response = await fetch(GROQ_TRANSCRIPTION_URL, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-        body: form
-      });
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new InvalidAudioError(
-          `Transcription provider returned ${response.status}`,
-          detail.slice(0, 500)
-        );
+    let lastRateLimit;
+    for (const apiKey of this.keyPool.usableKeys()) {
+      try {
+        const response = await fetch(GROQ_TRANSCRIPTION_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: buildForm()
+        });
+        if (response.status === 429) {
+          const detail = await response.text();
+          this.keyPool.rest(apiKey, detail);
+          lastRateLimit = new InvalidAudioError("Transcription provider returned 429", detail.slice(0, 500));
+          continue;
+        }
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new InvalidAudioError(
+            `Transcription provider returned ${response.status}`,
+            detail.slice(0, 500)
+          );
+        }
+        payload = await response.json();
+        break;
+      } catch (err) {
+        if (err instanceof InvalidAudioError) throw err;
+        throw new InvalidAudioError("Speech-to-text provider rejected or failed to process the audio", err);
       }
-      payload = await response.json();
-    } catch (err) {
-      if (err instanceof InvalidAudioError) throw err;
-      throw new InvalidAudioError("Speech-to-text provider rejected or failed to process the audio", err);
+    }
+    if (!payload) {
+      throw lastRateLimit ?? new InvalidAudioError("Speech-to-text provider had no usable API key");
     }
     const text = payload.text?.trim();
     if (!text) {
@@ -869,16 +954,18 @@ var GroqSttService = class {
 // server/voice-ai/groq/chat.ts
 var GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 var GroqRateLimitError = class extends Error {
+  detail;
   constructor(model, detail) {
     super(`Groq rate limit reached for ${model}: ${detail}`);
     this.name = "GroqRateLimitError";
+    this.detail = detail;
   }
 };
-async function callModel(options, model) {
+async function callModel(options, model, apiKey) {
   const response = await fetch(GROQ_CHAT_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${options.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -903,31 +990,37 @@ async function callModel(options, model) {
   return content.trim();
 }
 async function groqChat(options) {
-  try {
-    return await callModel(options, options.model);
-  } catch (err) {
-    const fallback = options.fallbackModel;
-    if (!(err instanceof GroqRateLimitError) || !fallback || fallback === options.model) {
-      throw err;
-    }
-    console.warn("[voice-ai] primary model rate limited, falling back", {
-      from: options.model,
-      to: fallback
-    });
-    return await callModel(options, fallback);
+  const models = [options.model];
+  if (options.fallbackModel && options.fallbackModel !== options.model) {
+    models.push(options.fallbackModel);
   }
+  const keys = options.keyPool.usableKeys();
+  let lastRateLimit;
+  for (const apiKey of keys) {
+    for (const model of models) {
+      try {
+        return await callModel(options, model, apiKey);
+      } catch (err) {
+        if (!(err instanceof GroqRateLimitError)) throw err;
+        lastRateLimit = err;
+      }
+    }
+    if (lastRateLimit) options.keyPool.rest(apiKey, lastRateLimit.detail);
+  }
+  throw lastRateLimit ?? new Error("Groq had no usable API key configured");
 }
 
 // server/voice-ai/translation/groq-translation.service.ts
 var GroqTranslationService = class {
-  apiKey;
+  keyPool;
   model;
   fallbackModel;
   constructor(env) {
-    if (!env.GROQ_API_KEY) {
+    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
-    this.apiKey = env.GROQ_API_KEY;
+    this.keyPool = new GroqKeyPool(keys);
     this.model = env.GROQ_LLM_MODEL;
     this.fallbackModel = env.GROQ_LLM_FALLBACK_MODEL;
   }
@@ -940,7 +1033,7 @@ var GroqTranslationService = class {
     let raw;
     try {
       raw = await groqChat({
-        apiKey: this.apiKey,
+        keyPool: this.keyPool,
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,
@@ -1019,14 +1112,15 @@ Respond with a JSON object of the form {"story": "..."}.`;
 
 // server/voice-ai/description/groq-description.service.ts
 var GroqDescriptionService = class {
-  apiKey;
+  keyPool;
   model;
   fallbackModel;
   constructor(env) {
-    if (!env.GROQ_API_KEY) {
+    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
-    this.apiKey = env.GROQ_API_KEY;
+    this.keyPool = new GroqKeyPool(keys);
     this.model = env.GROQ_LLM_MODEL;
     this.fallbackModel = env.GROQ_LLM_FALLBACK_MODEL;
   }
@@ -1037,7 +1131,7 @@ var GroqDescriptionService = class {
     let raw;
     try {
       raw = await groqChat({
-        apiKey: this.apiKey,
+        keyPool: this.keyPool,
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,
@@ -1069,7 +1163,7 @@ var GroqDescriptionService = class {
     let raw;
     try {
       raw = await groqChat({
-        apiKey: this.apiKey,
+        keyPool: this.keyPool,
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,

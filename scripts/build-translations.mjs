@@ -7,10 +7,16 @@ const MODEL = process.env.GROQ_LLM_MODEL || "openai/gpt-oss-120b";
 const BATCH = 12;
 const PACE_MS = 9000;
 
-if (!process.env.GROQ_API_KEY) {
+const API_KEYS = [process.env.GROQ_API_KEY ?? "", ...(process.env.GROQ_FALLBACK_API_KEYS ?? "").split(",")]
+  .map((key) => key.trim())
+  .filter((key, index, all) => key && all.indexOf(key) === index);
+
+if (API_KEYS.length === 0) {
   console.error("GROQ_API_KEY is required to regenerate translations.");
   process.exit(1);
 }
+
+const exhaustedKeys = new Set();
 
 const languagesSource = execFileSync(
   process.execPath,
@@ -41,31 +47,49 @@ Respond with a JSON object mapping every given key to its ${target.englishName} 
 
 ${JSON.stringify(entries, null, 2)}`;
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+  let lastError;
 
-  if (!response.ok) {
+  for (const apiKey of API_KEYS) {
+    if (exhaustedKeys.has(apiKey)) continue;
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (response.ok) {
+      const payload = await response.json();
+      return JSON.parse(payload.choices[0].message.content);
+    }
+
     const detail = await response.text();
-    const err = new Error(`Groq returned ${response.status}: ${detail.slice(0, 200)}`);
-    err.status = response.status;
+    lastError = new Error(`Groq returned ${response.status}: ${detail.slice(0, 200)}`);
+    lastError.status = response.status;
     const wait = /try again in ([0-9.]+)s/i.exec(detail);
-    err.retryAfterMs = wait ? Math.ceil(parseFloat(wait[1]) * 1000) + 1500 : undefined;
-    throw err;
+    lastError.retryAfterMs = wait ? Math.ceil(parseFloat(wait[1]) * 1000) + 1500 : undefined;
+
+    if (response.status !== 429) throw lastError;
+
+    if (/tokens per day|TPD|requests per day|RPD/i.test(detail)) {
+      exhaustedKeys.add(apiKey);
+      const left = API_KEYS.length - exhaustedKeys.size;
+      process.stdout.write(left > 0 ? `[key ${exhaustedKeys.size} spent, switching]` : "");
+      continue;
+    }
+
+    throw lastError;
   }
 
-  const payload = await response.json();
-  return JSON.parse(payload.choices[0].message.content);
+  throw lastError ?? new Error("No usable Groq API key");
 }
 
 const only = process.argv.slice(2);

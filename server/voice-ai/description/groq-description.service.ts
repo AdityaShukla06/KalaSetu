@@ -2,18 +2,23 @@ import { ProductDescriptionService, HeritageStoryInput } from "../types/voice-ai
 import { DescriptionGenerationError, MalformedModelResponseError } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
 import { groqChat } from "../groq/chat";
+import { GroqKeyPool, parseGroqApiKeys } from "../groq/keyPool";
 import { buildHeritagePrompt } from "./heritagePrompt";
 
 export class GroqDescriptionService implements ProductDescriptionService {
-  private readonly apiKey: string;
+  private readonly keyPool: GroqKeyPool;
   private readonly model: string;
   private readonly fallbackModel: string;
 
-  constructor(env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_LLM_MODEL" | "GROQ_LLM_FALLBACK_MODEL">) {
-    if (!env.GROQ_API_KEY) {
+  constructor(
+    env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_LLM_MODEL" | "GROQ_LLM_FALLBACK_MODEL"> &
+      Partial<Pick<VoiceAiEnv, "GROQ_FALLBACK_API_KEYS">>,
+  ) {
+    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
-    this.apiKey = env.GROQ_API_KEY;
+    this.keyPool = new GroqKeyPool(keys);
     this.model = env.GROQ_LLM_MODEL;
     this.fallbackModel = env.GROQ_LLM_FALLBACK_MODEL;
   }
@@ -26,7 +31,7 @@ export class GroqDescriptionService implements ProductDescriptionService {
     let raw: string;
     try {
       raw = await groqChat({
-        apiKey: this.apiKey,
+        keyPool: this.keyPool,
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,
@@ -63,7 +68,7 @@ export class GroqDescriptionService implements ProductDescriptionService {
     let raw: string;
     try {
       raw = await groqChat({
-        apiKey: this.apiKey,
+        keyPool: this.keyPool,
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,

@@ -9,6 +9,7 @@ import {
   MalformedModelResponseError,
 } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
+import { GroqKeyPool, parseGroqApiKeys } from "../groq/keyPool";
 import { normaliseAudioMimeType, extensionForAudio } from "./audio-mime";
 
 const GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
@@ -49,14 +50,18 @@ export function toSupportedLanguage(reported: string | undefined): string {
 }
 
 export class GroqSttService implements SpeechToTextService {
-  private readonly apiKey: string;
+  private readonly keyPool: GroqKeyPool;
   private readonly model: string;
 
-  constructor(env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_STT_MODEL">) {
-    if (!env.GROQ_API_KEY) {
+  constructor(
+    env: Pick<VoiceAiEnv, "GROQ_API_KEY" | "GROQ_STT_MODEL"> &
+      Partial<Pick<VoiceAiEnv, "GROQ_FALLBACK_API_KEYS">>,
+  ) {
+    const keys = parseGroqApiKeys(env.GROQ_API_KEY, env.GROQ_FALLBACK_API_KEYS);
+    if (keys.length === 0) {
       throw new Error("GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq");
     }
-    this.apiKey = env.GROQ_API_KEY;
+    this.keyPool = new GroqKeyPool(keys);
     this.model = env.GROQ_STT_MODEL;
   }
 
@@ -67,36 +72,55 @@ export class GroqSttService implements SpeechToTextService {
 
     const audioMimeType = normaliseAudioMimeType(mimeType, GROQ_SUPPORTED_AUDIO_TYPES);
 
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(audio)], { type: audioMimeType }), `recording.${extensionForAudio(audioMimeType)}`);
-    form.append("model", this.model);
-    form.append("response_format", "verbose_json");
-    form.append(
-      "prompt",
-      "An Indian artisan describing a handmade product in their own language.",
-    );
+    const buildForm = () => {
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob([new Uint8Array(audio)], { type: audioMimeType }),
+        `recording.${extensionForAudio(audioMimeType)}`,
+      );
+      form.append("model", this.model);
+      form.append("response_format", "verbose_json");
+      form.append("prompt", "An Indian artisan describing a handmade product in their own language.");
+      return form;
+    };
 
-    let payload: { text?: string; language?: string };
+    let payload: { text?: string; language?: string } | undefined;
+    let lastRateLimit: InvalidAudioError | undefined;
 
-    try {
-      const response = await fetch(GROQ_TRANSCRIPTION_URL, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-        body: form,
-      });
+    for (const apiKey of this.keyPool.usableKeys()) {
+      try {
+        const response = await fetch(GROQ_TRANSCRIPTION_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: buildForm(),
+        });
 
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new InvalidAudioError(
-          `Transcription provider returned ${response.status}`,
-          detail.slice(0, 500),
-        );
+        if (response.status === 429) {
+          const detail = await response.text();
+          this.keyPool.rest(apiKey, detail);
+          lastRateLimit = new InvalidAudioError("Transcription provider returned 429", detail.slice(0, 500));
+          continue;
+        }
+
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new InvalidAudioError(
+            `Transcription provider returned ${response.status}`,
+            detail.slice(0, 500),
+          );
+        }
+
+        payload = (await response.json()) as { text?: string; language?: string };
+        break;
+      } catch (err) {
+        if (err instanceof InvalidAudioError) throw err;
+        throw new InvalidAudioError("Speech-to-text provider rejected or failed to process the audio", err);
       }
+    }
 
-      payload = (await response.json()) as { text?: string; language?: string };
-    } catch (err) {
-      if (err instanceof InvalidAudioError) throw err;
-      throw new InvalidAudioError("Speech-to-text provider rejected or failed to process the audio", err);
+    if (!payload) {
+      throw lastRateLimit ?? new InvalidAudioError("Speech-to-text provider had no usable API key");
     }
 
     const text = payload.text?.trim();

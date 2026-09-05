@@ -274,6 +274,20 @@ Groq is the default because its free tier is far more generous. Gemini's free ti
 
 Groq's free tier caps tokens per day per model rather than per minute, and each model has its own allowance. When the primary model runs out, `groqChat` falls through to `GROQ_LLM_FALLBACK_MODEL` instead of failing the request, and logs that it did so. A heavy day on one model no longer takes the voice feature down.
 
+## Surviving a spent Groq quota
+
+Two independent allowances are worked through before a Groq request is allowed to fail, because running out of daily quota mid-demo is the most likely way this app breaks in front of anyone.
+
+**Model fallback** is the first (above): each model has its own daily allowance, so a 429 on the primary model retries on `GROQ_LLM_FALLBACK_MODEL`.
+
+**Key rotation** is the second. `GROQ_FALLBACK_API_KEYS` takes a comma-separated list of extra keys, tried in order after `GROQ_API_KEY`. [`server/voice-ai/groq/keyPool.ts`](server/voice-ai/groq/keyPool.ts) owns the pool and is shared by all three Groq paths (transcription, translation, description/heritage story) plus `scripts/build-translations.mjs`, which is where the quota actually gets burned in practice.
+
+**The catch, and it is the whole story here: Groq counts the daily quota per organisation, not per key.** The 429 body says so itself ("in organization `org_...`"). Extra keys minted inside one Groq account all draw down the same allowance, so rotating between them buys exactly nothing. This only helps when each key belongs to a **separate Groq account**.
+
+**A spent key rests rather than being dropped**, so nothing needs a redeploy to recover: a key that returns a daily-quota 429 is parked for 15 minutes, a per-minute limit is parked for however long the provider's own "try again in ..." hint says (capped at an hour), and once the cooldown passes the key rejoins the rotation. If every key happens to be resting, the pool hands back the full list rather than an empty one, so a mis-timed cooldown costs one failed attempt instead of turning a recoverable request into an instant failure. Only a 429 rotates; a genuine error (a 500, a bad request) fails immediately rather than replaying a broken request against every key in turn.
+
+The cooldown map lives in memory, so on Vercel it only spans a warm instance. That is deliberate rather than worth a datastore: the worst case is one wasted probe per cold start, not a broken request. `GET /api/health` reports `config.groqKeys`, the number of keys actually parsed, which is the quickest way to confirm a deployment picked up more than one. Keys are masked (`gsk_...abcd`) wherever they are logged.
+
 ## Data and ownership
 
 `users`, `products`, `inquiries`, `audit_log`, and `otp_codes`, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product and inquiry read, update, and delete is scoped by ownership in the query itself, so knowing an ID is not enough to touch someone else's row. The API uses the service role key server side only, which bypasses row level security entirely, so this ownership scoping in the route code is what actually gates every request that comes through the API today.
