@@ -7,6 +7,7 @@ import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs
 import { getMarketplaceProduct, createInquiry, recordProductView } from "../../services/api";
 import type { ProductWithArtisan, InquiryContactPreference } from "../../services/api";
 import { buildWhatsAppUrl } from "../../../shared/whatsapp";
+import { estimateShippingCost, isValidIndianPincode } from "../../../shared/shippingEstimator";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
 import { useLanguage } from "../../context/LanguageContext";
 import "./ProductDetail.css";
@@ -15,6 +16,7 @@ type LoadState = "loading" | "error" | "not-found" | "loaded";
 type InquiryState = "idle" | "sending" | "sent" | "error";
 
 const VIEWED_SESSION_KEY = "kalasetu:viewedProducts";
+const DESTINATION_PINCODE_KEY = "kalasetu:destinationPincode";
 
 function hasRecordedView(productId: string): boolean {
   try {
@@ -110,6 +112,14 @@ export function ProductDetailScreen() {
   const [contactValue, setContactValue] = useState("");
   const [inquiryState, setInquiryState] = useState<InquiryState>("idle");
 
+  const [destinationPincode, setDestinationPincode] = useState(() => {
+    try {
+      return sessionStorage.getItem(DESTINATION_PINCODE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
   const load = useCallback(async () => {
     if (!productId) return;
     setState("loading");
@@ -157,6 +167,15 @@ export function ProductDetailScreen() {
       setContactValue("");
     } catch {
       setInquiryState("error");
+    }
+  }
+
+  function handleDestinationPincodeChange(value: string) {
+    setDestinationPincode(value);
+    try {
+      if (isValidIndianPincode(value)) sessionStorage.setItem(DESTINATION_PINCODE_KEY, value.trim());
+    } catch {
+      return;
     }
   }
 
@@ -210,6 +229,12 @@ export function ProductDetailScreen() {
   const description = descriptionTab === "local" ? product.descriptionLocal : product.descriptionEn;
   const artisanName = product.artisan.shopName || product.artisan.displayName || t("marketplace.artisanUnnamed");
 
+  const shippingUnavailable = !product.weightKg || !product.artisan.pincode;
+  const shippingEstimate =
+    !shippingUnavailable && isValidIndianPincode(destinationPincode)
+      ? estimateShippingCost(product.weightKg as number, product.artisan.pincode as string, destinationPincode)
+      : null;
+
   return (
     <div className="product-detail">
       <Link to="/marketplace" className="product-detail-back">
@@ -225,6 +250,42 @@ export function ProductDetailScreen() {
         <div className="product-detail-body">
           <h1>{title}</h1>
           <p className="price">₹{product.price}</p>
+
+          {shippingUnavailable ? (
+            <p className="caption shipping-estimate-unavailable">{t("shipping.buyerUnavailable")}</p>
+          ) : (
+            <div className="shipping-estimate-card">
+              <Input
+                label={t("shipping.pincodeLabel")}
+                type="tel"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder={t("shipping.pincodePlaceholder")}
+                value={destinationPincode}
+                onChange={(event) => handleDestinationPincodeChange(event.target.value)}
+              />
+              {destinationPincode && !isValidIndianPincode(destinationPincode) && (
+                <p className="caption shipping-estimate-error">{t("shipping.pincodeInvalid")}</p>
+              )}
+              {shippingEstimate && (
+                <div className="shipping-estimate-result">
+                  <p className="body-s shipping-estimate-line">
+                    <span className="shipping-estimate-label">{t("shipping.estimatedShippingLabel")}</span>
+                    <span>
+                      ₹{shippingEstimate.minCost}–₹{shippingEstimate.maxCost}
+                    </span>
+                  </p>
+                  <p className="body-s shipping-estimate-line shipping-estimate-total">
+                    <span className="shipping-estimate-label">{t("shipping.estimatedTotalLabel")}</span>
+                    <span>
+                      ₹{product.price + shippingEstimate.minCost}–₹{product.price + shippingEstimate.maxCost}
+                    </span>
+                  </p>
+                  <p className="caption shipping-estimate-disclaimer">{t("shipping.buyerDisclaimer")}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="product-detail-tags">
             <span className="product-detail-tag">{categoryLabel}</span>

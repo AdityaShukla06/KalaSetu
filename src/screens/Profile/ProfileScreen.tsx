@@ -6,6 +6,7 @@ import { LanguageSelect } from "../../components/LanguageSelect";
 import { RegionSelect } from "../../components/RegionSelect";
 import { getMyProfile, updateMyProfile, relocaliseProducts, type UserProfile } from "../../services/api";
 import { isValidWhatsAppNumber } from "../../../shared/whatsapp";
+import { isValidIndianPincode } from "../../../shared/shippingEstimator";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Profile.css";
@@ -64,6 +65,8 @@ export function ProfileScreen() {
   const [region, setRegion] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [whatsappError, setWhatsappError] = useState(false);
+  const [pincode, setPincode] = useState("");
+  const [pincodeError, setPincodeError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -80,6 +83,7 @@ export function ProfileScreen() {
       setShopName(result.shopName ?? "");
       setRegion(result.region ?? "");
       setWhatsappNumber(result.whatsappNumber ?? "");
+      setPincode(result.pincode ?? "");
       setState("loaded");
     } catch {
       setState("error");
@@ -125,14 +129,20 @@ export function ProfileScreen() {
     (displayName.trim() !== (profile.displayName ?? "") ||
       shopName.trim() !== (profile.shopName ?? "") ||
       region !== (profile.region ?? "") ||
-      whatsappNumber.trim() !== (profile.whatsappNumber ?? ""));
+      whatsappNumber.trim() !== (profile.whatsappNumber ?? "") ||
+      pincode.trim() !== (profile.pincode ?? ""));
 
   async function handleSave() {
     if (whatsappNumber.trim() && !isValidWhatsAppNumber(whatsappNumber.trim())) {
       setWhatsappError(true);
       return;
     }
+    if (pincode.trim() && !isValidIndianPincode(pincode.trim())) {
+      setPincodeError(true);
+      return;
+    }
     setWhatsappError(false);
+    setPincodeError(false);
     setSaving(true);
     setSaveError(false);
     setSaved(false);
@@ -142,6 +152,7 @@ export function ProfileScreen() {
         shopName: shopName.trim(),
         region: region || undefined,
         whatsappNumber: whatsappNumber.trim(),
+        pincode: pincode.trim(),
       });
       setProfile((prev) =>
         prev
@@ -151,6 +162,7 @@ export function ProfileScreen() {
               shopName: shopName.trim(),
               region: region || null,
               whatsappNumber: whatsappNumber.trim() || null,
+              pincode: pincode.trim() || null,
             }
           : prev,
       );
@@ -240,6 +252,21 @@ export function ProfileScreen() {
               }}
             />
             <p className="caption profile-whatsapp-note">{t("profile.whatsappNote")}</p>
+            <Input
+              label={t("profile.pincodeLabel")}
+              type="tel"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder={t("profile.pincodePlaceholder")}
+              value={pincode}
+              error={pincodeError ? t("profile.pincodeInvalid") : undefined}
+              onChange={(event) => {
+                setPincode(event.target.value);
+                setPincodeError(false);
+                setSaved(false);
+              }}
+            />
+            <p className="caption profile-whatsapp-note">{t("profile.pincodeNote")}</p>
 
             {saveError && (
               <p className="onboarding-error" role="alert">

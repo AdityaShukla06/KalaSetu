@@ -186,6 +186,7 @@ const ProductInputSchema = z.object({
   timeTaken: z.string().trim().min(1).max(60).optional(),
   giTag: z.string().trim().min(1).max(120).optional(),
   careInstructions: z.string().trim().min(1).max(500).optional(),
+  weightKg: z.number().positive().max(1000).optional(),
 });
 
 function toRow(input: Partial<z.infer<typeof ProductInputSchema>>): Record<string, unknown> {
@@ -204,6 +205,7 @@ function toRow(input: Partial<z.infer<typeof ProductInputSchema>>): Record<strin
   if (input.timeTaken !== undefined) row.time_taken = input.timeTaken;
   if (input.giTag !== undefined) row.gi_tag = input.giTag;
   if (input.careInstructions !== undefined) row.care_instructions = input.careInstructions;
+  if (input.weightKg !== undefined) row.weight_kg = input.weightKg;
   return row;
 }
 
@@ -315,8 +317,29 @@ router.get(
       }
     }
 
+    let weightByProduct = new Map<string, number>();
+    if (productIds.length > 0) {
+      const { data: weightRows, error: weightError } = await supabase
+        .from("products")
+        .select("id, weight_kg")
+        .in("id", productIds);
+
+      if (weightError) {
+        console.warn("[products] could not load product weight for My Shop, shipping estimate will be unavailable", {
+          message: weightError.message,
+        });
+      } else {
+        weightByProduct = new Map(
+          (weightRows ?? [])
+            .filter((row) => row.weight_kg !== null)
+            .map((row) => [row.id as string, Number(row.weight_kg)]),
+        );
+      }
+    }
+
     const result: ProductWithViewCount[] = rows.map((row) => ({
       ...toProduct(row),
+      weightKg: weightByProduct.get(row.id),
       viewCount: viewCountByProduct.get(row.id) ?? 0,
     }));
 
@@ -424,7 +447,7 @@ router.get(
 
     let { data: artisan, error: artisanError } = await supabase
       .from("users")
-      .select("id, shop_name, display_name, region, whatsapp_number, total_products")
+      .select("id, shop_name, display_name, region, whatsapp_number, pincode, total_products")
       .eq("id", (product as ProductRow).user_id)
       .maybeSingle();
 
@@ -434,20 +457,37 @@ router.get(
         .select("id, shop_name, display_name, region, total_products")
         .eq("id", (product as ProductRow).user_id)
         .maybeSingle();
-      artisan = fallback.data ? { ...fallback.data, whatsapp_number: null } : null;
+      artisan = fallback.data ? { ...fallback.data, whatsapp_number: null, pincode: null } : null;
       artisanError = fallback.error;
     }
 
     if (artisanError) throw new Error(`Could not load the artisan profile: ${artisanError.message}`);
 
+    let weightKg: number | undefined;
+    const { data: weightRow, error: weightError } = await supabase
+      .from("products")
+      .select("weight_kg")
+      .eq("id", (product as ProductRow).id)
+      .maybeSingle();
+
+    if (weightError) {
+      console.warn("[products] could not load product weight, shipping estimate will be unavailable", {
+        message: weightError.message,
+      });
+    } else if (weightRow?.weight_kg !== null && weightRow?.weight_kg !== undefined) {
+      weightKg = Number(weightRow.weight_kg);
+    }
+
     const result: ProductWithArtisan = {
       ...toProduct(product as ProductRow),
+      weightKg,
       artisan: {
         userId: artisan?.id ?? (product as ProductRow).user_id,
         shopName: artisan?.shop_name ?? null,
         displayName: artisan?.display_name ?? null,
         region: artisan?.region ?? null,
         whatsappNumber: artisan?.whatsapp_number ?? null,
+        pincode: artisan?.pincode ?? null,
         totalProducts: artisan?.total_products ?? 0,
       },
     };

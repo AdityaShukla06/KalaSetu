@@ -8,6 +8,7 @@ export interface UserProfile {
   shopName: string | null;
   region: string | null;
   whatsappNumber: string | null;
+  pincode: string | null;
   language: string;
   role: UserRole;
   totalProducts: number;
@@ -19,7 +20,9 @@ export function getMyProfile(): Promise<UserProfile> {
 }
 
 export function updateMyProfile(
-  updates: Partial<Pick<UserProfile, "displayName" | "shopName" | "region" | "whatsappNumber" | "language">>,
+  updates: Partial<
+    Pick<UserProfile, "displayName" | "shopName" | "region" | "whatsappNumber" | "pincode" | "language">
+  >,
 ): Promise<{ success: boolean }> {
   return apiFetch("/users/me", {
     method: "PATCH",

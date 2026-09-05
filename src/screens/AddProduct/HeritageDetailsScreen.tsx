@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { useAddProductDraft } from "../../context/AddProductDraftContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { WEIGHT_CATEGORIES } from "../../../shared/shippingRateCard";
 import "./VoiceDescribe.css";
 
 function ArrowIcon() {
@@ -23,6 +24,7 @@ export function HeritageDetailsScreen() {
   const [timeTaken, setTimeTaken] = useState(draft.timeTaken ?? "");
   const [giTag, setGiTag] = useState(draft.giTag ?? "");
   const [careInstructions, setCareInstructions] = useState(draft.careInstructions ?? "");
+  const [weightKg, setWeightKg] = useState(draft.weightKg !== undefined ? String(draft.weightKg) : "");
 
   const hasPhoto = Boolean(draft.imageUrl);
 
@@ -35,11 +37,13 @@ export function HeritageDetailsScreen() {
   if (!hasPhoto) return null;
 
   function handleContinue() {
+    const parsedWeight = Number(weightKg);
     updateDraft({
       technique: technique.trim() || undefined,
       timeTaken: timeTaken.trim() || undefined,
       giTag: giTag.trim() || undefined,
       careInstructions: careInstructions.trim() || undefined,
+      weightKg: weightKg.trim() && Number.isFinite(parsedWeight) && parsedWeight > 0 ? parsedWeight : undefined,
     });
     navigate("/add-product/price");
   }
@@ -82,6 +86,31 @@ export function HeritageDetailsScreen() {
             maxLength={500}
           />
         </label>
+
+        <p className="field-label">{t("heritage.weightLabel")}</p>
+        <p className="body-s onboarding-helper">{t("heritage.weightHelper")}</p>
+        <div className="weight-category-grid">
+          {WEIGHT_CATEGORIES.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              className={`weight-category-button${Number(weightKg) === category.weightKg ? " weight-category-button-active" : ""}`}
+              onClick={() => setWeightKg(String(category.weightKg))}
+            >
+              {t(category.labelKey)}
+            </button>
+          ))}
+        </div>
+        <Input
+          label={t("heritage.weightExactLabel")}
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.1"
+          placeholder={t("heritage.weightExactPlaceholder")}
+          value={weightKg}
+          onChange={(event) => setWeightKg(event.target.value)}
+        />
       </div>
 
       <Button variant="primary" icon={<ArrowIcon />} onClick={handleContinue}>

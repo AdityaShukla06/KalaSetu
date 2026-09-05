@@ -100,6 +100,55 @@
   color: var(--color-secondary-soft);
 }
 
+.shipping-estimate-unavailable {
+  color: var(--color-text-muted);
+}
+
+.shipping-estimate-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.shipping-estimate-error {
+  margin: 0;
+  color: var(--color-error);
+}
+
+.shipping-estimate-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+}
+
+.shipping-estimate-line {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-secondary);
+}
+
+.shipping-estimate-label {
+  color: var(--color-text-muted);
+}
+
+.shipping-estimate-total {
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.shipping-estimate-disclaimer {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
 .product-detail-description {
   color: var(--color-secondary);
   white-space: pre-wrap;

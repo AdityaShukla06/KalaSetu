@@ -79,6 +79,8 @@ shared/regions.ts    the fixed list of Indian states/UTs, used by both halves
 shared/materials.ts  the fixed list of product materials, used by both halves
 shared/ondcCatalog.ts the ONDC retail catalog field mapping, used by the frontend export today
 shared/whatsapp.ts   number normalisation and wa.me link building, used by both the buyer and artisan sides
+shared/shippingRateCard.ts the shipping estimate rate table, the one file to edit to change the numbers
+shared/shippingEstimator.ts pure zone classification and cost-range calculation over that rate card
 supabase/
   schema.sql         tables, index, counter function, RLS, storage bucket
   migrations/        run these against a database created before a change
@@ -94,7 +96,7 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/auth/request-otp` | `{ email }` | `{ success, emailDelivered, expiresInMinutes }` |
 | POST | `/api/auth/verify-otp` | `{ email, otp, intendedRole? }` | `{ token, userId, email, role }` |
 | GET | `/api/users/me` | | `UserProfile` |
-| PATCH | `/api/users/me` | `{ displayName?, shopName?, region?, whatsappNumber?, language? }` | `{ success }` |
+| PATCH | `/api/users/me` | `{ displayName?, shopName?, region?, whatsappNumber?, pincode?, language? }` | `{ success }` |
 | POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, originalImageUrl, width, height }`, artisan only |
 | POST | `/api/images/remove-background` | raw image bytes | `{ cutoutUrl, backgroundRemoved, notice? }`, artisan only |
 | POST | `/api/images/finalize` | `{ sourceUrl, options }` | `{ finalImageUrl, width, height }`, artisan only |
@@ -174,6 +176,22 @@ Async, not real-time chat, on purpose: an inquiry plus a WhatsApp handoff is clo
 **The artisan inbox** at `/inquiries`, linked from My Shop, lists every inquiry received. Opening the inbox marks the inquiries visible in that load as read as a side effect of `GET /api/inquiries/received` itself (the response still reflects each row's read state from just before that update, so the badge that says "New" is accurate for that one view). "Mark as responded" is a separate, explicit action (`PATCH /api/inquiries/:id/responded`, artisan only, own inquiries only) from either reading it or closing it, since responding usually happens over WhatsApp or a phone call, outside the app entirely; the inbox surfaces a "Reply on WhatsApp" shortcut using the buyer's own contact value when they gave one.
 
 **RLS** needed no changes here: the existing `inquiries_select_buyer`/`inquiries_select_artisan`/`inquiries_select_admin`/`inquiries_update_parties` policies already cover every new column, since they're scoped by row, not by field.
+
+## Shipping cost estimate
+
+Product prices exclude shipping, which used to make the buyer's total misleading and let an artisan under-price without realising a courier would eat into their margin. This is a rule-based estimator, not a courier integration: KalaSetu has no merchant account with any courier and makes no network call to price a shipment, ever.
+
+**How it's built, and why it's trustworthy enough to explain to a judge.** Indian courier rate cards are publicly known to be structured as zone (how far the shipment is going) x weight slab (500g steps), plus a fuel surcharge and GST on top; [`shared/shippingRateCard.ts`](shared/shippingRateCard.ts) models that exact structure with representative numbers and is the one file to edit if those numbers need updating, heavily commented (a deliberate, narrow exception to this project's usual no-comments rule, because the brief specifically asked for a rate table that's "easy to update and easy to explain to judges"). [`shared/shippingEstimator.ts`](shared/shippingEstimator.ts) is the pure calculation logic that reads it and needs no comments of its own; [`shared/shippingEstimator.test.ts`](shared/shippingEstimator.test.ts) covers the zone classification and cost math, 21 tests, no database needed.
+
+**Five zones, cheapest to most expensive**: same city, within state, metro-to-metro, rest of India, and a "special" zone for Jammu & Kashmir, Ladakh, Sikkim, the North-Eastern states, and the Andaman & Nicobar Islands, the same handful of buckets every major Indian courier uses. A zone is inferred from comparing the first few digits of an origin and destination pincode (matching pincode prefix conventions, not a live address lookup), which is exactly why this is an estimate and is labelled as one everywhere.
+
+**Always a range, never a fake-precise number.** Different couriers charge differently for the same zone and weight, by a well-documented 15-20%. Rather than presenting false precision, every estimate widens the computed cost into a range using that same spread, and the UI never shows a single number.
+
+**Two inputs an artisan and a buyer provide, both optional so nothing existing breaks.** `products.weight_kg` (an approximate weight, picked from a preset "light/medium/heavy/very heavy" or typed exactly, on the same optional-details step as technique and care instructions) and `users.pincode` (an artisan's own origin pincode, and, separately, a buyer types their own destination pincode inline on the product page, cached in `sessionStorage` only, never saved to their account, since a buyer might be shipping somewhere other than home).
+
+**Shown twice, honestly labelled both times.** The buyer's product detail page shows "Estimated shipping" as a range next to the price once they enter a pincode, plus an "estimated delivered total" (price plus that range), with a disclaimer that it is not a live quote, a courier booking, or a guaranteed price. The artisan sees the same rate card applied to their own product's weight at listing time, broken down by all five zones at once (there's no real buyer yet to pick one destination for), specifically so they can see how much of their margin shipping might actually take before they publish.
+
+**Extending two more already-shipped, high-traffic routes** (`GET /api/users/me`, marketplace product detail) with `pincode` reused the same 42703-catch-and-retry fallback already added for `whatsapp_number`, so neither breaks on a database that hasn't run migration 009 yet. `products.weight_kg` deliberately was **not** added to the shared `PRODUCT_COLUMNS` constant used by browsing, moderation, and the public passport page, none of which need it; it's fetched separately, and fails soft, only in the two places that actually use it (My Shop and the buyer's product detail).
 
 ## Admin console
 
@@ -302,7 +320,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, `server/__pricing_flag.test.ts`, `server/__analytics.test.ts`, and `server/__inquiries.test.ts` drive the whole API against a real Supabase project. All eight only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, `server/__pricing_flag.test.ts`, `server/__analytics.test.ts`, `server/__inquiries.test.ts`, and `server/__shipping.test.ts` drive the whole API against a real Supabase project. All nine only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
 - `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
 - After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 

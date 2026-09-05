@@ -18,6 +18,7 @@ export interface ProductInput {
   timeTaken?: string;
   giTag?: string;
   careInstructions?: string;
+  weightKg?: number;
 }
 
 export type ReviewStatus = "pending" | "approved" | "rejected" | "flagged";
@@ -52,6 +53,7 @@ export interface ArtisanSummary {
   displayName: string | null;
   region: string | null;
   whatsappNumber: string | null;
+  pincode: string | null;
   totalProducts: number;
 }
 

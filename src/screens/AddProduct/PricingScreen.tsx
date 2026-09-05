@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
-import { suggestPrice, createProduct } from "../../services/api";
+import { suggestPrice, createProduct, getMyProfile } from "../../services/api";
 import type { PricingSuggestionOutput } from "../../services/api";
 import { useAddProductDraft } from "../../context/AddProductDraftContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { translations } from "../../context/translations";
 import { CATEGORIES } from "./CategoryStep";
+import { estimateShippingByZone } from "../../../shared/shippingEstimator";
+import { SHIPPING_ZONES } from "../../../shared/shippingRateCard";
 import "./Pricing.css";
 
 function ArrowIcon() {
@@ -78,6 +80,13 @@ export function PricingScreen() {
   const [publishError, setPublishError] = useState(false);
   const [published, setPublished] = useState(false);
   const [passportId, setPassportId] = useState<string | null>(null);
+  const [artisanPincode, setArtisanPincode] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMyProfile()
+      .then((profile) => setArtisanPincode(profile.pincode))
+      .catch(() => setArtisanPincode(null));
+  }, []);
 
   const hasDescription = Boolean(draft.descriptionEn?.trim() || draft.descriptionLocal?.trim());
   const missingPhoto = !draft.imageUrl;
@@ -184,6 +193,7 @@ export function PricingScreen() {
         timeTaken: draft.timeTaken,
         giTag: draft.giTag,
         careInstructions: draft.careInstructions,
+        weightKg: draft.weightKg,
       });
       setPassportId(result.passportId);
       resetDraft();
@@ -378,6 +388,30 @@ export function PricingScreen() {
                 max: suggestion.maximumPrice ?? suggestion.suggestedMax,
               })}
             </p>
+          )}
+
+          {draft.weightKg ? (
+            <details className="pricing-breakdown">
+              <summary>{t("shipping.estimateToggle")}</summary>
+              <p className="body-s pricing-breakdown-disclaimer">{t("shipping.estimateDisclaimer")}</p>
+              <ul className="pricing-breakdown-list">
+                {SHIPPING_ZONES.map((zone) => {
+                  const range = estimateShippingByZone(draft.weightKg as number)?.[zone];
+                  if (!range) return null;
+                  return (
+                    <li key={zone}>
+                      <span>{t(`shipping.zone.${zone}`)}</span>
+                      <span>
+                        ₹{range.minCost}–₹{range.maxCost}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {!artisanPincode && <p className="body-s pricing-breakdown-disclaimer">{t("shipping.pincodeMissingArtisanNote")}</p>}
+            </details>
+          ) : (
+            <p className="caption pricing-note">{t("shipping.weightMissingArtisanNote")}</p>
           )}
 
           <Button variant="primary" icon={<PublishIcon />} loading={publishing} onClick={handlePublish}>
