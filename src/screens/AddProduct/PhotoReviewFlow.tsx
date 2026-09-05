@@ -2,6 +2,7 @@ import { useLayoutEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { enhanceImage } from "../../services/api";
 import { BeforeAfterCompare } from "./BeforeAfterCompare";
+import { PhotoStudio } from "./PhotoStudio";
 import { useAddProductDraft } from "../../context/AddProductDraftContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./AddProduct.css";
@@ -12,7 +13,7 @@ interface PhotoReviewFlowProps {
   onDone: () => void;
 }
 
-type Step = "reviewing" | "enhancing" | "enhance-error" | "compare";
+type Step = "reviewing" | "enhancing" | "enhance-error" | "compare" | "studio";
 
 function RetakeIcon() {
   return (
@@ -109,13 +110,28 @@ export function PhotoReviewFlow({ blob, onRetake, onDone }: PhotoReviewFlowProps
     );
   }
 
+  if (step === "compare") {
+    return (
+      <div className="compare-screen">
+        <BeforeAfterCompare originalUrl={originalUrl} enhancedUrl={enhancedUrl ?? originalUrl} />
+        <p className="body-s compare-hint">{t("camera.compareHint")}</p>
+        <Button variant="primary" icon={<ArrowIcon />} onClick={() => setStep("studio")}>
+          {t("camera.continue")}
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="compare-screen">
-      <BeforeAfterCompare originalUrl={originalUrl} enhancedUrl={enhancedUrl ?? originalUrl} />
-      <p className="body-s compare-hint">{t("camera.compareHint")}</p>
-      <Button variant="primary" icon={<ArrowIcon />} onClick={onDone}>
-        {t("camera.continue")}
-      </Button>
-    </div>
+    <PhotoStudio
+      blob={blob}
+      originalUrl={originalUrl}
+      enhancedUrl={enhancedUrl ?? originalUrl}
+      onRetake={onRetake}
+      onAccept={(finalImageUrl) => {
+        updateDraft({ imageUrl: finalImageUrl });
+        onDone();
+      }}
+    />
   );
 }

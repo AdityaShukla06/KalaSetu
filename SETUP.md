@@ -29,7 +29,17 @@ This powers voice transcription (Whisper), translation, and description generati
 
 Gemini is supported as a fallback: set `VOICE_AI_PROVIDER=gemini` and supply `GEMINI_API_KEY` instead. Worth knowing that Gemini's free tier allows only 5 requests per minute, and one voice note costs up to four of them.
 
-## 3. A session secret
+## 3. Background removal (optional)
+
+Powers the "Remove background" button in the photo enhancement studio. Everything else in the studio (brightness, contrast, sharpen, crop, background fill/blur) runs locally in `sharp` and needs no key.
+
+1. Go to [remove.bg](https://www.remove.bg), create an account, and open your account/API settings to get an API key.
+2. Set `BACKGROUND_REMOVAL_PROVIDER=remove-bg` and put the key in `REMOVE_BG_API_KEY`.
+3. **Free tier:** new accounts get 50 free API calls, at preview resolution (up to 0.25 megapixels). Beyond that it's pay-as-you-go credits. Check your remaining calls on your remove.bg account dashboard before demo day, since the exact allowance is set by remove.bg and can change.
+
+**You can skip this entirely.** Leave `BACKGROUND_REMOVAL_PROVIDER=none` (the default) and the button reports background removal as unavailable; the rest of the photo pipeline, and the rest of the app, is unaffected.
+
+## 4. A session secret
 
 Generate any long random string for `JWT_SECRET`:
 
@@ -39,7 +49,7 @@ openssl rand -base64 32
 
 If you change this later, everyone is signed out. That is the intended way to revoke all sessions.
 
-## 4. Email delivery (optional)
+## 5. Email delivery (optional)
 
 Sign in codes are emailed through [Resend](https://resend.com). Free tier, no card, 3000 emails a month.
 
@@ -48,7 +58,7 @@ Sign in codes are emailed through [Resend](https://resend.com). Free tier, no ca
 
 **You can skip this entirely.** Without a key, codes are not emailed and the demo fallback OTP below is how you sign in.
 
-## 5. Run it locally
+## 6. Run it locally
 
 ```bash
 npm install
@@ -60,7 +70,7 @@ Open `http://localhost:5173`. Sign in with any email address and the code `5741`
 
 To check the API is alive: `http://localhost:5173/api/health` should return `{"status":"ok"}`.
 
-## 6. Deploy to Vercel
+## 7. Deploy to Vercel
 
 1. Push your branch to GitHub.
 2. Go to [vercel.com](https://vercel.com), sign in with GitHub, **Add New -> Project**, import the repository.
@@ -70,7 +80,8 @@ To check the API is alive: `http://localhost:5173/api/health` should return `{"s
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `JWT_SECRET`
    - `GROQ_API_KEY`
-   - `RESEND_API_KEY` (only if you did step 4)
+   - `BACKGROUND_REMOVAL_PROVIDER` and `REMOVE_BG_API_KEY` (only if you did step 3)
+   - `RESEND_API_KEY` (only if you did step 5)
    - `DEMO_FALLBACK_OTP_ENABLED`
 5. **Deploy.**
 
@@ -78,7 +89,7 @@ Vercel gives you an HTTPS URL. That matters: the camera and microphone only work
 
 `VITE_API_BASE_URL` should stay empty in production. The API is served from the same origin at `/api`.
 
-## 7. Verify the deployment
+## 8. Verify the deployment
 
 - [ ] `https://<your-app>.vercel.app/api/health` returns `{"status":"ok","version":"1.0.0"}`. **Check this first.** If it fails, everything else will fail in ways that look unrelated.
 - [ ] The app loads at the root URL.
@@ -104,9 +115,10 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `/api/health` returns 500 | A required env var is missing | Vercel logs name the exact variable. Check all of section 6. |
+| `/api/health` returns 500 | A required env var is missing | Vercel logs name the exact variable. Check all of section 7. |
 | `Invalid server environment configuration` | Same as above | The error lists every missing or invalid variable. |
 | Sign in says the code is wrong | No email arrived and you typed a guess | Use `5741`, or set `RESEND_API_KEY` to receive real codes. |
 | Voice returns 500 with `stage: "stt"` | Provider key, model, or rate limit | The function logs carry the provider's own error. |
 | Images 404 after upload | Storage bucket missing or private | Re-run `supabase/schema.sql`, then confirm `product-images` exists and is public. |
+| "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, or the key is missing/wrong, or your remove.bg credits ran out | Check section 3, and your remove.bg dashboard for remaining credits. Everything else in the studio still works either way. |
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |

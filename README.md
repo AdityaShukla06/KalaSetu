@@ -47,7 +47,7 @@ src/                 the PWA
   screens/           one folder per screen
     Onboarding/      welcome, email entry, OTP verification
     Home/            My Shop catalog, product detail sheet, GeM/ONDC banner
-    AddProduct/      camera, category, voice description, pricing, publish
+    AddProduct/      camera, enhancement studio, category, voice description, pricing, publish
     Profile/         profile and language
     Marketplace/     buyer landing (placeholder until the buyer portal is built)
     Admin/           admin landing (placeholder until the admin console is built)
@@ -60,9 +60,10 @@ src/                 the PWA
 server/              the API, an ordinary Express app
   routes/            one router per resource, all mounted under /api
   middleware/        session verification, role checks, raw body reading, async errors
-  lib/               supabase client, env schema, JWT, OTP, email
-  services/          pricingEngine.ts, imageEnhancer.ts
+  lib/               supabase client, env schema, JWT, OTP, email, own-storage URL guard
+  services/          pricingEngine.ts, imageEnhancer.ts, imageStudio.ts
   voice-ai/          provider-agnostic STT, translation, description pipeline
+  image-ai/          swappable background removal provider, mirrors voice-ai/
 
 api/index.ts         Vercel entry point, exports the Express app
 shared/languages.ts  the language registry, used by both halves
@@ -82,7 +83,9 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/auth/verify-otp` | `{ email, otp }` | `{ token, userId, email }` |
 | GET | `/api/users/me` | | `UserProfile` |
 | PATCH | `/api/users/me` | `{ displayName?, shopName?, language? }` | `{ success }` |
-| POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, width, height }` |
+| POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, originalImageUrl, width, height }`, artisan only |
+| POST | `/api/images/remove-background` | raw image bytes | `{ cutoutUrl, backgroundRemoved, notice? }`, artisan only |
+| POST | `/api/images/finalize` | `{ sourceUrl, options }` | `{ finalImageUrl, width, height }`, artisan only |
 | POST | `/api/voice/transcribe` | raw audio bytes, `?category=` and `?language=` | `{ transcript, descriptionEn, descriptionLocal, localLanguage, detectedLanguage }` |
 | POST | `/api/pricing/suggest` | `{ category, materialCost or rawMaterials, ... }` | range, confidence, market reference, breakdown |
 | POST | `/api/products` | `ProductInput` | `{ productId }`, artisan only |
@@ -155,7 +158,11 @@ Row level security is enabled on every table and carries the full three-role rul
 
 ## How the features work
 
-**Photo.** `getUserMedia` with the rear camera, falling back to a native file picker if the camera is unavailable or denied. The captured image goes to `/api/images/enhance`, which runs a real `sharp` pipeline: EXIF auto rotation, resize to fit 1600px, contrast normalisation, a slight saturation lift, mild sharpening, and mozjpeg encoding. Auto rotation matters most in practice, since phone photos carry an orientation flag that would otherwise show the product sideways. Enhancement is deliberately deterministic rather than generative, because a marketplace photo has to keep showing the artisan's actual product.
+**Photo.** `getUserMedia` with the rear camera, falling back to a native file picker if the camera is unavailable or denied. The captured image goes to `/api/images/enhance`, which runs a real `sharp` pipeline: EXIF auto rotation, resize to fit 1600px, contrast normalisation, a slight saturation lift, mild sharpening, and mozjpeg encoding. Auto rotation matters most in practice, since phone photos carry an orientation flag that would otherwise show the product sideways. Enhancement is deliberately deterministic rather than generative, because a marketplace photo has to keep showing the artisan's actual product. The original and the enhanced image are both kept, at their own storage paths, so neither is ever overwritten.
+
+**Enhancement studio.** After the before/after compare screen, the artisan lands on a studio: background removal, brightness, contrast, sharpen, an auto lighting preset, a background treatment (white, soft cream, or blur), and e-commerce crop presets (original, square, portrait). Every control is a preset or a stepped +/- button, never a slider with a number, per the low digital literacy requirement. Toggling brightness, contrast, sharpen, auto lighting, or crop only updates a live CSS-filter preview client side; nothing hits the server until "Use this photo," which bakes the real pixels with `sharp` in `/api/images/finalize`. Background removal is the one control that's a real API call (behind [server/image-ai](server/image-ai)'s swappable provider interface, the same pattern as Groq/Gemini), because it needs actual image understanding, not a filter, so it stays a manual, explicit action rather than firing on page load. `/api/images/finalize` only reads from the caller's own storage folder (checked by [server/lib/ownStorageUrl.ts](server/lib/ownStorageUrl.ts) against the origin and normalised path, not a string prefix, so a `..` cannot walk into another artisan's folder) never an arbitrary URL, since that source string comes from the client.
+
+Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means the studio's remove-background button reports it as unavailable and the rest of the pipeline is completely unaffected. Set it to `remove-bg` with a key from remove.bg to turn it on. If the provider times out, hits its rate limit, or errors, `enhanceProductImage` catches it, logs the reason server side, and returns the artisan's photo through the ordinary `sharp` pipeline unchanged, with a short notice code the studio turns into a plain sentence. A slow or failed background removal call never blocks the listing and never loses the photo.
 
 **Voice.** `MediaRecorder` produces `audio/webm` on Chrome for Android. Groq accepts that, Gemini does not, so recordings are decoded and re-encoded to 16kHz mono WAV in the browser ([`src/services/audio.ts`](src/services/audio.ts)), which is the one format both accept. That keeps the provider switch a server side concern the frontend never has to know about. The backend independently validates the incoming type against the active provider and rejects an unsupported one with a clear error. The pipeline then transcribes in the original script, translates to English if needed, generates the English description under a strict no-invention prompt, and translates that result into the artisan's chosen language rather than generating it separately. If the mic is unavailable the flow falls back to typing, and either language alone is enough to publish.
 

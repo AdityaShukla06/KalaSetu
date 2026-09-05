@@ -1,0 +1,223 @@
+.studio-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: var(--space-6) var(--space-5) calc(var(--space-6) + var(--safe-area-bottom));
+  gap: var(--space-4);
+  background: var(--color-background);
+  overflow-y: auto;
+}
+
+.studio-title {
+  margin-bottom: 0;
+}
+
+.studio-tiles {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.studio-tile {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  background: var(--color-secondary);
+  overflow: hidden;
+}
+
+.studio-tile-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-composite {
+  position: absolute;
+  inset: 0;
+}
+
+.studio-backdrop-blur {
+  filter: blur(14px);
+  transform: scale(1.1);
+}
+
+.studio-backdrop-fill {
+  position: absolute;
+  inset: 0;
+}
+
+.studio-subject {
+  object-fit: contain;
+}
+
+.studio-tile-label {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(20, 16, 14, 0.62);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.studio-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.studio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.studio-label {
+  font-family: var(--font-body);
+  font-size: var(--text-caption-size);
+  font-weight: 700;
+  color: var(--color-secondary);
+}
+
+.studio-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--hit-min);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-button);
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary-tint);
+  color: var(--color-primary-pressed);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.studio-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.studio-action-inactive {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.studio-spinner {
+  width: 20px;
+  height: 20px;
+  border-width: 3px;
+}
+
+.studio-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.studio-chip-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.studio-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--hit-min);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.studio-chip-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-surface);
+}
+
+.studio-toggle-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.studio-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.studio-step-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--hit-min);
+  height: var(--hit-min);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  cursor: pointer;
+}
+
+.studio-step-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.studio-step-dots {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.studio-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border);
+}
+
+.studio-step-dot-active {
+  background: var(--color-primary);
+}
+
+.studio-finalizing-hint {
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.studio-actions {
+  position: static;
+  background: none;
+  padding: 0;
+}
+
+.studio-actions .btn {
+  flex: 1;
+  width: auto;
+}

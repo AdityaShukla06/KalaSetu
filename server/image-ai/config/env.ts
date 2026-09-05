@@ -1,0 +1,47 @@
+import "dotenv/config";
+import { z } from "zod";
+
+const envSchema = z
+  .object({
+    BACKGROUND_REMOVAL_PROVIDER: z.enum(["remove-bg", "none"]).default("none"),
+    REMOVE_BG_API_KEY: z.string().optional(),
+    BACKGROUND_REMOVAL_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  })
+  .superRefine((env, ctx) => {
+    if (env.BACKGROUND_REMOVAL_PROVIDER === "remove-bg" && !env.REMOVE_BG_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["REMOVE_BG_API_KEY"],
+        message: "REMOVE_BG_API_KEY is required when BACKGROUND_REMOVAL_PROVIDER is remove-bg",
+      });
+    }
+  });
+
+export type ImageAiEnv = z.infer<typeof envSchema>;
+
+let cached: ImageAiEnv | undefined;
+
+function withoutBlanks(source: NodeJS.ProcessEnv): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === "string" && value.trim() !== "") out[key] = value;
+  }
+  return out;
+}
+
+export function loadImageAiEnv(): ImageAiEnv {
+  if (cached) return cached;
+
+  const parsed = envSchema.safeParse(withoutBlanks(process.env));
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid image-ai environment configuration: ${issues}`);
+  }
+
+  cached = parsed.data;
+  return cached;
+}
+
+export function resetImageAiEnvCache(): void {
+  cached = undefined;
+}
