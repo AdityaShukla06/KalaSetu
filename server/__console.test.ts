@@ -8,6 +8,7 @@ let server: Server;
 let base: string;
 
 const EMAIL_ARTISAN = `console-artisan-${Date.now()}@example.com`;
+const EMAIL_ARTISAN_DEACTIVATION = `console-artisan-deactivation-${Date.now()}@example.com`;
 const EMAIL_ADMIN = `console-admin-${Date.now()}@example.com`;
 const FALLBACK = process.env.DEMO_FALLBACK_OTP || "5741";
 
@@ -37,7 +38,7 @@ beforeEach((ctx) => {
 const created: { users: string[]; products: string[]; emails: string[] } = {
   users: [],
   products: [],
-  emails: [EMAIL_ARTISAN, EMAIL_ADMIN],
+  emails: [EMAIL_ARTISAN, EMAIL_ARTISAN_DEACTIVATION, EMAIL_ADMIN],
 };
 
 async function verifyRaw(email: string, intendedRole: "artisan" | "buyer" = "artisan") {
@@ -164,7 +165,7 @@ suite("artisan management", () => {
   });
 
   it("PASS/FAIL: deactivating an artisan blocks their next login, reactivating restores it", async () => {
-    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const artisan = await signInAs(EMAIL_ARTISAN_DEACTIVATION, "artisan");
     const admin = await signInAs(EMAIL_ADMIN, "admin");
 
     const deactivateRes = await fetch(`${base}/api/internal/console/artisans/${artisan.userId}`, {
@@ -174,7 +175,7 @@ suite("artisan management", () => {
     });
     expect(deactivateRes.status).toBe(200);
 
-    const blockedLogin = await verifyRaw(EMAIL_ARTISAN);
+    const blockedLogin = await verifyRaw(EMAIL_ARTISAN_DEACTIVATION);
     expect(blockedLogin.status).toBe(403);
     expect((await json<{ error: string }>(blockedLogin)).error).toBe("account_deactivated");
 
@@ -185,12 +186,12 @@ suite("artisan management", () => {
     });
     expect(reactivateRes.status).toBe(200);
 
-    const restoredLogin = await verifyRaw(EMAIL_ARTISAN);
+    const restoredLogin = await verifyRaw(EMAIL_ARTISAN_DEACTIVATION);
     expect(restoredLogin.status).toBe(200);
   });
 
   it("PASS/FAIL: deactivation writes an audit row", async () => {
-    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const artisan = await signInAs(EMAIL_ARTISAN_DEACTIVATION, "artisan");
     const admin = await signInAs(EMAIL_ADMIN, "admin");
 
     await fetch(`${base}/api/internal/console/artisans/${artisan.userId}`, {
@@ -205,6 +206,12 @@ suite("artisan management", () => {
 
     const entry = auditEntries.find((e) => e.action === "artisan.deactivate" && e.targetId === artisan.userId);
     expect(entry?.reason).toBe("audit test");
+
+    await fetch(`${base}/api/internal/console/artisans/${artisan.userId}`, {
+      method: "PATCH",
+      headers: { ...auth(admin.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: true }),
+    });
   });
 });
 
