@@ -170,17 +170,23 @@ suite("marketplace search", () => {
   it("PASS/FAIL: sorts by price ascending and descending", async () => {
     const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
     const buyer = await signInAs(EMAIL_BUYER, "buyer");
-    const lowId = await createProduct(artisan.token, { price: 111 });
-    const highId = await createProduct(artisan.token, { price: 9999 });
+    const stamp = Date.now();
+    const q = `Sort Test ${stamp}`;
+    const lowId = await createProduct(artisan.token, { titleEn: `${q} Low`, price: 111 });
+    const highId = await createProduct(artisan.token, { titleEn: `${q} High`, price: 9999 });
 
     const asc = await json<{ items: Array<{ productId: string }> }>(
-      await fetch(`${base}/api/products/marketplace?sort=price_asc&limit=48`, { headers: auth(buyer.token) }),
+      await fetch(`${base}/api/products/marketplace?q=${encodeURIComponent(q)}&sort=price_asc&limit=48`, {
+        headers: auth(buyer.token),
+      }),
     );
     const ascIds = asc.items.map((item) => item.productId);
     expect(ascIds.indexOf(lowId)).toBeLessThan(ascIds.indexOf(highId));
 
     const desc = await json<{ items: Array<{ productId: string }> }>(
-      await fetch(`${base}/api/products/marketplace?sort=price_desc&limit=48`, { headers: auth(buyer.token) }),
+      await fetch(`${base}/api/products/marketplace?q=${encodeURIComponent(q)}&sort=price_desc&limit=48`, {
+        headers: auth(buyer.token),
+      }),
     );
     const descIds = desc.items.map((item) => item.productId);
     expect(descIds.indexOf(highId)).toBeLessThan(descIds.indexOf(lowId));

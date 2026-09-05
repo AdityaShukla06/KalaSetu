@@ -111,6 +111,12 @@ A script that fills the app with realistic content for judging, so the marketpla
 - **Photos**, ideally real craft photographs the team supplies in a folder per craft type; any craft without photos yet gets an obvious "photo pending" placeholder instead of a broken image, so the demo still runs before all photos are sourced.
 - **Run and verified against the live database.** Migration 010 is applied, and the script has been run end to end: 45 products across 14 artisans, 5 buyers, 13 inquiries, and over a thousand view records, all correctly counted, all pointing at real category/region/material/language values the app actually recognises. Re-running it twice in a row (including recovering cleanly from one mid-run network failure) confirmed the wipe-and-regenerate cycle leaves no leftover or duplicate rows.
 
+## Fixed: the API never actually ran locally
+
+Found while opening the app in a browser to test it for real: `npm run dev` only ever started the frontend (Vite). There was no local Express server at all, so every `/api/*` call silently got the app's own HTML back instead of JSON, since only a live Vercel deployment (or `vercel.json`'s routing rules) ever pointed `/api` at the actual server. That's why the app "opened" (the static shell loaded fine) but nothing that needed the backend, login included, ever worked locally.
+
+`npm run dev` now starts the real Express API on its own port alongside Vite, and Vite proxies `/api/*` straight to it, so the app has a genuinely working backend at `localhost:5173` for the first time in local development, matching how production actually serves both from one origin.
+
 ## Shared platform features
 
 - **One login for everyone.** Email OTP, a single flow, routing by role after verification. No separate login systems for artisans, buyers, or admins.

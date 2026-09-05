@@ -68,9 +68,11 @@ cp .env.example .env    # then fill in the values from the steps above
 npm run dev
 ```
 
+`npm run dev` starts two processes together (labelled `[api]` and `[web]` in the terminal): the Express API on `http://localhost:8787`, and Vite on `http://localhost:5173`, which proxies any `/api/*` request straight through to it. That's what makes `/api` work at the same origin as the frontend locally, matching how a single Vercel deployment serves both in production.
+
 Open `http://localhost:5173`. Sign in with any email address and the code `5741`.
 
-To check the API is alive: `http://localhost:5173/api/health` should return `{"status":"ok"}`.
+To check the API is alive: `http://localhost:5173/api/health` should return `{"status":"ok", ...}`. If it instead returns the app's HTML, the `[api]` process didn't start, most likely because a required `.env` value is missing; check the `[api]` process's own terminal output for the actual error.
 
 ## 7. Deploy to Vercel
 
@@ -131,3 +133,4 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |
 | Sign in returns 403 `account_deactivated` | An admin deactivated that artisan in the console | Reactivate them from `/internal/console/artisans`, or it's expected if that was intentional. |
 | `/internal/console` shows "Page not found" | You're not signed in as an admin | That's the intended behaviour for anyone else, not a bug. Seed or promote an admin account (see "Admin console for judging" above). |
+| The app loads but nothing works locally (login hangs, screens stay blank, `/api/health` returns HTML instead of JSON) | The API process isn't running. Running `vite` directly, or an older terminal tab still running just `vite`, skips the API entirely | Use `npm run dev` (not `vite` directly), and check its `[api]`-labelled output for a startup error. Two dev servers on the same ports at once (an old tab left open) will also cause this. |

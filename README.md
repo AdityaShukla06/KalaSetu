@@ -24,7 +24,7 @@ cp .env.example .env    # fill in the values, see SETUP.md
 npm run dev
 ```
 
-Then open `http://localhost:5173`.
+Then open `http://localhost:5173`. `npm run dev` runs the Vite frontend and the Express API together (labelled `[web]` and `[api]`); Vite proxies `/api/*` to the API process, so the app talks to a real backend at the same origin locally, the same as it does in production on Vercel.
 
 Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](SETUP.md). The on-device checklist is in [TESTING.md](TESTING.md). The ONDC catalog field mapping is in [ONDC_CATALOG_MAPPING.md](ONDC_CATALOG_MAPPING.md).
 
@@ -32,7 +32,9 @@ Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Vite dev server |
+| `npm run dev` | Runs the Express API (`:8787`) and the Vite dev server (`:5173`, proxying `/api` to the API) together |
+| `npm run dev:web` | Vite dev server only, no working `/api` |
+| `npm run dev:api` | Express API only, on `:8787`, restarts on file changes |
 | `npm run build` | Type checks and builds to `dist/` |
 | `npm run preview` | Serves the production build |
 | `npm run lint` | oxlint |
@@ -68,6 +70,9 @@ src/                 the PWA
   styles/            variables.css (design tokens), global.css
 
 server/              the API, an ordinary Express app
+  app.ts             the Express app and its middleware/route mounting, imported by both vercel.ts and dev.ts
+  vercel.ts          Vercel's serverless entry point, wraps app.ts as a Node request handler
+  dev.ts             local-only entry point, app.listen() on :8787, used by `npm run dev:api`
   routes/            one router per resource, all mounted under /api
   middleware/        session verification, role checks, raw body reading, async errors
   lib/               supabase client, env schema, JWT, OTP, inquiry email, own-storage URL guard, passport id generation
