@@ -83,6 +83,23 @@
   text-decoration: underline;
 }
 
+.product-detail-price-note {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--color-disabled-bg);
+  color: var(--color-secondary);
+  font-size: var(--text-body-s-size);
+  line-height: 20px;
+}
+
+.product-detail-price-note-badge {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: var(--color-secondary-soft);
+}
+
 .product-detail-description {
   color: var(--color-secondary);
   white-space: pre-wrap;

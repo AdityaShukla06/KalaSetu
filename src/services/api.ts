@@ -11,7 +11,13 @@ export type {
   MarketplaceResult,
 } from "./api/products";
 export type { UserProfile } from "./api/users";
-export type { RawMaterialItem, PricingSuggestionInput, PricingSuggestionOutput } from "./api/pricing";
+export type {
+  RawMaterialItem,
+  PricingSuggestionInput,
+  PricingSuggestionOutput,
+  MaterialCostAssessment,
+  MaterialCostStatus,
+} from "./api/pricing";
 export type { UserRole, SelfServeRole, VerifyOtpResult } from "./api/auth";
 export type { InquiryStatus, Inquiry, InquiryProductSummary } from "./api/inquiries";
 export type {

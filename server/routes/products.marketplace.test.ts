@@ -20,6 +20,7 @@ function makeRow(overrides: Partial<Parameters<typeof matchesSearch>[0]> = {}) {
     status: "published",
     flagged: false,
     flag_reason: null,
+    auto_flag_reason: null,
     review_status: "pending",
     reviewed_at: null,
     reviewed_by: null,

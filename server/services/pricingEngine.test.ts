@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { calculateSmartPrice, getMarketWeight, PRICING_CONFIG } from "./pricingEngine";
+import {
+  calculateSmartPrice,
+  getMarketWeight,
+  assessMaterialCost,
+  assessOvercharge,
+  PRICING_CONFIG,
+  MATERIAL_COST_REFERENCE_RANGES,
+} from "./pricingEngine";
 
 describe("getMarketWeight", () => {
   it("gives strong evidence weight for 26 samples", () => {
@@ -213,5 +220,98 @@ describe("calculateSmartPrice", () => {
 
     expect(result.reason).toBe(result.reasoning);
     expect(result.reason.length).toBeGreaterThan(0);
+  });
+
+  it("caps a wildly inflated material cost so it cannot keep dragging the price up", () => {
+    const potteryMax = MATERIAL_COST_REFERENCE_RANGES.pottery.typicalMax;
+    const capCeiling = potteryMax * PRICING_CONFIG.materialCostCapMultiplier;
+
+    const inflated = calculateSmartPrice({ category: "pottery", materialCost: 1_000_000 });
+    const atCapCeiling = calculateSmartPrice({ category: "pottery", materialCost: capCeiling });
+
+    expect(inflated.materialCostAssessment.wasCapped).toBe(true);
+    expect(inflated.materialCostAssessment.materialCostUsedForCalculation).toBe(capCeiling);
+    expect(inflated.materialCostAssessment.status).toBe("above_typical_range");
+    expect(inflated.recommendedPrice).toBe(atCapCeiling.recommendedPrice);
+    expect(inflated.pricingBreakdown.materialCost).toBe(1_000_000);
+  });
+
+  it("does not cap a material cost that is high but still within the cap multiplier", () => {
+    const potteryMax = MATERIAL_COST_REFERENCE_RANGES.pottery.typicalMax;
+    const justUnderCap = potteryMax * PRICING_CONFIG.materialCostCapMultiplier - 1;
+
+    const result = calculateSmartPrice({ category: "pottery", materialCost: justUnderCap });
+
+    expect(result.materialCostAssessment.wasCapped).toBe(false);
+    expect(result.materialCostAssessment.materialCostUsedForCalculation).toBe(justUnderCap);
+  });
+
+  it("surfaces a below-range material cost without capping it upward", () => {
+    const potteryMin = MATERIAL_COST_REFERENCE_RANGES.pottery.typicalMin;
+    const tinyCost = potteryMin / PRICING_CONFIG.materialCostWarningMultiplier - 1;
+
+    const result = calculateSmartPrice({ category: "pottery", materialCost: tinyCost });
+
+    expect(result.materialCostAssessment.status).toBe("below_typical_range");
+    expect(result.materialCostAssessment.wasCapped).toBe(false);
+    expect(result.materialCostAssessment.materialCostUsedForCalculation).toBe(tinyCost);
+  });
+
+  it("reports within_range for an ordinary material cost", () => {
+    const result = calculateSmartPrice({ category: "pottery", materialCost: 300 });
+    expect(result.materialCostAssessment.status).toBe("within_range");
+    expect(result.materialCostAssessment.wasCapped).toBe(false);
+  });
+
+  it("falls back to no_reference for a category with no baseline, without throwing", () => {
+    const assessment = assessMaterialCost("not-a-real-category", 500);
+    expect(assessment.status).toBe("no_reference");
+    expect(assessment.wasCapped).toBe(false);
+    expect(assessment.materialCostUsedForCalculation).toBe(500);
+  });
+
+  it("mentions the capped material cost in the plain-language explanation", () => {
+    const result = calculateSmartPrice({ category: "pottery", materialCost: 1_000_000 });
+    expect(result.reason).toContain("capped material cost");
+  });
+});
+
+describe("assessOvercharge", () => {
+  it("does not flag a listed price within the suggested range", () => {
+    const suggestion = calculateSmartPrice({ category: "pottery", materialCost: 300 });
+    const assessment = assessOvercharge(suggestion, suggestion.recommendedPrice);
+
+    expect(assessment.flagged).toBe(false);
+    expect(assessment.reason).toBeNull();
+  });
+
+  it("flags a listed price well above the suggested range with a neutral, factual reason", () => {
+    const suggestion = calculateSmartPrice({ category: "pottery", materialCost: 300 });
+    const wayTooHigh = suggestion.overchargeCeiling + 5000;
+
+    const assessment = assessOvercharge(suggestion, wayTooHigh);
+
+    expect(assessment.flagged).toBe(true);
+    expect(assessment.reason).toContain("Priced above typical range for this category");
+    expect(assessment.reason).toContain(String(suggestion.minimumPrice));
+    expect(assessment.reason).toContain(String(suggestion.maximumPrice));
+    expect(assessment.reason?.toLowerCase()).not.toContain("overcharg");
+    expect(assessment.reason?.toLowerCase()).not.toContain("seller");
+  });
+
+  it("does not flag right at the overcharge ceiling", () => {
+    const suggestion = calculateSmartPrice({ category: "pottery", materialCost: 300 });
+    const assessment = assessOvercharge(suggestion, suggestion.overchargeCeiling);
+
+    expect(assessment.flagged).toBe(false);
+  });
+
+  it("allows listing above the suggested maximum as long as it stays under the overcharge ceiling", () => {
+    const suggestion = calculateSmartPrice({ category: "pottery", materialCost: 300 });
+    const aboveMaxButUnderCeiling = Math.round((suggestion.maximumPrice + suggestion.overchargeCeiling) / 2);
+
+    const assessment = assessOvercharge(suggestion, aboveMaxButUnderCeiling);
+
+    expect(assessment.flagged).toBe(false);
   });
 });

@@ -180,6 +180,13 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
             {t("passport.viewLink")}
           </a>
 
+          {mode === "view" && product.autoFlagReason && (
+            <p className="sheet-price-note">
+              <span className="sheet-price-note-badge">{t("pricing.priceNoteBadge")}</span>
+              {product.autoFlagReason}
+            </p>
+          )}
+
           <LanguageTabs value={descriptionTab} onChange={setDescriptionTab} />
 
           {mode === "edit" ? (

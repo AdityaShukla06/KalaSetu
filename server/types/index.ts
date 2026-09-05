@@ -35,6 +35,7 @@ export interface Product extends ProductInput {
   status: ProductStatus;
   flagged: boolean;
   flagReason: string | null;
+  autoFlagReason: string | null;
   reviewStatus: ReviewStatus;
   reviewedAt: string | null;
   reviewedBy: string | null;

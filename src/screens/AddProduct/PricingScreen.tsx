@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { suggestPrice, createProduct } from "../../services/api";
+import type { PricingSuggestionOutput } from "../../services/api";
 import { useAddProductDraft } from "../../context/AddProductDraftContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { translations } from "../../context/translations";
@@ -52,11 +53,7 @@ function getCategoryTitles(categoryId: string, language: string): { en: string; 
   };
 }
 
-interface Suggestion {
-  suggestedMin: number;
-  suggestedMax: number;
-  reasoning: string;
-}
+type Suggestion = PricingSuggestionOutput;
 
 export function PricingScreen() {
   const navigate = useNavigate();
@@ -99,6 +96,13 @@ export function PricingScreen() {
   const parsedCost = Number(materialCost);
   const costIsValid = Boolean(materialCost.trim()) && Number.isFinite(parsedCost) && parsedCost > 0;
   const suggestionIsStale = suggestion !== null && costIsValid && parsedCost !== suggestedForCost;
+
+  const parsedSellingPrice = Number(sellingPrice);
+  const isPricedAboveRange =
+    suggestion !== null &&
+    typeof suggestion.overchargeCeiling === "number" &&
+    Number.isFinite(parsedSellingPrice) &&
+    parsedSellingPrice > suggestion.overchargeCeiling;
 
   const fetchSuggestion = useCallback(
     async (cost: number) => {
@@ -289,6 +293,66 @@ export function PricingScreen() {
             <p className="body-s pricing-reasoning">{suggestion.reasoning}</p>
           </div>
 
+          {suggestion.materialCostAssessment?.status === "above_typical_range" && (
+            <p className="pricing-material-cost-note" role="status">
+              {t("pricing.materialCostAboveTypical", {
+                category: suggestion.pricingBreakdown?.categoryName ?? draft.category ?? "",
+                min: suggestion.materialCostAssessment.typicalMin ?? 0,
+                max: suggestion.materialCostAssessment.typicalMax ?? 0,
+              })}
+              {suggestion.materialCostAssessment.wasCapped &&
+                ` ${t("pricing.materialCostCappedNote", {
+                  cappedCost: suggestion.materialCostAssessment.materialCostUsedForCalculation,
+                })}`}
+            </p>
+          )}
+          {suggestion.materialCostAssessment?.status === "below_typical_range" && (
+            <p className="pricing-material-cost-note" role="status">
+              {t("pricing.materialCostBelowTypical", {
+                category: suggestion.pricingBreakdown?.categoryName ?? draft.category ?? "",
+                min: suggestion.materialCostAssessment.typicalMin ?? 0,
+                max: suggestion.materialCostAssessment.typicalMax ?? 0,
+              })}
+            </p>
+          )}
+
+          {suggestion.pricingBreakdown && (
+            <details className="pricing-breakdown">
+              <summary>{t("pricing.breakdownToggle")}</summary>
+              <ul className="pricing-breakdown-list">
+                <li>
+                  <span>{t("pricing.materialCostLabel")}</span>
+                  <span>₹{suggestion.pricingBreakdown.materialCostUsedForCalculation}</span>
+                </li>
+                <li>
+                  <span>{t("pricing.breakdownLabour")}</span>
+                  <span>₹{suggestion.pricingBreakdown.estimatedLabourCost}</span>
+                </li>
+                <li>
+                  <span>{t("pricing.breakdownOverhead")}</span>
+                  <span>₹{suggestion.pricingBreakdown.overhead}</span>
+                </li>
+                <li>
+                  <span>{t("pricing.breakdownProductionCost")}</span>
+                  <span>₹{suggestion.pricingBreakdown.productionCost}</span>
+                </li>
+                <li>
+                  <span>{t("pricing.breakdownMargin")}</span>
+                  <span>₹{suggestion.pricingBreakdown.fairPriceFloor}</span>
+                </li>
+                <li>
+                  <span>{t("pricing.breakdownComplexity")}</span>
+                  <span>{suggestion.pricingBreakdown.complexity}</span>
+                </li>
+                <li>
+                  <span>{t("pricing.breakdownCategory")}</span>
+                  <span>{suggestion.pricingBreakdown.categoryName}</span>
+                </li>
+              </ul>
+              <p className="body-s pricing-breakdown-disclaimer">{t("pricing.breakdownDisclaimer")}</p>
+            </details>
+          )}
+
           <Input
             label={t("pricing.sellingPriceLabel")}
             prefix="₹"
@@ -304,6 +368,17 @@ export function PricingScreen() {
             error={sellingPriceError ?? undefined}
           />
           <p className="body-s pricing-note">{t("pricing.sellingPriceNote")}</p>
+
+          {isPricedAboveRange && (
+            <p className="pricing-overcharge-banner" role="status">
+              <strong>{t("pricing.overchargeBannerTitle")}</strong>
+              <br />
+              {t("pricing.overchargeBannerBody", {
+                min: suggestion.minimumPrice ?? suggestion.suggestedMin,
+                max: suggestion.maximumPrice ?? suggestion.suggestedMax,
+              })}
+            </p>
+          )}
 
           <Button variant="primary" icon={<PublishIcon />} loading={publishing} onClick={handlePublish}>
             {t("pricing.publish")}

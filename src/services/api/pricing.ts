@@ -18,12 +18,25 @@ export interface PricingSuggestionInput {
   subcategory?: string;
 }
 
+export type MaterialCostStatus = "within_range" | "above_typical_range" | "below_typical_range" | "no_reference";
+
+export interface MaterialCostAssessment {
+  status: MaterialCostStatus;
+  typicalMin: number | null;
+  typicalMax: number | null;
+  enteredMaterialCost: number;
+  materialCostUsedForCalculation: number;
+  wasCapped: boolean;
+}
+
 export interface PricingSuggestionOutput {
   suggestedMin: number;
   suggestedMax: number;
   recommendedPrice?: number;
   minimumPrice?: number;
   maximumPrice?: number;
+  overchargeCeiling?: number;
+  materialCostAssessment?: MaterialCostAssessment;
   reasoning: string;
   reason?: string;
   recommendationReliability?: number;
@@ -38,6 +51,7 @@ export interface PricingSuggestionOutput {
   };
   pricingBreakdown?: {
     materialCost: number;
+    materialCostUsedForCalculation: number;
     estimatedLabourCost: number;
     overhead: number;
     productionCost: number;

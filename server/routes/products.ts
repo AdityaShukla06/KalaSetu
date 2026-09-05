@@ -7,6 +7,7 @@ import { getSupabase } from "../lib/supabase";
 import { Product, ProductStatus, ProductWithArtisan } from "../types";
 import { buildVoiceAiDependencies } from "../voice-ai";
 import { generatePassportId } from "../lib/passportId";
+import { calculateSmartPrice, assessOvercharge } from "../services/pricingEngine";
 import { isAppLanguage } from "../../shared/languages";
 import { DICTIONARIES } from "../../shared/locales";
 import { isProductMaterial } from "../../shared/materials";
@@ -73,8 +74,31 @@ async function generateHeritageStorySafely(input: {
   }
 }
 
+function assessOverchargeSafely(input: {
+  category: string;
+  materialCost: number;
+  descriptionEn: string;
+  imageUrl: string;
+  price: number;
+}): string | null {
+  try {
+    const suggestion = calculateSmartPrice({
+      category: input.category,
+      materialCost: input.materialCost,
+      descriptionEn: input.descriptionEn,
+      imageUrl: input.imageUrl,
+    });
+    return assessOvercharge(suggestion, input.price).reason;
+  } catch (err) {
+    console.warn("[products] overcharge assessment failed, skipping auto-flag", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 export const PRODUCT_COLUMNS =
-  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, review_status, reviewed_at, reviewed_by, review_reason, passport_id, technique, time_taken, gi_tag, care_instructions, product_story, story_generated_at, created_at, updated_at";
+  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, auto_flag_reason, review_status, reviewed_at, reviewed_by, review_reason, passport_id, technique, time_taken, gi_tag, care_instructions, product_story, story_generated_at, created_at, updated_at";
 
 export interface ProductRow {
   id: string;
@@ -94,6 +118,7 @@ export interface ProductRow {
   status: string;
   flagged: boolean;
   flag_reason: string | null;
+  auto_flag_reason: string | null;
   review_status: string;
   reviewed_at: string | null;
   reviewed_by: string | null;
@@ -128,6 +153,7 @@ export function toProduct(row: ProductRow): Product {
     status: row.status as ProductStatus,
     flagged: row.flagged,
     flagReason: row.flag_reason,
+    autoFlagReason: row.auto_flag_reason,
     reviewStatus: row.review_status as Product["reviewStatus"],
     reviewedAt: row.reviewed_at,
     reviewedBy: row.reviewed_by,
@@ -212,6 +238,13 @@ router.post(
       timeTaken: parsed.data.timeTaken,
       giTag: parsed.data.giTag,
     });
+    const autoFlagReason = assessOverchargeSafely({
+      category: parsed.data.category,
+      materialCost: parsed.data.materialCost,
+      descriptionEn: parsed.data.descriptionEn,
+      imageUrl: parsed.data.imageUrl,
+      price: parsed.data.price,
+    });
 
     const { data, error } = await supabase
       .from("products")
@@ -224,6 +257,7 @@ router.post(
         passport_id: passportId,
         product_story: story,
         story_generated_at: story ? new Date().toISOString() : null,
+        auto_flag_reason: autoFlagReason,
       })
       .select("id, passport_id")
       .single();
@@ -391,9 +425,31 @@ router.patch(
     }
 
     const supabase = getSupabase();
+
+    const { data: existing, error: existingError } = await supabase
+      .from("products")
+      .select("category, material_cost, price, description_en, image_url")
+      .eq("id", req.params.id as string)
+      .eq("user_id", req.uid)
+      .maybeSingle();
+
+    if (existingError) throw new Error(`Could not load the product: ${existingError.message}`);
+    if (!existing) {
+      res.status(404).json({ error: "Product not found" });
+      return;
+    }
+
+    const autoFlagReason = assessOverchargeSafely({
+      category: parsed.data.category ?? existing.category,
+      materialCost: parsed.data.materialCost ?? Number(existing.material_cost),
+      descriptionEn: parsed.data.descriptionEn ?? existing.description_en,
+      imageUrl: parsed.data.imageUrl ?? existing.image_url,
+      price: parsed.data.price ?? Number(existing.price),
+    });
+
     const { data, error } = await supabase
       .from("products")
-      .update({ ...toRow(parsed.data), updated_at: new Date().toISOString() })
+      .update({ ...toRow(parsed.data), auto_flag_reason: autoFlagReason, updated_at: new Date().toISOString() })
       .eq("id", req.params.id as string)
       .eq("user_id", req.uid)
       .select("id");

@@ -134,3 +134,59 @@
   color: var(--color-primary);
   font-weight: 600;
 }
+
+.pricing-material-cost-note {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-size: var(--text-body-s-size);
+  line-height: 20px;
+}
+
+.pricing-breakdown {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-3) var(--space-4);
+}
+
+.pricing-breakdown summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+}
+
+.pricing-breakdown-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pricing-breakdown-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-body-s-size);
+  color: var(--color-secondary);
+}
+
+.pricing-breakdown-disclaimer {
+  margin-top: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.pricing-overcharge-banner {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--color-disabled-bg);
+  color: var(--color-secondary);
+  font-size: var(--text-body-s-size);
+  line-height: 20px;
+}

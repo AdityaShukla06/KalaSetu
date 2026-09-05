@@ -38,6 +38,7 @@ create table if not exists products (
   status          text not null default 'published' check (status in ('draft', 'published', 'failed')),
   flagged         boolean not null default false,
   flag_reason     text,
+  auto_flag_reason text,
   review_status   text not null default 'pending' check (review_status in ('pending', 'approved', 'rejected', 'flagged')),
   reviewed_at     timestamptz,
   reviewed_by     uuid references users(id),

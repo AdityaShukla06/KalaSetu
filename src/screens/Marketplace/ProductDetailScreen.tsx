@@ -175,6 +175,13 @@ export function ProductDetailScreen() {
             {t("passport.viewLink")}
           </a>
 
+          {product.autoFlagReason && (
+            <p className="product-detail-price-note">
+              <span className="product-detail-price-note-badge">{t("pricing.priceNoteBadge")}</span>
+              {product.autoFlagReason}
+            </p>
+          )}
+
           <LanguageTabs value={descriptionTab} onChange={setDescriptionTab} />
           <p className="body-s product-detail-description">{description}</p>
 

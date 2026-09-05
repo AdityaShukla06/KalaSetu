@@ -80,7 +80,7 @@ export function ModerationScreen() {
             <tbody>
               {Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     <Skeleton height="20px" />
                   </td>
                 </tr>
@@ -115,6 +115,7 @@ export function ModerationScreen() {
                   <th>Artisan</th>
                   <th>Category</th>
                   <th>Price</th>
+                  <th>Pricing</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -125,6 +126,15 @@ export function ModerationScreen() {
                     <td>{product.artisanName ?? "—"}</td>
                     <td>{product.category}</td>
                     <td>₹{product.price}</td>
+                    <td>
+                      {product.autoFlagReason ? (
+                        <span className="console-flag-badge" title={product.autoFlagReason}>
+                          Above typical range
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <Button

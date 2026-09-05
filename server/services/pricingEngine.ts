@@ -68,6 +68,9 @@ export const PRICING_CONFIG: {
   fairMargin: number;
   marketWeights: { high: number; medium: number; low: number; insufficient: number };
   maximumMarkup: number;
+  materialCostWarningMultiplier: number;
+  materialCostCapMultiplier: number;
+  overchargeThreshold: number;
 } = {
   labourFactors: {
     simple: 0.30,
@@ -85,7 +88,92 @@ export const PRICING_CONFIG: {
     insufficient: 0.00,
   },
   maximumMarkup: 0.20,
+  materialCostWarningMultiplier: 2,
+  materialCostCapMultiplier: 3,
+  overchargeThreshold: 0.30,
 };
+
+export interface MaterialCostBaseline {
+  typicalMin: number;
+  typicalMax: number;
+}
+
+export const MATERIAL_COST_REFERENCE_NOTE =
+  "Rule-based reference ranges for typical raw-material cost per category. Not verified market data, not a hard limit on listing price, and not the output of a trained model.";
+
+export const MATERIAL_COST_REFERENCE_RANGES: Record<string, MaterialCostBaseline> = {
+  textiles: { typicalMin: 80, typicalMax: 4000 },
+  pottery: { typicalMin: 20, typicalMax: 900 },
+  jewelry: { typicalMin: 50, typicalMax: 6000 },
+  woodwork: { typicalMin: 60, typicalMax: 3500 },
+  "bamboo-cane": { typicalMin: 20, typicalMax: 700 },
+  bamboo: { typicalMin: 20, typicalMax: 700 },
+  other: { typicalMin: 20, typicalMax: 5000 },
+};
+
+export type MaterialCostStatus = "within_range" | "above_typical_range" | "below_typical_range" | "no_reference";
+
+export interface MaterialCostAssessment {
+  status: MaterialCostStatus;
+  typicalMin: number | null;
+  typicalMax: number | null;
+  enteredMaterialCost: number;
+  materialCostUsedForCalculation: number;
+  wasCapped: boolean;
+}
+
+export function assessMaterialCost(categoryKey: string, enteredMaterialCost: number): MaterialCostAssessment {
+  const baseline = MATERIAL_COST_REFERENCE_RANGES[categoryKey];
+  if (!baseline) {
+    return {
+      status: "no_reference",
+      typicalMin: null,
+      typicalMax: null,
+      enteredMaterialCost,
+      materialCostUsedForCalculation: enteredMaterialCost,
+      wasCapped: false,
+    };
+  }
+
+  const capCeiling = baseline.typicalMax * PRICING_CONFIG.materialCostCapMultiplier;
+  const warnCeiling = baseline.typicalMax * PRICING_CONFIG.materialCostWarningMultiplier;
+  const warnFloor = baseline.typicalMin / PRICING_CONFIG.materialCostWarningMultiplier;
+
+  const materialCostUsedForCalculation = Math.min(enteredMaterialCost, capCeiling);
+  const wasCapped = materialCostUsedForCalculation < enteredMaterialCost;
+
+  let status: MaterialCostStatus = "within_range";
+  if (enteredMaterialCost > warnCeiling) status = "above_typical_range";
+  else if (enteredMaterialCost < warnFloor) status = "below_typical_range";
+
+  return {
+    status,
+    typicalMin: baseline.typicalMin,
+    typicalMax: baseline.typicalMax,
+    enteredMaterialCost,
+    materialCostUsedForCalculation,
+    wasCapped,
+  };
+}
+
+export interface OverchargeAssessment {
+  flagged: boolean;
+  reason: string | null;
+  overchargeCeiling: number;
+}
+
+export function assessOvercharge(suggestion: PricingEngineOutput, listedPrice: number): OverchargeAssessment {
+  const overchargeCeiling = suggestion.overchargeCeiling;
+  if (!Number.isFinite(listedPrice) || listedPrice <= overchargeCeiling) {
+    return { flagged: false, reason: null, overchargeCeiling };
+  }
+
+  const reason =
+    `Priced above typical range for this category. Listed at ₹${roundToSensibleInr(listedPrice)}; ` +
+    `suggested range ₹${suggestion.minimumPrice}–₹${suggestion.maximumPrice}.`;
+
+  return { flagged: true, reason, overchargeCeiling };
+}
 
 export function getMarketWeight(marketAvailable: boolean, sampleCount: number): number {
   if (!marketAvailable) return PRICING_CONFIG.marketWeights.insufficient;
@@ -117,8 +205,11 @@ export interface PricingEngineOutput {
   reasoning: string;
   recommendationReliability: number;
   reliabilityLabel: "Very High" | "High" | "Medium" | "Low" | "Very Low";
+  overchargeCeiling: number;
+  materialCostAssessment: MaterialCostAssessment;
   pricingBreakdown: {
     materialCost: number;
+    materialCostUsedForCalculation: number;
     estimatedLabourCost: number;
     overhead: number;
     productionCost: number;
@@ -230,6 +321,19 @@ function inferComplexity(text: string): ComplexityLevel {
   return "standard";
 }
 
+function buildMaterialCostNote(assessment: MaterialCostAssessment, categoryName: string): string {
+  if (assessment.status === "above_typical_range") {
+    const cappedNote = assessment.wasCapped
+      ? ` To keep the suggestion fair, this calculation used a capped material cost of ₹${roundToSensibleInr(assessment.materialCostUsedForCalculation)} instead.`
+      : "";
+    return `The material cost you entered is well above the typical range for ${categoryName} (₹${assessment.typicalMin}–₹${assessment.typicalMax}).${cappedNote}`;
+  }
+  if (assessment.status === "below_typical_range") {
+    return `The material cost you entered is well below the typical range for ${categoryName} (₹${assessment.typicalMin}–₹${assessment.typicalMax}). Double check it's correct.`;
+  }
+  return "";
+}
+
 function buildExplanation(params: {
   productionCost: number;
   fairPriceFloor: number;
@@ -237,18 +341,21 @@ function buildExplanation(params: {
   marketMedian: number | null;
   sampleCount: number;
   recommendedPrice: number;
+  materialCostAssessment: MaterialCostAssessment;
+  categoryName: string;
 }): string {
   const productionCostText = `Your estimated production cost is ₹${roundToSensibleInr(params.productionCost)}. This includes material cost, estimated labour, and overhead.`;
   const fairFloorText = `A fair artisan margin gives a minimum fair price of ₹${roundToSensibleInr(params.fairPriceFloor)}.`;
+  const materialCostNote = buildMaterialCostNote(params.materialCostAssessment, params.categoryName);
 
   if (!params.marketAvailable || params.marketMedian === null) {
-    return `${productionCostText} ${fairFloorText} No reliable market benchmark was available for this product segment. The recommendation is therefore based primarily on estimated production cost and the fair artisan margin.`;
+    return `${productionCostText} ${fairFloorText} No reliable market benchmark was available for this product segment. The recommendation is therefore based primarily on estimated production cost and the fair artisan margin.${materialCostNote ? ` ${materialCostNote}` : ""}`;
   }
 
   const marketText = `Comparable products have a market median of ₹${roundToSensibleInr(params.marketMedian)} based on ${params.sampleCount} samples.`;
   const recommendationText = `The recommended price of ₹${params.recommendedPrice} balances artisan protection with market competitiveness.`;
 
-  return `${productionCostText} ${fairFloorText} ${marketText} ${recommendationText}`;
+  return `${productionCostText} ${fairFloorText} ${marketText} ${recommendationText}${materialCostNote ? ` ${materialCostNote}` : ""}`;
 }
 
 export function calculateSmartPrice(input: PricingEngineInput): PricingEngineOutput {
@@ -274,6 +381,9 @@ export function calculateSmartPrice(input: PricingEngineInput): PricingEngineOut
   }
   const categoryName = categoryConfig.name;
 
+  const materialCostAssessment = assessMaterialCost(normalizedCategory, effectiveMaterialCost);
+  const materialCostForCalculation = materialCostAssessment.materialCostUsedForCalculation;
+
   const fullText = `${input.category} ${input.descriptionEn || ""} ${input.descriptionHi || ""}`.trim();
 
   let complexity: ComplexityLevel;
@@ -292,9 +402,9 @@ export function calculateSmartPrice(input: PricingEngineInput): PricingEngineOut
   }
 
   const labourFactor = PRICING_CONFIG.labourFactors[complexity];
-  const estimatedLabourCost = effectiveMaterialCost * labourFactor;
-  const overhead = (effectiveMaterialCost + estimatedLabourCost) * PRICING_CONFIG.overheadRate;
-  const productionCost = effectiveMaterialCost + estimatedLabourCost + overhead;
+  const estimatedLabourCost = materialCostForCalculation * labourFactor;
+  const overhead = (materialCostForCalculation + estimatedLabourCost) * PRICING_CONFIG.overheadRate;
+  const productionCost = materialCostForCalculation + estimatedLabourCost + overhead;
   const fairPriceFloor = productionCost * (1 + PRICING_CONFIG.fairMargin);
 
   const selectedSubcategory = input.subcategory || inferSubcategory(normalizedCategory, fullText);
@@ -363,7 +473,11 @@ export function calculateSmartPrice(input: PricingEngineInput): PricingEngineOut
     marketMedian,
     sampleCount,
     recommendedPrice,
+    materialCostAssessment,
+    categoryName,
   });
+
+  const overchargeCeiling = roundToSensibleInr(maximumPrice * (1 + PRICING_CONFIG.overchargeThreshold));
 
   return {
     success: true,
@@ -376,8 +490,11 @@ export function calculateSmartPrice(input: PricingEngineInput): PricingEngineOut
     reasoning: reason,
     recommendationReliability,
     reliabilityLabel,
+    overchargeCeiling,
+    materialCostAssessment,
     pricingBreakdown: {
       materialCost: effectiveMaterialCost,
+      materialCostUsedForCalculation: roundToSensibleInr(materialCostForCalculation),
       estimatedLabourCost: roundToSensibleInr(estimatedLabourCost),
       overhead: roundToSensibleInr(overhead),
       productionCost: roundToSensibleInr(productionCost),

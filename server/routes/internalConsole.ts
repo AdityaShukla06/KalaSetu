@@ -348,7 +348,7 @@ router.get(
   asyncRoute(async (_req: Request, res: Response): Promise<void> => {
     const { data, error } = await getSupabase()
       .from("products")
-      .select(`${PRODUCT_COLUMNS}, auto_flag_reason`)
+      .select(PRODUCT_COLUMNS)
       .not("auto_flag_reason", "is", null)
       .order("created_at", { ascending: false });
 
@@ -361,9 +361,9 @@ router.get(
       throw new Error(`Could not load flagged listings: ${error.message}`);
     }
 
-    const items: FlaggedListing[] = (data as Array<ProductRow & { auto_flag_reason: string }>).map((row) => ({
+    const items: FlaggedListing[] = (data as ProductRow[]).map((row) => ({
       ...toProduct(row),
-      autoFlagReason: row.auto_flag_reason,
+      autoFlagReason: row.auto_flag_reason as string,
     }));
 
     const result: FlaggedListingsResult = { available: true, items };
