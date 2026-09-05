@@ -114,6 +114,17 @@
   padding: 0 var(--space-8);
 }
 
+.pricing-passport-link {
+  min-height: var(--hit-min);
+  display: flex;
+  align-items: center;
+  color: var(--color-secondary-soft);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .pricing-range-stale .pricing-range-value {
   opacity: 0.45;
 }

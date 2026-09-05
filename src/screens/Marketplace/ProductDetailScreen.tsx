@@ -166,6 +166,15 @@ export function ProductDetailScreen() {
             )}
           </div>
 
+          <a
+            href={`/passport/${product.passportId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="product-detail-passport-link"
+          >
+            {t("passport.viewLink")}
+          </a>
+
           <LanguageTabs value={descriptionTab} onChange={setDescriptionTab} />
           <p className="body-s product-detail-description">{description}</p>
 

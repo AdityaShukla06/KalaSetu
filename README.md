@@ -14,6 +14,7 @@ An artisan records a voice note in their own language. The app transcribes it, w
 - Email OTP sign in with app issued JWT sessions
 - Groq (Whisper and gpt-oss-120b) for transcription, translation, and description, with Gemini as a switchable fallback
 - `sharp` for image enhancement
+- `qrcode` for the Craft Heritage Passport's scannable link, generated entirely client side
 
 ## Getting started
 
@@ -54,6 +55,7 @@ src/                 the PWA
     Profile/         profile and language
     Marketplace/     buyer portal: browse/search/filter, product detail, inquiries, profile
     Console/         admin console: dashboard, artisans, moderation, flagged listings
+    Passport/        the public Craft Heritage Passport certificate page
     NotFound/        generic 404, also used to hide the console route from non-admins
   components/        Button, Card, Input, OtpInput, LanguageToggle, RegionSelect, Skeleton, ConfirmDialog, BottomNav
   context/           Auth, Language, AddProductDraft
@@ -64,7 +66,7 @@ src/                 the PWA
 server/              the API, an ordinary Express app
   routes/            one router per resource, all mounted under /api
   middleware/        session verification, role checks, raw body reading, async errors
-  lib/               supabase client, env schema, JWT, OTP, email, own-storage URL guard
+  lib/               supabase client, env schema, JWT, OTP, email, own-storage URL guard, passport id generation
   services/          pricingEngine.ts, imageEnhancer.ts, imageStudio.ts
   voice-ai/          provider-agnostic STT, translation, description pipeline
   image-ai/          swappable background removal provider, mirrors voice-ai/
@@ -94,7 +96,7 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/images/finalize` | `{ sourceUrl, options }` | `{ finalImageUrl, width, height }`, artisan only |
 | POST | `/api/voice/transcribe` | raw audio bytes, `?category=` and `?language=` | `{ transcript, descriptionEn, descriptionLocal, localLanguage, detectedLanguage }` |
 | POST | `/api/pricing/suggest` | `{ category, materialCost or rawMaterials, ... }` | range, confidence, market reference, breakdown |
-| POST | `/api/products` | `ProductInput` | `{ productId }`, artisan only |
+| POST | `/api/products` | `ProductInput` | `{ productId, passportId }`, artisan only |
 | GET | `/api/products` | | `Product[]`, the caller's own |
 | GET | `/api/products/marketplace` | `?q=&category=&material=&region=&minPrice=&maxPrice=&sort=&page=&limit=` | `{ items, page, limit, total, hasMore }`, published and unflagged only |
 | GET | `/api/products/marketplace/:id` | | `ProductWithArtisan`, a single published listing plus a live artisan summary |
@@ -114,6 +116,7 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | PATCH | `/api/internal/console/moderation/:id/flag` | `{ reason }` | `{ success }`, admin only, pulls the listing from the marketplace |
 | GET | `/api/internal/console/flagged` | | `{ available, items }`, admin only, `available: false` until the pricing overcharge check exists |
 | GET | `/api/internal/console/audit` | `?limit=` | `AuditLogEntry[]`, admin only |
+| GET | `/api/passport/:passportId` | | `PublicPassport`, public, no auth, published and unflagged only |
 
 Uploads send the file as the raw request body with its real type in an `X-File-Type` header rather than as multipart. Serverless runtimes buffer and consume the request stream before the handler runs, which breaks multipart parsers; reading a raw body works both under a normal Express server and on Vercel.
 
@@ -168,6 +171,20 @@ Four screens under `src/screens/Console/`, deliberately unlinked from anywhere i
 **Confirm dialogs are one reusable component** ([src/components/ConfirmDialog.tsx](src/components/ConfirmDialog.tsx)), used for deactivate and for reject/flag's required-reason prompt, matching the existing design system rather than adding a modal library.
 
 **Demo login**: `npm run seed:demo-admin -- you@example.com` (or no argument, defaults to `admin@kalasetu.demo`) creates the account directly with the service role key, no prior sign-in required, unlike `promote:admin`. Sign in through the normal email/OTP screen afterward; the role choice on that screen is ignored for an account that already exists.
+
+## Craft Heritage Passport
+
+Every product gets a public, shareable certificate of origin at `/passport/ART-YYYY-NNNNNN`, viewable with no login. It exists to give a handmade product a digital identity beyond the commercial listing: a QR code, the artisan's name and region, craft type, technique, materials, time taken, creation date, an optional GI/ODOP tag, care instructions, and a short Product Story, styled to read like a certificate rather than a normal product page.
+
+**Passport ID.** `ART-` plus the creation year plus a 6-digit sequence number, e.g. `ART-2026-001892`, assigned at product creation by [`next_passport_number`](supabase/migrations/005-heritage-passport.sql), a Postgres function that does an atomic upsert-and-return on a `passport_counters(year, last_value)` table, the same race-safe pattern already used for `increment_total_products`. Existing products were backfilled by actual creation year and creation order, so historical listings get historically appropriate numbers rather than being bunched into the current year.
+
+**The Product Story is the one place in this app with an explicit anti-fabrication prompt**, because a fabricated cultural claim in front of anyone evaluating this would be worse than no story at all. [`server/voice-ai/description/heritagePrompt.ts`](server/voice-ai/description/heritagePrompt.ts) builds one shared prompt used by both the Groq and Gemini implementations, so the rule can't drift between providers. It explicitly marks every field the artisan didn't provide as "(not provided, omit this from the story)" rather than silently leaving it out, which is a stronger signal against the model quietly filling the gap, and it forbids inventing regional history or heritage claims even when the category or material would typically suggest one. The artisan's region is deliberately never passed into this prompt at all, specifically so the model has no place name to "helpfully" reason a tradition from. Generation happens once at product creation and the result is stored in `products.product_story`; the passport page never regenerates it. If generation fails for any reason, product creation still succeeds, `product_story` stays null, and the passport shows a plain "story not available" line instead of blocking the listing, the same non-blocking pattern used for background removal.
+
+**No official claim, anywhere.** The passport's footer carries an explicit self-declared-record disclaimer, and the story prompt itself (rule 4) separately forbids the model from ever implying government verification or third-party certification. Both exist independently of each other on purpose.
+
+**Public by design, narrow on purpose.** `GET /api/passport/:passportId` and the `/passport/:passportId` frontend route carry no auth middleware at all, deliberately, and the frontend route sits outside every auth-gating wrapper so a logged-in user isn't redirected away from a shared link either. The response is a hand-picked `PublicPassport` shape that excludes price, the owning user id, and every moderation field; a draft, flagged, or nonexistent passport id all return a plain 404. A matching anon-role RLS policy (`products_select_public_passport`) backs the same restriction at the database level.
+
+**QR code and print.** The QR (linking to the passport's own public URL) renders client side with the `qrcode` package, no network call. Share uses the Web Share API where available and falls back to copying the link. A `@media print` stylesheet hides every button and produces a clean single-page certificate.
 
 ## Languages
 
@@ -230,7 +247,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, and `server/__console.test.ts` drive the whole API against a real Supabase project. All four only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, and `server/__passport.test.ts` drive the whole API against a real Supabase project. All five only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
 - `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
 - After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 

@@ -10,7 +10,10 @@ import {
 } from "../types/voice-ai.types";
 
 function stubDescriptionService(text = "A handwoven bamboo basket."): ProductDescriptionService {
-  return { generateDescription: vi.fn().mockResolvedValue(text) };
+  return {
+    generateDescription: vi.fn().mockResolvedValue(text),
+    generateHeritageStory: vi.fn().mockResolvedValue("A short heritage story."),
+  };
 }
 
 function sttReturning(text: string, language: SpeechToTextResultLanguage): SpeechToTextService {
@@ -94,7 +97,10 @@ describe("processVoiceDescription", () => {
     const deps: VoiceAiDependencies = {
       sttService: sttReturning("A clay pot.", "en"),
       translationService: new MockTranslationService(),
-      descriptionService: { generateDescription: vi.fn().mockRejectedValue(new Error("boom")) },
+      descriptionService: {
+        generateDescription: vi.fn().mockRejectedValue(new Error("boom")),
+        generateHeritageStory: vi.fn().mockRejectedValue(new Error("boom")),
+      },
     };
 
     await expect(

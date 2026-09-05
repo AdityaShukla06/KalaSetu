@@ -6,6 +6,7 @@ import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
 import { Product, ProductStatus, ProductWithArtisan } from "../types";
 import { buildVoiceAiDependencies } from "../voice-ai";
+import { generatePassportId } from "../lib/passportId";
 import { isAppLanguage } from "../../shared/languages";
 import { DICTIONARIES } from "../../shared/locales";
 import { isProductMaterial } from "../../shared/materials";
@@ -37,21 +38,43 @@ function localisedTitle(category: string, language: string, fallback: string): s
 
 let voiceDeps: ReturnType<typeof buildVoiceAiDependencies> | undefined;
 
-function getTranslator() {
+function getVoiceDeps() {
   if (!voiceDeps) {
     voiceDeps = buildVoiceAiDependencies({
       logger: {
         info: () => {},
-        warn: (m: string, meta?: Record<string, unknown>) => console.warn("[relocalise]", m, meta || ""),
-        error: (m: string, meta?: Record<string, unknown>) => console.error("[relocalise]", m, meta || ""),
+        warn: (m: string, meta?: Record<string, unknown>) => console.warn("[products]", m, meta || ""),
+        error: (m: string, meta?: Record<string, unknown>) => console.error("[products]", m, meta || ""),
       },
     });
   }
-  return voiceDeps.translationService;
+  return voiceDeps;
+}
+
+function getTranslator() {
+  return getVoiceDeps().translationService;
+}
+
+async function generateHeritageStorySafely(input: {
+  category: string;
+  descriptionEn: string;
+  material?: string;
+  technique?: string;
+  timeTaken?: string;
+  giTag?: string;
+}): Promise<string | null> {
+  try {
+    return await getVoiceDeps().descriptionService.generateHeritageStory(input);
+  } catch (err) {
+    console.warn("[products] heritage story generation failed, passport will show no story for now", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 export const PRODUCT_COLUMNS =
-  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, review_status, reviewed_at, reviewed_by, review_reason, created_at, updated_at";
+  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, review_status, reviewed_at, reviewed_by, review_reason, passport_id, technique, time_taken, gi_tag, care_instructions, product_story, story_generated_at, created_at, updated_at";
 
 export interface ProductRow {
   id: string;
@@ -75,6 +98,13 @@ export interface ProductRow {
   reviewed_at: string | null;
   reviewed_by: string | null;
   review_reason: string | null;
+  passport_id: string;
+  technique: string | null;
+  time_taken: string | null;
+  gi_tag: string | null;
+  care_instructions: string | null;
+  product_story: string | null;
+  story_generated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -102,6 +132,13 @@ export function toProduct(row: ProductRow): Product {
     reviewedAt: row.reviewed_at,
     reviewedBy: row.reviewed_by,
     reviewReason: row.review_reason,
+    technique: row.technique ?? undefined,
+    timeTaken: row.time_taken ?? undefined,
+    giTag: row.gi_tag ?? undefined,
+    careInstructions: row.care_instructions ?? undefined,
+    passportId: row.passport_id,
+    productStory: row.product_story,
+    storyGeneratedAt: row.story_generated_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -118,6 +155,10 @@ const ProductInputSchema = z.object({
   imageUrl: z.string().url(),
   price: z.number().positive(),
   materialCost: z.number().positive(),
+  technique: z.string().trim().min(1).max(120).optional(),
+  timeTaken: z.string().trim().min(1).max(60).optional(),
+  giTag: z.string().trim().min(1).max(120).optional(),
+  careInstructions: z.string().trim().min(1).max(500).optional(),
 });
 
 function toRow(input: Partial<z.infer<typeof ProductInputSchema>>): Record<string, unknown> {
@@ -132,6 +173,10 @@ function toRow(input: Partial<z.infer<typeof ProductInputSchema>>): Record<strin
   if (input.imageUrl !== undefined) row.image_url = input.imageUrl;
   if (input.price !== undefined) row.price = input.price;
   if (input.materialCost !== undefined) row.material_cost = input.materialCost;
+  if (input.technique !== undefined) row.technique = input.technique;
+  if (input.timeTaken !== undefined) row.time_taken = input.timeTaken;
+  if (input.giTag !== undefined) row.gi_tag = input.giTag;
+  if (input.careInstructions !== undefined) row.care_instructions = input.careInstructions;
   return row;
 }
 
@@ -158,6 +203,16 @@ router.post(
 
     const artisanName = artisan?.shop_name || artisan?.display_name || null;
 
+    const passportId = await generatePassportId();
+    const story = await generateHeritageStorySafely({
+      category: parsed.data.category,
+      descriptionEn: parsed.data.descriptionEn,
+      material: parsed.data.material,
+      technique: parsed.data.technique,
+      timeTaken: parsed.data.timeTaken,
+      giTag: parsed.data.giTag,
+    });
+
     const { data, error } = await supabase
       .from("products")
       .insert({
@@ -166,15 +221,18 @@ router.post(
         status: "published",
         artisan_name: artisanName,
         region: artisan?.region ?? null,
+        passport_id: passportId,
+        product_story: story,
+        story_generated_at: story ? new Date().toISOString() : null,
       })
-      .select("id")
+      .select("id, passport_id")
       .single();
 
     if (error) throw new Error(`Could not create the product: ${error.message}`);
 
     await supabase.rpc("increment_total_products", { target_user: req.uid, delta: 1 });
 
-    res.status(201).json({ productId: data.id });
+    res.status(201).json({ productId: data.id, passportId: data.passport_id });
   }),
 );
 

@@ -33,6 +33,7 @@ export type {
   FlaggedListing,
   FlaggedListingsResult,
 } from "./api/console";
+export type { PublicPassport } from "./api/passport";
 
 // importing utility apis
 export { sendOtp, verifyOtp, OTP_LENGTH } from "./api/auth";
@@ -62,3 +63,4 @@ export {
   getFlaggedListings,
   getAuditLog,
 } from "./api/console";
+export { getPublicPassport } from "./api/passport";

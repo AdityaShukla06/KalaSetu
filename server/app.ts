@@ -10,6 +10,7 @@ import translateRouter from "./routes/translate";
 import pricingRouter from "./routes/pricing";
 import inquiriesRouter from "./routes/inquiries";
 import internalConsoleRouter from "./routes/internalConsole";
+import passportRouter from "./routes/passport";
 import { PayloadTooLargeError } from "./middleware/rawBody";
 
 const app = express();
@@ -27,6 +28,7 @@ app.use("/api/translate", translateRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/inquiries", inquiriesRouter);
 app.use("/api/internal/console", internalConsoleRouter);
+app.use("/api/passport", passportRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });

@@ -76,7 +76,7 @@ export function VoiceDescribeScreen() {
 
   function handleDescriptionContinue() {
     updateDraft({ descriptionEn, descriptionLocal });
-    navigate("/add-product/price");
+    navigate("/add-product/heritage");
   }
 
   if (phase === "category") {

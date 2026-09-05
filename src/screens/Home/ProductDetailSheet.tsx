@@ -171,6 +171,15 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
             {t("home.detailCategory")}: {categoryLabel}
           </p>
 
+          <a
+            href={`/passport/${product.passportId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sheet-passport-link"
+          >
+            {t("passport.viewLink")}
+          </a>
+
           <LanguageTabs value={descriptionTab} onChange={setDescriptionTab} />
 
           {mode === "edit" ? (

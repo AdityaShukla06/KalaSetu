@@ -1,7 +1,8 @@
-import { ProductDescriptionService } from "../types/voice-ai.types";
+import { ProductDescriptionService, HeritageStoryInput } from "../types/voice-ai.types";
 import { DescriptionGenerationError, MalformedModelResponseError } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
 import { groqChat } from "../groq/chat";
+import { buildHeritagePrompt } from "./heritagePrompt";
 
 export class GroqDescriptionService implements ProductDescriptionService {
   private readonly apiKey: string;
@@ -52,6 +53,39 @@ export class GroqDescriptionService implements ProductDescriptionService {
     }
 
     return description;
+  }
+
+  async generateHeritageStory(input: HeritageStoryInput): Promise<string> {
+    if (!input.descriptionEn || input.descriptionEn.trim().length === 0) {
+      throw new DescriptionGenerationError("Cannot generate a heritage story from an empty description");
+    }
+
+    let raw: string;
+    try {
+      raw = await groqChat({
+        apiKey: this.apiKey,
+        model: this.model,
+        fallbackModel: this.fallbackModel,
+        json: true,
+        prompt: buildHeritagePrompt(input),
+      });
+    } catch (err) {
+      throw new DescriptionGenerationError("Heritage story generation call failed", err);
+    }
+
+    let parsed: { story?: string };
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      throw new MalformedModelResponseError("generation", "Heritage story response was not valid JSON", parseErr);
+    }
+
+    const story = parsed.story?.trim();
+    if (!story) {
+      throw new MalformedModelResponseError("generation", "Response was missing story");
+    }
+
+    return story;
   }
 }
 

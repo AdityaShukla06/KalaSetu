@@ -19,6 +19,10 @@ export interface ProductInput {
   imageUrl: string;
   price: number;
   materialCost: number;
+  technique?: string;
+  timeTaken?: string;
+  giTag?: string;
+  careInstructions?: string;
 }
 
 export type ReviewStatus = "pending" | "approved" | "rejected" | "flagged";
@@ -35,8 +39,29 @@ export interface Product extends ProductInput {
   reviewedAt: string | null;
   reviewedBy: string | null;
   reviewReason: string | null;
+  passportId: string;
+  productStory: string | null;
+  storyGeneratedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PublicPassport {
+  passportId: string;
+  titleEn: string;
+  titleLocal: string;
+  localLanguage: string;
+  category: string;
+  technique: string | null;
+  material: string | null;
+  timeTaken: string | null;
+  giTag: string | null;
+  careInstructions: string | null;
+  imageUrl: string;
+  artisanName: string | null;
+  region: string | null;
+  createdAt: string;
+  productStory: string | null;
 }
 
 export interface ArtisanSummary {

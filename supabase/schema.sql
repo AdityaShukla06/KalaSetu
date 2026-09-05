@@ -42,6 +42,13 @@ create table if not exists products (
   reviewed_at     timestamptz,
   reviewed_by     uuid references users(id),
   review_reason   text,
+  passport_id     text not null unique,
+  technique       text,
+  time_taken      text,
+  gi_tag          text,
+  care_instructions text,
+  product_story   text,
+  story_generated_at timestamptz,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -60,6 +67,13 @@ create index if not exists products_price_idx
 
 create index if not exists products_review_status_idx
   on products (review_status);
+
+create table if not exists passport_counters (
+  year       int primary key,
+  last_value int not null default 0
+);
+
+alter table passport_counters enable row level security;
 
 create table if not exists inquiries (
   id          uuid primary key default gen_random_uuid(),
@@ -115,6 +129,19 @@ as $$
   update users
   set total_products = greatest(0, total_products + delta)
   where id = target_user;
+$$;
+
+-- Atomically returns the next passport sequence number for a given year.
+-- The upsert's row-level lock is what makes this safe under concurrent
+-- product creation; the application formats the ART-YYYY-NNNNNN string.
+create or replace function next_passport_number(target_year int)
+returns int
+language sql
+as $$
+  insert into passport_counters (year, last_value)
+  values (target_year, 1)
+  on conflict (year) do update set last_value = passport_counters.last_value + 1
+  returning last_value;
 $$;
 
 create or replace function app_current_role()
@@ -193,6 +220,11 @@ create policy products_select_own on products
 drop policy if exists products_select_published on products;
 create policy products_select_published on products
   for select to authenticated
+  using (status = 'published' and flagged = false);
+
+drop policy if exists products_select_public_passport on products;
+create policy products_select_public_passport on products
+  for select to anon
   using (status = 'published' and flagged = false);
 
 drop policy if exists products_select_admin on products;

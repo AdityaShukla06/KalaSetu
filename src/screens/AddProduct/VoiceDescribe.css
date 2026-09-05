@@ -231,6 +231,22 @@
   box-shadow: 0 0 0 4px rgba(193, 80, 46, 0.14);
 }
 
+.heritage-subtitle {
+  margin-bottom: var(--space-5);
+}
+
+.heritage-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.heritage-care-textarea {
+  min-height: 90px;
+  margin-bottom: 0;
+}
+
 .describe-loading .btn {
   width: auto;
   padding: 0 var(--space-6);

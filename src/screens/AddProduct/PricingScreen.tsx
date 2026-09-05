@@ -80,6 +80,7 @@ export function PricingScreen() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState(false);
   const [published, setPublished] = useState(false);
+  const [passportId, setPassportId] = useState<string | null>(null);
 
   const hasDescription = Boolean(draft.descriptionEn?.trim() || draft.descriptionLocal?.trim());
   const missingPhoto = !draft.imageUrl;
@@ -164,7 +165,7 @@ export function PricingScreen() {
     const local = draft.descriptionLocal?.trim() || draft.descriptionEn?.trim() || "";
 
     try {
-      await createProduct({
+      const result = await createProduct({
         category: draft.category ?? "other",
         material: draft.material,
         titleEn: titles.en,
@@ -175,7 +176,12 @@ export function PricingScreen() {
         imageUrl: draft.imageUrl ?? "",
         price,
         materialCost: cost,
+        technique: draft.technique,
+        timeTaken: draft.timeTaken,
+        giTag: draft.giTag,
+        careInstructions: draft.careInstructions,
       });
+      setPassportId(result.passportId);
       resetDraft();
       setPublished(true);
     } catch {
@@ -198,6 +204,16 @@ export function PricingScreen() {
         <Button variant="primary" icon={<ArrowIcon />} onClick={() => navigate("/")}>
           {t("pricing.viewShop")}
         </Button>
+        {passportId && (
+          <a
+            href={`/passport/${passportId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pricing-passport-link"
+          >
+            {t("passport.viewLink")}
+          </a>
+        )}
       </div>
     );
   }

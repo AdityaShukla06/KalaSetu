@@ -71,6 +71,18 @@
   font-weight: 600;
 }
 
+.product-detail-passport-link {
+  align-self: flex-start;
+  min-height: var(--hit-min);
+  display: flex;
+  align-items: center;
+  color: var(--color-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .product-detail-description {
   color: var(--color-secondary);
   white-space: pre-wrap;

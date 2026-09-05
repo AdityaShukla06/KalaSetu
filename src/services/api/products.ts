@@ -14,6 +14,10 @@ export interface ProductInput {
   imageUrl: string;
   price: number;
   materialCost: number;
+  technique?: string;
+  timeTaken?: string;
+  giTag?: string;
+  careInstructions?: string;
 }
 
 export type ReviewStatus = "pending" | "approved" | "rejected" | "flagged";
@@ -30,6 +34,9 @@ export interface Product extends ProductInput {
   reviewedAt: string | null;
   reviewedBy: string | null;
   reviewReason: string | null;
+  passportId: string;
+  productStory: string | null;
+  storyGeneratedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,7 +78,7 @@ export interface MarketplaceResult {
 //endpoints
 
 //create product
-export function createProduct(product: ProductInput): Promise<{ productId: string }> {
+export function createProduct(product: ProductInput): Promise<{ productId: string; passportId: string }> {
   return apiFetch("/products", {
     method: "POST",
     body: JSON.stringify(product),

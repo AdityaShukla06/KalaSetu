@@ -89,6 +89,22 @@ export interface TranslationService {
 
 export interface ProductDescriptionService {
   generateDescription(englishTranscript: string, category: string): Promise<string>;
+  generateHeritageStory(input: HeritageStoryInput): Promise<string>;
+}
+
+/**
+ * Structured fields feeding the Craft Heritage Passport's story. Every field
+ * besides category and descriptionEn is optional because the artisan may
+ * not have provided it; an absent field must be omitted from the story, not
+ * guessed, which is why the prompt is told explicitly which fields exist.
+ */
+export interface HeritageStoryInput {
+  category: string;
+  descriptionEn: string;
+  material?: string;
+  technique?: string;
+  timeTaken?: string;
+  giTag?: string;
 }
 
 // ---------------------------------------------------------------------------

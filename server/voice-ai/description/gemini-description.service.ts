@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
-import { ProductDescriptionService } from "../types/voice-ai.types";
+import { ProductDescriptionService, HeritageStoryInput } from "../types/voice-ai.types";
 import { DescriptionGenerationError, MalformedModelResponseError } from "../errors/voice-ai.errors";
 import { VoiceAiEnv } from "../config/env";
+import { buildHeritagePrompt } from "./heritagePrompt";
 
 /**
  * Generates the final English product description from the English transcript
@@ -65,6 +66,55 @@ export class GeminiDescriptionService implements ProductDescriptionService {
     } catch (err) {
       if (err instanceof MalformedModelResponseError) throw err;
       throw new DescriptionGenerationError("Gemini description generation call failed", err);
+    }
+  }
+
+  async generateHeritageStory(input: HeritageStoryInput): Promise<string> {
+    if (!input.descriptionEn || input.descriptionEn.trim().length === 0) {
+      throw new DescriptionGenerationError("Cannot generate a heritage story from an empty description");
+    }
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.model,
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: buildHeritagePrompt(input) }],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              story: { type: "STRING" },
+            },
+            required: ["story"],
+          },
+        },
+      });
+
+      const raw = response.text;
+      if (!raw) {
+        throw new MalformedModelResponseError("generation", "Gemini returned no text output");
+      }
+
+      let parsed: { story?: string };
+      try {
+        parsed = JSON.parse(raw);
+      } catch (parseErr) {
+        throw new MalformedModelResponseError("generation", "Gemini heritage story response was not valid JSON", parseErr);
+      }
+
+      if (!parsed.story || parsed.story.trim().length === 0) {
+        throw new MalformedModelResponseError("generation", "Gemini response was missing story");
+      }
+
+      return parsed.story.trim();
+    } catch (err) {
+      if (err instanceof MalformedModelResponseError) throw err;
+      throw new DescriptionGenerationError("Gemini heritage story generation call failed", err);
     }
   }
 }

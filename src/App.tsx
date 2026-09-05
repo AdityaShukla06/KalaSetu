@@ -9,6 +9,7 @@ import { LoginScreen } from "./screens/Onboarding/LoginScreen";
 import { HomeScreen } from "./screens/Home/HomeScreen";
 import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
 import { VoiceDescribeScreen } from "./screens/AddProduct/VoiceDescribeScreen";
+import { HeritageDetailsScreen } from "./screens/AddProduct/HeritageDetailsScreen";
 import { PricingScreen } from "./screens/AddProduct/PricingScreen";
 import { ProfileScreen } from "./screens/Profile/ProfileScreen";
 import { MarketplaceLayout } from "./screens/Marketplace/MarketplaceLayout";
@@ -22,6 +23,7 @@ import { ArtisanDetailScreen } from "./screens/Console/ArtisanDetailScreen";
 import { ModerationScreen } from "./screens/Console/ModerationScreen";
 import { FlaggedScreen } from "./screens/Console/FlaggedScreen";
 import { NotFoundScreen } from "./screens/NotFound/NotFoundScreen";
+import { PassportScreen } from "./screens/Passport/PassportScreen";
 
 function AppLayout() {
   return (
@@ -64,6 +66,8 @@ function App() {
         <AppBanners />
         <BrowserRouter>
           <Routes>
+            <Route path="/passport/:passportId" element={<PassportScreen />} />
+
             <Route element={<RedirectIfAuthed />}>
               <Route path="/login" element={<LoginScreen />} />
             </Route>
@@ -90,6 +94,7 @@ function App() {
               <Route element={<RequireRole role="artisan" />}>
                 <Route path="/add-product/photo" element={<AddProductScreen />} />
                 <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
+                <Route path="/add-product/heritage" element={<HeritageDetailsScreen />} />
                 <Route path="/add-product/price" element={<PricingScreen />} />
 
                 <Route element={<AppLayout />}>
