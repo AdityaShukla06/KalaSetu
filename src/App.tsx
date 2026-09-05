@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { AppProviders } from "./context/AppProviders";
 import { useAuth, roleLandingPath } from "./context/AuthContext";
@@ -28,11 +29,20 @@ import { AnalyticsScreen } from "./screens/Analytics/AnalyticsScreen";
 import { InquiriesScreen } from "./screens/Inquiries/InquiriesScreen";
 
 function AppLayout() {
+  useEffect(() => {
+    document.documentElement.style.setProperty("--shell-max-width", "none");
+    return () => {
+      document.documentElement.style.removeProperty("--shell-max-width");
+    };
+  }, []);
+
   return (
-    <>
-      <Outlet />
+    <div className="artisan-shell">
       <BottomNav />
-    </>
+      <main className="artisan-shell-content">
+        <Outlet />
+      </main>
+    </div>
   );
 }
 

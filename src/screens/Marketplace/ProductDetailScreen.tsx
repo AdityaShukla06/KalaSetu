@@ -6,7 +6,7 @@ import { Skeleton } from "../../components/Skeleton";
 import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
 import { getMarketplaceProduct, createInquiry, recordProductView } from "../../services/api";
 import type { ProductWithArtisan, InquiryContactPreference } from "../../services/api";
-import { buildWhatsAppUrl } from "../../../shared/whatsapp";
+import { buildWhatsAppUrl, isValidWhatsAppNumber } from "../../../shared/whatsapp";
 import { estimateShippingCost, isValidIndianPincode } from "../../../shared/shippingEstimator";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
 import { useLanguage } from "../../context/LanguageContext";
@@ -111,6 +111,8 @@ export function ProductDetailScreen() {
   const [contactPreference, setContactPreference] = useState<InquiryContactPreference>("email");
   const [contactValue, setContactValue] = useState("");
   const [inquiryState, setInquiryState] = useState<InquiryState>("idle");
+  const [messageError, setMessageError] = useState(false);
+  const [contactValueError, setContactValueError] = useState(false);
 
   const [destinationPincode, setDestinationPincode] = useState(() => {
     try {
@@ -147,10 +149,16 @@ export function ProductDetailScreen() {
   }, [state, productId]);
 
   const needsContactValue = contactPreference !== "email";
-  const contactValueMissing = needsContactValue && !contactValue.trim();
 
   async function handleSendInquiry() {
-    if (!productId || !message.trim() || contactValueMissing) return;
+    if (!productId) return;
+
+    const messageMissing = !message.trim();
+    const contactValueInvalid = needsContactValue && !isValidWhatsAppNumber(contactValue);
+    setMessageError(messageMissing);
+    setContactValueError(contactValueInvalid);
+    if (messageMissing || contactValueInvalid) return;
+
     setInquiryState("sending");
     try {
       const parsedQuantity = Number(quantity);
@@ -362,16 +370,22 @@ export function ProductDetailScreen() {
                 </label>
                 <textarea
                   id="inquiry-message"
-                  className="inquiry-textarea"
+                  className={`inquiry-textarea${messageError ? " inquiry-textarea-error" : ""}`}
                   rows={4}
                   placeholder={t("marketplace.inquiryPlaceholder")}
                   value={message}
                   onChange={(event) => {
                     setMessage(event.target.value);
+                    setMessageError(false);
                     if (inquiryState === "error") setInquiryState("idle");
                   }}
                   disabled={inquiryState === "sending"}
                 />
+                {messageError && (
+                  <p className="field-error" role="alert">
+                    {t("marketplace.inquiryMessageRequired")}
+                  </p>
+                )}
 
                 <p className="field-label">{t("marketplace.contactPreferenceLabel")}</p>
                 <div className="contact-pref-tabs" role="tablist">
@@ -394,9 +408,16 @@ export function ProductDetailScreen() {
                   <Input
                     label={t("marketplace.contactValueLabel")}
                     type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    maxLength={18}
                     placeholder={t("marketplace.contactValuePlaceholder")}
                     value={contactValue}
-                    onChange={(event) => setContactValue(event.target.value)}
+                    error={contactValueError ? t("marketplace.contactValueInvalid") : undefined}
+                    onChange={(event) => {
+                      setContactValue(event.target.value);
+                      setContactValueError(false);
+                    }}
                     disabled={inquiryState === "sending"}
                   />
                 )}
@@ -410,7 +431,6 @@ export function ProductDetailScreen() {
                   variant="primary"
                   icon={<SendIcon />}
                   loading={inquiryState === "sending"}
-                  disabled={!message.trim() || contactValueMissing}
                   onClick={handleSendInquiry}
                 >
                   {t("marketplace.inquirySend")}

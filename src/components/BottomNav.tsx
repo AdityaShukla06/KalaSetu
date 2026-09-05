@@ -40,33 +40,35 @@ function ProfileIcon() {
 export function BottomNav() {
   return (
     <nav className="bottom-nav" aria-label="Primary">
-      <NavLink
-        to="/"
-        end
-        className={({ isActive }) => `bottom-nav-tab${isActive ? " bottom-nav-tab-active" : ""}`}
-      >
-        <HomeIcon />
-        <span>My Shop</span>
-      </NavLink>
+      <div className="bottom-nav-inner">
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) => `bottom-nav-tab${isActive ? " bottom-nav-tab-active" : ""}`}
+        >
+          <HomeIcon />
+          <span>My Shop</span>
+        </NavLink>
 
-      <NavLink
-        to="/add-product/photo"
-        className="bottom-nav-center"
-        aria-label="Add product"
-      >
-        <span className="bottom-nav-fab">
-          <PlusIcon />
-        </span>
-        <span className="bottom-nav-center-label">Add</span>
-      </NavLink>
+        <NavLink
+          to="/add-product/photo"
+          className="bottom-nav-center"
+          aria-label="Add product"
+        >
+          <span className="bottom-nav-fab">
+            <PlusIcon />
+          </span>
+          <span className="bottom-nav-center-label">Add</span>
+        </NavLink>
 
-      <NavLink
-        to="/profile"
-        className={({ isActive }) => `bottom-nav-tab${isActive ? " bottom-nav-tab-active" : ""}`}
-      >
-        <ProfileIcon />
-        <span>Profile</span>
-      </NavLink>
+        <NavLink
+          to="/profile"
+          className={({ isActive }) => `bottom-nav-tab${isActive ? " bottom-nav-tab-active" : ""}`}
+        >
+          <ProfileIcon />
+          <span>Profile</span>
+        </NavLink>
+      </div>
     </nav>
   );
 }

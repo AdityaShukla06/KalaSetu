@@ -129,3 +129,20 @@
 .analytics-sort-active {
   color: var(--color-primary);
 }
+
+@media (min-width: 900px) {
+  .analytics-screen {
+    padding: var(--space-8) 0 var(--space-10);
+    gap: var(--space-6);
+  }
+
+  .stat-card-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-4);
+  }
+
+  .analytics-table th,
+  .analytics-table td {
+    padding: var(--space-4) var(--space-5);
+  }
+}

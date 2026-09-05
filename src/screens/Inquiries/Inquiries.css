@@ -144,3 +144,25 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+@media (min-width: 900px) {
+  .inquiries-screen {
+    padding: var(--space-8) 0 var(--space-10);
+    gap: var(--space-6);
+  }
+
+  .inquiries-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .inquiries-item {
+    padding: var(--space-5);
+  }
+
+  .inquiries-item-photo {
+    width: 88px;
+    height: 88px;
+  }
+}

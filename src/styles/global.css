@@ -114,6 +114,41 @@ a {
   padding: 0 var(--space-5) calc(var(--tab-bar-height) + var(--safe-area-bottom));
 }
 
+.artisan-shell {
+  width: 100%;
+  max-width: 390px;
+  margin: 0 auto;
+}
+
+@media (min-width: 900px) {
+  :root {
+    --artisan-topnav-height: 68px;
+    --artisan-shell-max-width: 1180px;
+  }
+
+  .artisan-shell {
+    max-width: none;
+    padding: 0 var(--space-8);
+  }
+
+  .artisan-shell-content {
+    display: block;
+    max-width: var(--artisan-shell-max-width);
+    margin: 0 auto;
+    padding-top: var(--artisan-topnav-height);
+  }
+
+  .artisan-shell .screen {
+    min-height: auto;
+    padding-inline: 0;
+    padding-bottom: var(--space-10);
+  }
+
+  .artisan-form-column {
+    max-width: 560px;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

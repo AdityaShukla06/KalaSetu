@@ -62,3 +62,9 @@
   color: var(--color-error, #b3261e);
   font-weight: 600;
 }
+
+@media (min-width: 900px) {
+  .profile-screen {
+    padding-top: var(--space-8);
+  }
+}

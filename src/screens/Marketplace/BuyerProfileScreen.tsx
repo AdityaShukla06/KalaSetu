@@ -38,7 +38,6 @@ export function BuyerProfileScreen() {
   const [state, setState] = useState<LoadState>("loading");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [companyName, setCompanyName] = useState("");
   const [region, setRegion] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -53,7 +52,6 @@ export function BuyerProfileScreen() {
       const result = await getMyProfile();
       setProfile(result);
       setDisplayName(result.displayName ?? "");
-      setCompanyName(result.shopName ?? "");
       setRegion(result.region ?? "");
       setState("loaded");
     } catch {
@@ -79,9 +77,7 @@ export function BuyerProfileScreen() {
 
   const dirty =
     profile !== null &&
-    (displayName.trim() !== (profile.displayName ?? "") ||
-      companyName.trim() !== (profile.shopName ?? "") ||
-      region !== (profile.region ?? ""));
+    (displayName.trim() !== (profile.displayName ?? "") || region !== (profile.region ?? ""));
 
   async function handleSave() {
     setSaving(true);
@@ -90,12 +86,9 @@ export function BuyerProfileScreen() {
     try {
       await updateMyProfile({
         displayName: displayName.trim(),
-        shopName: companyName.trim(),
         region: region || undefined,
       });
-      setProfile((prev) =>
-        prev ? { ...prev, displayName: displayName.trim(), shopName: companyName.trim(), region: region || null } : prev,
-      );
+      setProfile((prev) => (prev ? { ...prev, displayName: displayName.trim(), region: region || null } : prev));
       setSaved(true);
     } catch {
       setSaveError(true);
@@ -132,15 +125,6 @@ export function BuyerProfileScreen() {
             maxLength={80}
             onChange={(event) => {
               setDisplayName(event.target.value);
-              setSaved(false);
-            }}
-          />
-          <Input
-            label={t("marketplace.companyNameLabel")}
-            value={companyName}
-            maxLength={120}
-            onChange={(event) => {
-              setCompanyName(event.target.value);
               setSaved(false);
             }}
           />

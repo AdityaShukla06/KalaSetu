@@ -26,6 +26,7 @@ The original, most-built-out side of the app. Mobile-first, large tap targets, b
 - **Approximate weight.** An optional step when publishing: pick a size ("light," "medium," "heavy," "very heavy") or type an exact weight in kg. Only used to estimate shipping cost, never shown to buyers directly.
 - **Language switch.** Changing the interface language also offers to re-translate the artisan's existing listings into the new language.
 - **PWA basics.** Install prompt, offline banner, and a cache-first app shell so the app still opens (to cached screens) with no network.
+- **Works on a laptop, not just a phone.** The artisan side was built mobile-first and used to sit as a narrow 390px strip in the middle of a desktop screen. It now adapts at one breakpoint: the bottom tab bar becomes a proper top navigation bar, the product grid widens from 2 columns to 4 or 5, analytics cards go 4 across, and the inquiry inbox becomes two columns. Forms stay a comfortable reading width instead of stretching across the whole screen. On a phone it is pixel for pixel the same app it was before, by design. The add-product flow deliberately stays a narrow centred column, because it is a camera-first, one-step-at-a-time wizard and that is the right shape for it on any screen.
 
 ## Buyer features
 
@@ -35,14 +36,14 @@ A separate portal, reachable only by an account with the buyer role, that works 
 - **Search and filter.** Free-text search over title and description (in both English and the artisan's language), plus filters for category, material, region, and price range, and sorting by newest or by price. Paginated with a "load more" pattern.
 - **Product detail.** Full description (English/local language tabs), price, category and material tags, an estimated shipping cost and delivered total once a buyer enters their pincode (see "Shipping cost estimate" below), a live summary of the artisan (shop name, region, how many products they have listed), and a prominent inquiry form.
 - **Inquiries.** A buyer can message an artisan about a specific product with a quantity, a free-text message, and how they'd like to be reached (email, phone, or WhatsApp), or skip the form entirely and message the artisan directly on WhatsApp if the artisan has added a number. The buyer has a running list of everything they've sent, with status and whether the artisan has responded.
-- **Buyer profile.** Display name, company name, region, language, and the inquiry list above.
+- **Buyer profile.** Display name, region, language, and the inquiry list above. Deliberately not a company name: nothing in the app ever used it, and it is not something an artisan acts on.
 - **Loading, empty, and error states everywhere.** Real skeleton loaders (not blank-screen spinners), "no products match these filters" instead of a blank grid, and retry buttons on every failure.
 
 ## Buyer-to-artisan inquiries
 
 An async message-plus-handoff flow instead of real-time chat, because that's closer to how this trade actually happens: a quick message or a WhatsApp ping, not a live chat window.
 
-- **The inquiry form** asks a buyer for a quantity, a message, and how they'd like to be contacted back (email, phone, or WhatsApp, with a number required for the last two).
+- **The inquiry form** asks a buyer for a quantity, a message, and how they'd like to be contacted back (email, phone, or WhatsApp, with a number required for the last two). If something is missing or wrong, the form says so on the specific field rather than quietly refusing to send: previously the send button just sat there disabled with no explanation, so typing a valid phone number and pressing send looked like the form was broken when it was only incomplete.
 - **A prominent WhatsApp button** sits above that form, not hidden behind it: if the artisan has added a WhatsApp number to their profile, a buyer can tap it and go straight to a WhatsApp chat with the product name and passport ID already filled in, no form required at all.
 - **The artisan gets emailed** the moment an inquiry comes in (product name, photo, the buyer's message, quantity, and how to reach them), with a link straight back into the app. If email delivery fails for any reason, the inquiry is never lost, it was already saved before the email was even attempted, and the artisan still sees it in their inbox.
 - **An inquiry inbox** on the artisan side lists everything received, marks messages read just by opening the inbox, and has an explicit "Mark as responded" action separate from that, since responding usually happens over WhatsApp or a phone call, not inside the app. A "Reply on WhatsApp" shortcut appears right there when the buyer left a phone number.

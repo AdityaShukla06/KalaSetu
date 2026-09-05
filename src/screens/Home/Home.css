@@ -410,3 +410,41 @@
   color: var(--color-error, #b3261e);
   font-weight: 600;
 }
+
+@media (min-width: 900px) {
+  .home-screen {
+    padding-top: var(--space-8);
+    gap: var(--space-6);
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-5);
+  }
+
+  .gem-banner,
+  .home-export-section {
+    max-width: 560px;
+  }
+
+  .sheet-overlay {
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8);
+  }
+
+  .sheet {
+    max-width: 720px;
+    max-height: 82vh;
+    border-radius: var(--radius-card);
+  }
+
+  .sheet-photo {
+    aspect-ratio: 16 / 9;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+  }
+
+  .sheet-body {
+    padding-bottom: var(--space-6);
+  }
+}

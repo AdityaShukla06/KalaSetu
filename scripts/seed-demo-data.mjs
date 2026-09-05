@@ -758,7 +758,6 @@ const BUYERS = [
   {
     key: "ritu-delhi",
     displayName: "Ritu Malhotra",
-    shopName: "Malhotra Home Decor",
     region: "Delhi",
     pincode: "110001",
     language: "en",
@@ -766,7 +765,6 @@ const BUYERS = [
   {
     key: "arjun-kochi",
     displayName: "Arjun Nair",
-    shopName: "Nair & Sons Retail",
     region: "Kerala",
     pincode: "682001",
     language: "en",
@@ -774,7 +772,6 @@ const BUYERS = [
   {
     key: "priya-mumbai",
     displayName: "Priya Sharma",
-    shopName: null,
     region: "Maharashtra",
     pincode: "400001",
     language: "en",
@@ -782,7 +779,6 @@ const BUYERS = [
   {
     key: "fatima-hyderabad",
     displayName: "Fatima Sheikh",
-    shopName: "Sheikh Boutique",
     region: "Telangana",
     pincode: "500001",
     language: "en",
@@ -790,7 +786,6 @@ const BUYERS = [
   {
     key: "karan-chandigarh",
     displayName: "Karan Mehta",
-    shopName: "Mehta Exports",
     region: "Punjab",
     pincode: "160001",
     language: "en",
@@ -993,7 +988,6 @@ async function main() {
       .insert({
         email: `${buyer.key}@kalasetu-seed.demo`,
         display_name: buyer.displayName,
-        shop_name: buyer.shopName,
         region: buyer.region,
         pincode: buyer.pincode,
         language: buyer.language,

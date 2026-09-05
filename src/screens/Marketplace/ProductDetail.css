@@ -197,6 +197,10 @@
   box-shadow: 0 0 0 4px rgba(193, 80, 46, 0.14);
 }
 
+.inquiry-textarea-error {
+  border-color: var(--color-error);
+}
+
 .inquiry-sent {
   color: var(--color-success);
   font-weight: 600;

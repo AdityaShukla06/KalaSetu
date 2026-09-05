@@ -183,7 +183,7 @@ export function ProfileScreen() {
 
   return (
     <div className="screen">
-      <div className="profile-screen">
+      <div className="profile-screen artisan-form-column">
         <h1>{t("profile.title")}</h1>
 
         <div className="profile-section">
