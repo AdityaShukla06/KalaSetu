@@ -100,6 +100,16 @@ A separate, deliberately hidden part of the app for platform oversight, reachabl
 - **Audit log.** Every moderation action and every artisan activation/deactivation is recorded: who did it, what they did, to which record, when, and why. Visible on the dashboard.
 - **Demo access.** A seed script creates one admin account directly, so the console can be logged into and shown during judging without going through the normal artisan/buyer signup choice.
 
+## Demo seed data
+
+A script that fills the app with realistic content for judging, so the marketplace, admin console, and analytics dashboard don't look empty during a demo.
+
+- **What it creates.** 14 artisan accounts spread across genuine Indian craft regions (Varanasi's Banarasi silk, Kanchipuram's silk, Bengal's clay figures, Rajasthan's terracotta and block print, Assam's bamboo work, Mizoram's cane weaving, Moradabad's brassware, Bidar's Bidriware, Gujarat's Ajrakh block print, Odisha's silver filigree, Jaipur's silver jewellery, Kashmir's walnut carving, and Channapatna's lacquered toys), about 45 products between them, 5 buyer accounts, a dozen or so buyer inquiries, and 28 days of realistic view history so the analytics chart actually shows a trend instead of a flat line.
+- **Correct on purpose, not just plausible.** Every craft is paired with the real region it actually comes from, and a heritage tag (GI tag) is only added where that craft genuinely holds one. Nothing here associates a craft with a place it isn't actually known for.
+- **A realistic moderation queue too.** Roughly one in five seeded products is left waiting for admin review, so the moderation queue has something in it, not just an empty state.
+- **Clearly marked and easy to remove.** Every row this script creates is flagged internally as demo data, so it can be wiped out completely with one command, without touching any real account or listing.
+- **Photos**, ideally real craft photographs the team supplies in a folder per craft type; any craft without photos yet gets an obvious "photo pending" placeholder instead of a broken image, so the demo still runs before all photos are sourced.
+
 ## Shared platform features
 
 - **One login for everyone.** Email OTP, a single flow, routing by role after verification. No separate login systems for artisans, buyers, or admins.
@@ -113,7 +123,7 @@ A separate, deliberately hidden part of the app for platform oversight, reachabl
 - Express API, deployed as a single Vercel serverless function.
 - Supabase (Postgres + file storage), with row-level security enabled on every table.
 - Groq (Whisper for speech, gpt-oss-120b for text) as the default AI provider, Gemini as a swappable fallback, remove.bg as the swappable background-removal provider.
-- Nine schema migrations, all live on the project's Supabase database as of this writing: multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story), the pricing overcharge auto-flag (`products.auto_flag_reason`), view tracking (the `product_views` table), inquiry details plus a WhatsApp number (`inquiries.quantity/contact_preference/contact_value/read_at/responded_at/notified_at`, `users.whatsapp_number`), and the shipping estimate (`products.weight_kg`, `users.pincode`).
+- Ten schema migrations: nine already live on the project's Supabase database (multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story), the pricing overcharge auto-flag (`products.auto_flag_reason`), view tracking (the `product_views` table), inquiry details plus a WhatsApp number (`inquiries.quantity/contact_preference/contact_value/read_at/responded_at/notified_at`, `users.whatsapp_number`), and the shipping estimate (`products.weight_kg`, `users.pincode`)), plus a tenth (an `is_seed` flag on artisans/buyers and products, for the demo seed script above) written but not yet applied.
 - The ONDC catalog export needs no new schema at all; it's computed entirely from data already in `products`.
 
 ## Testing
@@ -133,3 +143,4 @@ A separate, deliberately hidden part of the app for platform oversight, reachabl
 
 - Artisan or buyer: open the app, pick a role on the email screen, sign in with the demo code (see `.env`'s `DEMO_FALLBACK_OTP`).
 - Admin: `npm run seed:demo-admin -- you@example.com`, then sign in with that email the same way. You'll land on the hidden console automatically.
+- A populated marketplace for judging: run migration 010 once, then `npm run seed:demo-data`. Remove it later with `npm run seed:demo-data:wipe`.

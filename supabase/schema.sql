@@ -16,11 +16,15 @@ create table if not exists users (
   role           text not null default 'artisan' check (role in ('artisan', 'buyer', 'admin')),
   is_active      boolean not null default true,
   total_products integer not null default 0,
+  is_seed        boolean not null default false,
   created_at     timestamptz not null default now()
 );
 
 create index if not exists users_is_active_idx
   on users (is_active);
+
+create index if not exists users_is_seed_idx
+  on users (is_seed);
 
 create table if not exists products (
   id              uuid primary key default gen_random_uuid(),
@@ -53,6 +57,7 @@ create table if not exists products (
   weight_kg       numeric(6, 3) check (weight_kg is null or weight_kg > 0),
   product_story   text,
   story_generated_at timestamptz,
+  is_seed         boolean not null default false,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -71,6 +76,9 @@ create index if not exists products_price_idx
 
 create index if not exists products_review_status_idx
   on products (review_status);
+
+create index if not exists products_is_seed_idx
+  on products (is_seed);
 
 create table if not exists passport_counters (
   year       int primary key,

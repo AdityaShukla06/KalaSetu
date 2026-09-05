@@ -41,6 +41,8 @@ Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](
 | `npm run verify:rls` | Checks row level security policies directly against Postgres |
 | `npm run promote:admin -- <email>` | Promotes an existing account to admin (they must have signed in once first) |
 | `npm run seed:demo-admin -- [email]` | Creates (or fixes up) one admin account directly, no prior sign-in needed. Defaults to `admin@kalasetu.demo` |
+| `npm run seed:demo-data` | Populates the marketplace with realistic demo artisans, products, buyers, inquiries, and view history. Wipes and regenerates its own data, safe to re-run |
+| `npm run seed:demo-data:wipe` | Removes everything the seed script created, without regenerating it |
 
 CI runs all of these on every pull request.
 
@@ -292,6 +294,24 @@ Row level security is enabled on every table and carries the full three-role rul
 **Fields ONDC expects that KalaSetu doesn't have yet** (inventory quantity, fulfillment/shipping configuration, return and COD policy, a real network provider ID, a full pickup address) are listed as gaps in the export's own `gaps` array and in the mapping doc, never filled with an invented value. A few fields that do exist in KalaSetu but have no dedicated ONDC slot (technique, time taken, GI/ODOP tag, care instructions, the passport link) are carried in `Item.tags`, which is ONDC's own documented mechanism for exactly this kind of extended metadata.
 
 **GeM is untouched.** The existing "Connect to GeM / ONDC" banner on My Shop stays exactly as it was, a "coming soon" roadmap placeholder; this feature is a separate, additional action, not a replacement for that banner.
+
+## Demo seed data
+
+`scripts/seed-demo-data.mjs` fills the marketplace, admin console, and analytics dashboard with realistic content for a demo, rather than leaving them looking empty: 14 artisans across genuine Indian craft regions, around 45 products, 5 buyer accounts, a dozen or so inquiries, and 28 days of historical view data.
+
+**Idempotent by wiping and recreating, not upserting.** Every seeded `users` row (artisan and buyer alike) is marked `is_seed = true`; every run starts by deleting all of them, which cascades through the existing foreign keys to remove every seeded product, inquiry, and view record in one step. That's also the entire "remove it cleanly" story: `npm run seed:demo-data:wipe` runs the same deletion and stops there.
+
+**Writes to Postgres directly with the service role key, bypassing the API on purpose.** Running everything through `POST /api/products` would fire the real heritage-story and pricing-overcharge AI calls dozens of times and force every timestamp to `now()`; this needs realistic, spread-out `created_at`, `reviewed_at`, and view timestamps instead.
+
+**Every craft-region pairing is real**, not invented: Banarasi silk brocade from Varanasi, Kanchipuram silk from Tamil Nadu, Krishnanagar clay figures from West Bengal, Bikaner terracotta from Rajasthan, bamboo basketry from Assam, cane weaving from Mizoram, brassware from Moradabad, Bidriware from Bidar, block print from Bagru and from Bhuj, silver filigree from Cuttack, oxidised silver jewellery from Jaipur, walnut wood carving from Kashmir, and lacquered toys from Channapatna. A GI tag is set only where one is genuinely registered (Banarasi, Kanchipuram, Bidriware, Channapatna, Cuttack filigree); every other product leaves it blank rather than guessing.
+
+Two of those craft names don't have their own entry in `products.category`, which only supports six values app-wide: block print is filed under `textiles` (a textile technique, not a separate top-level category here), and brassware/Bidriware under `other`. The real craft is still fully captured in each product's material, technique, and title.
+
+**Images come from `seed-images/<craft>/`**, one folder per craft (`handloom-textiles`, `pottery-terracotta`, `bamboo-cane`, `brassware-metalwork`, `block-print`, `jewellery`, `wood-carving`), uploaded to the existing `product-images` Storage bucket and cycled across that craft's products. Any folder left empty falls back to a generated placeholder image that says so, so the script runs immediately without real photos and can be re-run once they're added.
+
+**A realistic mix of moderation states, on purpose.** Roughly one in five seeded products is left at `review_status = 'pending'` so the admin moderation queue has something to review; the rest start `approved`. All products are `published` from the start, matching how the app's retrospective moderation actually works.
+
+Requires migration `010-seed-data-flag.sql` to already be applied (adds `is_seed` to `users` and `products`).
 
 ## How the features work
 

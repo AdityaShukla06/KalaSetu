@@ -14,7 +14,9 @@
     "build:api": "node scripts/build-api.mjs",
     "verify:rls": "node scripts/verify-rls.mjs",
     "promote:admin": "node scripts/promote-admin.mjs",
-    "seed:demo-admin": "node scripts/seed-demo-admin.mjs"
+    "seed:demo-admin": "node scripts/seed-demo-admin.mjs",
+    "seed:demo-data": "node scripts/seed-demo-data.mjs",
+    "seed:demo-data:wipe": "node scripts/seed-demo-data.mjs --wipe"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",
