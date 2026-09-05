@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:api": "node scripts/build-api.mjs",
-    "verify:rls": "node scripts/verify-rls.mjs"
+    "verify:rls": "node scripts/verify-rls.mjs",
+    "promote:admin": "node scripts/promote-admin.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",

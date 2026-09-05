@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { OtpInput } from "../../components/OtpInput";
 import { sendOtp, verifyOtp, OTP_LENGTH } from "../../services/api";
+import type { SelfServeRole } from "../../services/api";
 import { useAuth, roleLandingPath } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
@@ -12,6 +13,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 interface OtpVerificationScreenProps {
   email: string;
   emailDelivered: boolean;
+  intendedRole: SelfServeRole;
   onChangeEmail: () => void;
 }
 
@@ -32,6 +34,7 @@ function ShieldIcon() {
 export function OtpVerificationScreen({
   email,
   emailDelivered,
+  intendedRole,
   onChangeEmail,
 }: OtpVerificationScreenProps) {
   const navigate = useNavigate();
@@ -66,7 +69,7 @@ export function OtpVerificationScreen({
     setError(null);
 
     try {
-      const { token, userId, email: verifiedEmail, role } = await verifyOtp(email, otp);
+      const { token, userId, email: verifiedEmail, role } = await verifyOtp(email, otp, intendedRole);
       login(token, userId, verifiedEmail, role);
       navigate(roleLandingPath(role), { replace: true });
     } catch {

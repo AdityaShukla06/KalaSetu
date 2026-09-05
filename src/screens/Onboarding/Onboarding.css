@@ -75,3 +75,43 @@
   color: var(--color-warning, #b26a00);
   font-weight: 600;
 }
+
+.role-choice-label {
+  color: var(--color-text-muted);
+}
+
+.role-choice-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.role-choice-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 88px;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.role-choice-card-active {
+  background: var(--color-primary-tint);
+  border-color: var(--color-primary);
+  color: var(--color-primary-pressed);
+}
+
+.role-choice-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

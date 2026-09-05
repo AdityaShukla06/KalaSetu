@@ -22,9 +22,12 @@ const RequestOtpSchema = z.object({
   email: z.string().email("Enter a valid email address"),
 });
 
+const SELF_SERVE_ROLES = ["artisan", "buyer"] as const;
+
 const VerifyOtpSchema = z.object({
   email: z.string().email(),
   otp: z.string().regex(new RegExp(`^\\d{${OTP_LENGTH}}$`), `OTP must be ${OTP_LENGTH} digits`),
+  intendedRole: z.enum(SELF_SERVE_ROLES).optional().default("artisan"),
 });
 
 router.post(
@@ -123,7 +126,7 @@ router.post(
         .eq("id", record.id);
     }
 
-    const { userId, role } = await findOrCreateUser(email);
+    const { userId, role } = await findOrCreateUser(email, parsed.data.intendedRole);
     const token = signSessionToken({ sub: userId, email });
 
     res.json({ token, userId, email, role });
@@ -135,7 +138,10 @@ interface FoundUser {
   role: UserRole;
 }
 
-async function findOrCreateUser(email: string): Promise<FoundUser> {
+async function findOrCreateUser(
+  email: string,
+  intendedRole: (typeof SELF_SERVE_ROLES)[number],
+): Promise<FoundUser> {
   const supabase = getSupabase();
 
   const { data: existing, error: readError } = await supabase
@@ -151,7 +157,7 @@ async function findOrCreateUser(email: string): Promise<FoundUser> {
 
   const { data: created, error: writeError } = await supabase
     .from("users")
-    .insert({ email })
+    .insert({ email, role: intendedRole })
     .select("id, role")
     .single();
 

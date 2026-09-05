@@ -37,6 +37,8 @@ Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](
 | `npm run lint` | oxlint |
 | `npm run typecheck:server` | Type checks `server/` and `api/` |
 | `npm test` | vitest |
+| `npm run verify:rls` | Checks row level security policies directly against Postgres |
+| `npm run promote:admin -- <email>` | Promotes an existing account to admin (they must have signed in once first) |
 
 CI runs all of these on every pull request.
 
@@ -80,7 +82,7 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 |---|---|---|---|
 | GET | `/api/health` | | `{ status, version }` |
 | POST | `/api/auth/request-otp` | `{ email }` | `{ success, emailDelivered, expiresInMinutes }` |
-| POST | `/api/auth/verify-otp` | `{ email, otp }` | `{ token, userId, email }` |
+| POST | `/api/auth/verify-otp` | `{ email, otp, intendedRole? }` | `{ token, userId, email, role }` |
 | GET | `/api/users/me` | | `UserProfile` |
 | PATCH | `/api/users/me` | `{ displayName?, shopName?, language? }` | `{ success }` |
 | POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, originalImageUrl, width, height }`, artisan only |
@@ -114,7 +116,9 @@ Email delivery is optional. Without `RESEND_API_KEY` the app still works through
 
 Every account is `artisan`, `buyer`, or `admin`, stored in `users.role` and defaulting to `artisan`. `verify-otp` reads the role fresh from the database and returns it alongside the token; the frontend uses it once, right after login, to send an artisan to `/`, a buyer to `/marketplace`, or an admin to `/admin`. Nothing about that redirect is trusted afterward: every admin-only route re-checks the role from the database on every request through `requireRole()` in [server/middleware/requireRole.ts](server/middleware/requireRole.ts), never from the session token, so revoking someone's access takes effect on their very next request rather than waiting out a 7 day token.
 
-No code path accepts a `role` value from a client. `PATCH /api/users/me` never lists `role` as an updatable field, and `users.role` also has `UPDATE` revoked from the `authenticated` and `anon` Postgres roles as a second, independent lock. An admin account is created by hand, either in the Supabase dashboard or with a seed script run with the service role key.
+The email screen asks "I'm here to sell / buy" before sending the code. That choice (`intendedRole`, restricted to `artisan` or `buyer`, `admin` is not a legal value here) only ever affects the moment `verify-otp` first creates the account row; for an email that already has an account, it's silently ignored and the stored role never changes, so logging in again with the other choice picked does nothing. No code path accepts a `role` value for an *existing* account either: `PATCH /api/users/me` never lists `role` as an updatable field, and `users.role` also has `UPDATE` revoked from the `authenticated` and `anon` Postgres roles as a second, independent lock.
+
+Admin cannot be self-selected anywhere, by design. Promote an existing account (they must have signed in at least once) with `npm run promote:admin -- someone@example.com`, or by hand in the Supabase dashboard's Table Editor. Either way it's a one-off, out-of-band action with the service role key, never something the running app can do to itself.
 
 Buyers browse `GET /api/products/marketplace`, which returns published, unflagged listings from every artisan. An artisan's own `GET /api/products` still only returns their own listings, exactly as before roles existed. Admin moderation (`flagged`, `flag_reason`) is guarded by a database trigger rather than a column grant, because an artisan and an admin share the same Postgres `authenticated` role, so a column-level `REVOKE` cannot tell them apart; only Postgres RLS combined with a per-row role lookup can.
 

@@ -2,7 +2,7 @@
 export type { ProductStatus, ProductInput, Product } from "./api/products";
 export type { UserProfile } from "./api/users";
 export type { RawMaterialItem, PricingSuggestionInput, PricingSuggestionOutput } from "./api/pricing";
-export type { UserRole, VerifyOtpResult } from "./api/auth";
+export type { UserRole, SelfServeRole, VerifyOtpResult } from "./api/auth";
 export type {
   EnhanceResult,
   RemoveBackgroundResult,

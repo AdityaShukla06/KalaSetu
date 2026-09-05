@@ -221,3 +221,66 @@ suite("three role model", () => {
     expect(updated?.flagReason).toBe("role verification test");
   });
 });
+
+suite("self-serve role choice at signup", () => {
+  async function verifyWithRole(email: string, intendedRole: "artisan" | "buyer") {
+    await fetch(`${base}/api/auth/request-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    return fetch(`${base}/api/auth/verify-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp: FALLBACK, intendedRole }),
+    });
+  }
+
+  it("PASS/FAIL: a brand new signup becomes the role it chose", async () => {
+    const email = `roles-selfserve-buyer-${Date.now()}@example.com`;
+    created.emails.push(email);
+
+    const res = await verifyWithRole(email, "buyer");
+    const body = await json<{ userId: string; role: string }>(res);
+    created.users.push(body.userId);
+
+    expect(res.status).toBe(200);
+    expect(body.role).toBe("buyer");
+  });
+
+  it("PASS/FAIL: an existing account's role does not change on a later login", async () => {
+    const email = `roles-selfserve-existing-${Date.now()}@example.com`;
+    created.emails.push(email);
+
+    const first = await verifyWithRole(email, "artisan");
+    const firstBody = await json<{ userId: string; role: string }>(first);
+    created.users.push(firstBody.userId);
+    expect(firstBody.role).toBe("artisan");
+
+    const second = await verifyWithRole(email, "buyer");
+    const secondBody = await json<{ userId: string; role: string }>(second);
+
+    expect(secondBody.userId).toBe(firstBody.userId);
+    expect(secondBody.role).toBe("artisan");
+  });
+
+  it("PASS/FAIL: intendedRole cannot be admin, even as a raw request", async () => {
+    const email = `roles-selfserve-admin-attempt-${Date.now()}@example.com`;
+    created.emails.push(email);
+
+    await fetch(`${base}/api/auth/request-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    const res = await fetch(`${base}/api/auth/verify-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp: FALLBACK, intendedRole: "admin" }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+});
