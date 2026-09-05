@@ -43,9 +43,9 @@ export function VoiceDescribeScreen() {
 
   if (!hasPhoto) return null;
 
-  function handleCategoryContinue(selected: string) {
+  function handleCategoryContinue(selected: string, material?: string) {
     setCategory(selected);
-    updateDraft({ category: selected });
+    updateDraft({ category: selected, material });
     setPhase("record");
   }
 
@@ -80,7 +80,13 @@ export function VoiceDescribeScreen() {
   }
 
   if (phase === "category") {
-    return <CategoryStep initialCategory={category} onContinue={handleCategoryContinue} />;
+    return (
+      <CategoryStep
+        initialCategory={category}
+        initialMaterial={draft.material}
+        onContinue={handleCategoryContinue}
+      />
+    );
   }
 
   if (phase === "record") {

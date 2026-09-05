@@ -9,6 +9,7 @@ create table if not exists users (
   email          text not null unique,
   display_name   text,
   shop_name      text,
+  region         text,
   language       text not null default 'en',
   role           text not null default 'artisan' check (role in ('artisan', 'buyer', 'admin')),
   total_products integer not null default 0,
@@ -19,6 +20,9 @@ create table if not exists products (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null references users(id) on delete cascade,
   category        text not null,
+  material        text,
+  region          text,
+  artisan_name    text,
   title_en        text not null,
   title_local     text not null,
   description_en  text not null,
@@ -39,6 +43,12 @@ create index if not exists products_user_id_created_at_idx
 
 create index if not exists products_status_flagged_idx
   on products (status, flagged);
+
+create index if not exists products_marketplace_filter_idx
+  on products (status, flagged, category, material, region);
+
+create index if not exists products_price_idx
+  on products (price);
 
 create table if not exists inquiries (
   id          uuid primary key default gen_random_uuid(),

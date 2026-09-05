@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
 import { isAppLanguage } from "../../shared/languages";
+import { isIndianRegion } from "../../shared/regions";
 import { UserProfile, isUserRole } from "../types";
 
 const router = Router();
@@ -13,6 +14,7 @@ interface UserRow {
   email: string;
   display_name: string | null;
   shop_name: string | null;
+  region: string | null;
   language: string;
   role: string;
   total_products: number;
@@ -25,6 +27,7 @@ export function toUserProfile(row: UserRow): UserProfile {
     email: row.email,
     displayName: row.display_name,
     shopName: row.shop_name,
+    region: row.region,
     language: isAppLanguage(row.language) ? row.language : "en",
     role: isUserRole(row.role) ? row.role : "artisan",
     totalProducts: row.total_products,
@@ -39,7 +42,7 @@ router.get(
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from("users")
-      .select("id, email, display_name, shop_name, language, role, total_products, created_at")
+      .select("id, email, display_name, shop_name, region, language, role, total_products, created_at")
       .eq("id", req.uid)
       .maybeSingle();
 
@@ -56,6 +59,7 @@ router.get(
 const UpdateUserSchema = z.object({
   displayName: z.string().max(80).optional(),
   shopName: z.string().max(120).optional(),
+  region: z.string().refine(isIndianRegion, "Unsupported region").optional(),
   language: z.string().refine(isAppLanguage, "Unsupported language").optional(),
 });
 
@@ -72,6 +76,7 @@ router.patch(
     const patch: Record<string, unknown> = {};
     if (parsed.data.displayName !== undefined) patch.display_name = parsed.data.displayName;
     if (parsed.data.shopName !== undefined) patch.shop_name = parsed.data.shopName;
+    if (parsed.data.region !== undefined) patch.region = parsed.data.region;
     if (parsed.data.language !== undefined) patch.language = parsed.data.language;
 
     if (Object.keys(patch).length === 0) {

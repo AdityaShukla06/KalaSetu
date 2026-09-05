@@ -10,6 +10,7 @@ export type ProductStatus = "draft" | "published" | "failed";
 
 export interface ProductInput {
   category: string;
+  material?: string;
   titleEn: string;
   titleLocal: string;
   descriptionEn: string;
@@ -23,6 +24,8 @@ export interface ProductInput {
 export interface Product extends ProductInput {
   productId: string;
   userId: string;
+  region: string | null;
+  artisanName: string | null;
   status: ProductStatus;
   flagged: boolean;
   flagReason: string | null;
@@ -30,7 +33,27 @@ export interface Product extends ProductInput {
   updatedAt: string;
 }
 
+export interface ArtisanSummary {
+  userId: string;
+  shopName: string | null;
+  displayName: string | null;
+  region: string | null;
+  totalProducts: number;
+}
+
+export interface ProductWithArtisan extends Product {
+  artisan: ArtisanSummary;
+}
+
 export type InquiryStatus = "open" | "closed";
+
+export interface InquiryProductSummary {
+  titleEn: string;
+  titleLocal: string;
+  localLanguage: string;
+  imageUrl: string;
+  price: number;
+}
 
 export interface Inquiry {
   inquiryId: string;
@@ -40,6 +63,7 @@ export interface Inquiry {
   message: string;
   status: InquiryStatus;
   createdAt: string;
+  product: InquiryProductSummary | null;
 }
 
 export interface UserProfile {
@@ -47,6 +71,7 @@ export interface UserProfile {
   email: string;
   displayName: string | null;
   shopName: string | null;
+  region: string | null;
   language: string;
   role: UserRole;
   totalProducts: number;

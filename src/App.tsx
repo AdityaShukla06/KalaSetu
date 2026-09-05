@@ -11,7 +11,10 @@ import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
 import { VoiceDescribeScreen } from "./screens/AddProduct/VoiceDescribeScreen";
 import { PricingScreen } from "./screens/AddProduct/PricingScreen";
 import { ProfileScreen } from "./screens/Profile/ProfileScreen";
-import { MarketplaceScreen } from "./screens/Marketplace/MarketplaceScreen";
+import { MarketplaceLayout } from "./screens/Marketplace/MarketplaceLayout";
+import { BrowseScreen } from "./screens/Marketplace/BrowseScreen";
+import { ProductDetailScreen } from "./screens/Marketplace/ProductDetailScreen";
+import { BuyerProfileScreen } from "./screens/Marketplace/BuyerProfileScreen";
 import { AdminScreen } from "./screens/Admin/AdminScreen";
 
 function AppLayout() {
@@ -51,7 +54,11 @@ function App() {
 
             <Route element={<RequireAuth />}>
               <Route element={<RequireRole role="buyer" />}>
-                <Route path="/marketplace" element={<MarketplaceScreen />} />
+                <Route element={<MarketplaceLayout />}>
+                  <Route path="/marketplace" element={<BrowseScreen />} />
+                  <Route path="/marketplace/profile" element={<BuyerProfileScreen />} />
+                  <Route path="/marketplace/:productId" element={<ProductDetailScreen />} />
+                </Route>
               </Route>
 
               <Route element={<RequireRole role="admin" />}>

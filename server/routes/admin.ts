@@ -9,12 +9,15 @@ import { toProduct } from "./products";
 const router = Router();
 
 const PRODUCT_COLUMNS =
-  "id, user_id, category, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, created_at, updated_at";
+  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, created_at, updated_at";
 
 interface AdminProductRow {
   id: string;
   user_id: string;
   category: string;
+  material: string | null;
+  region: string | null;
+  artisan_name: string | null;
   title_en: string;
   title_local: string;
   description_en: string;

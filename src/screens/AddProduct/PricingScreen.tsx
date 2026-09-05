@@ -166,6 +166,7 @@ export function PricingScreen() {
     try {
       await createProduct({
         category: draft.category ?? "other",
+        material: draft.material,
         titleEn: titles.en,
         titleLocal: titles.local,
         descriptionEn: en,

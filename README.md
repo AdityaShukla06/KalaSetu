@@ -51,9 +51,9 @@ src/                 the PWA
     Home/            My Shop catalog, product detail sheet, GeM/ONDC banner
     AddProduct/      camera, enhancement studio, category, voice description, pricing, publish
     Profile/         profile and language
-    Marketplace/     buyer landing (placeholder until the buyer portal is built)
+    Marketplace/     buyer portal: browse/search/filter, product detail, inquiries, profile
     Admin/           admin landing (placeholder until the admin console is built)
-  components/        Button, Card, Input, OtpInput, LanguageToggle, BottomNav
+  components/        Button, Card, Input, OtpInput, LanguageToggle, RegionSelect, Skeleton, BottomNav
   context/           Auth, Language, AddProductDraft
     locales/         one JSON dictionary per language
   services/          api/ one module per resource, audio.ts (WAV conversion)
@@ -69,6 +69,8 @@ server/              the API, an ordinary Express app
 
 api/index.ts         Vercel entry point, exports the Express app
 shared/languages.ts  the language registry, used by both halves
+shared/regions.ts    the fixed list of Indian states/UTs, used by both halves
+shared/materials.ts  the fixed list of product materials, used by both halves
 supabase/
   schema.sql         tables, index, counter function, RLS, storage bucket
   migrations/        run these against a database created before a change
@@ -84,7 +86,7 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/auth/request-otp` | `{ email }` | `{ success, emailDelivered, expiresInMinutes }` |
 | POST | `/api/auth/verify-otp` | `{ email, otp, intendedRole? }` | `{ token, userId, email, role }` |
 | GET | `/api/users/me` | | `UserProfile` |
-| PATCH | `/api/users/me` | `{ displayName?, shopName?, language? }` | `{ success }` |
+| PATCH | `/api/users/me` | `{ displayName?, shopName?, region?, language? }` | `{ success }` |
 | POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, originalImageUrl, width, height }`, artisan only |
 | POST | `/api/images/remove-background` | raw image bytes | `{ cutoutUrl, backgroundRemoved, notice? }`, artisan only |
 | POST | `/api/images/finalize` | `{ sourceUrl, options }` | `{ finalImageUrl, width, height }`, artisan only |
@@ -92,7 +94,8 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/pricing/suggest` | `{ category, materialCost or rawMaterials, ... }` | range, confidence, market reference, breakdown |
 | POST | `/api/products` | `ProductInput` | `{ productId }`, artisan only |
 | GET | `/api/products` | | `Product[]`, the caller's own |
-| GET | `/api/products/marketplace` | | `Product[]`, every published and unflagged product |
+| GET | `/api/products/marketplace` | `?q=&category=&material=&region=&minPrice=&maxPrice=&sort=&page=&limit=` | `{ items, page, limit, total, hasMore }`, published and unflagged only |
+| GET | `/api/products/marketplace/:id` | | `ProductWithArtisan`, a single published listing plus a live artisan summary |
 | PATCH | `/api/products/:id` | partial `ProductInput` | `{ success }`, artisan only, own product |
 | DELETE | `/api/products/:id` | | `{ success }`, artisan only, own product |
 | POST | `/api/inquiries` | `{ productId, message }` | `{ inquiryId }`, buyer only |
@@ -121,6 +124,20 @@ The email screen asks "I'm here to sell / buy" before sending the code. That cho
 Admin cannot be self-selected anywhere, by design. Promote an existing account (they must have signed in at least once) with `npm run promote:admin -- someone@example.com`, or by hand in the Supabase dashboard's Table Editor. Either way it's a one-off, out-of-band action with the service role key, never something the running app can do to itself.
 
 Buyers browse `GET /api/products/marketplace`, which returns published, unflagged listings from every artisan. An artisan's own `GET /api/products` still only returns their own listings, exactly as before roles existed. Admin moderation (`flagged`, `flag_reason`) is guarded by a database trigger rather than a column grant, because an artisan and an admin share the same Postgres `authenticated` role, so a column-level `REVOKE` cannot tell them apart; only Postgres RLS combined with a per-row role lookup can.
+
+## Buyer marketplace
+
+Four screens under `src/screens/Marketplace/`: browse (search, filter, sort, pagination), product detail (gallery, description, artisan summary, inquiry form), and a buyer profile (details plus sent inquiries). All of it sits behind `MarketplaceLayout`, a top nav shared across the three, distinct from the artisan side's bottom tab bar because buyers need this to work as a real desktop website as well as inside a mobile WebView.
+
+**Filtering fields that didn't exist before this**: `products.material`, `products.region`, and a denormalized `products.artisan_name`, plus `users.region` as the source an artisan sets once in their profile and that gets copied onto each new listing at creation time, the same snapshot pattern already used for `title_local` and `inquiries.artisan_id`. All three are nullable; existing accounts and products just read as unspecified until an artisan fills them in. [`shared/regions.ts`](shared/regions.ts) and [`shared/materials.ts`](shared/materials.ts) are the fixed lists both the artisan-side pickers and the buyer-side filters validate against, the same pattern as [`shared/languages.ts`](shared/languages.ts).
+
+**Search never touches raw SQL.** `GET /api/products/marketplace` applies category/material/region/price as ordinary parameterized `.eq()`/`.gte()`/`.lte()` calls, safe by construction, then runs the free-text `q` match and the price sort as plain JavaScript over the already-filtered rows (capped at 1000 candidates) before slicing out the requested page. That's deliberate: building a raw `.or()` filter string out of buyer-supplied search text is exactly the injection surface a PostgREST filter string opens up, and at this data scale doing the last mile in application code is both simpler and safer than getting that escaping right.
+
+**RLS as the backstop, per the brief**: buyers reading only published/unflagged rows is enforced first in the query (`.eq("status", "published").eq("flagged", false)`), same as the existing `products_select_published` policy already covers as backstop; nothing new was needed there. There is no write path for a buyer to reach a product at all, at any layer: `POST/PATCH/DELETE /api/products` are all `requireRole("artisan")`, and the buyer role has no product-write RLS policy either.
+
+**Desktop responsiveness required one shared-shell change.** The whole app was capped at `max-width: 390px` on `#root`, fine for the artisan/admin mobile-only experience, wrong for a page meant to also work as a desktop website. `#root`'s max-width now reads a `--shell-max-width` custom property (default still `390px`), and `MarketplaceLayout` is the only place that overrides it, while mounted, back to `none`. Nothing about the artisan or admin screens changed.
+
+**Scope note**: "image gallery" on the product detail screen renders whatever a multi-image gallery would, but today's schema only ever stores one `image_url` per product, so it's a gallery of one. Adding multi-image capture to the artisan side is a separate, larger feature this didn't pull in.
 
 ## Languages
 
@@ -183,7 +200,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts` and `server/__roles.test.ts` drive the whole API against a real Supabase project. Both only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `server/__smoke.test.ts`, `server/__roles.test.ts`, and `server/__marketplace.test.ts` drive the whole API against a real Supabase project. All three only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
 - `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
 - After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 

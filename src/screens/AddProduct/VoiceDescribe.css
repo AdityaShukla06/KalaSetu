@@ -39,6 +39,42 @@
   background: var(--color-primary-tint);
 }
 
+.material-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.material-question {
+  color: var(--color-text-muted);
+}
+
+.material-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.material-chip {
+  min-height: var(--hit-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.material-chip-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-surface);
+}
+
 .category-tile-icon {
   width: 48px;
   height: 48px;

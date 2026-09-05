@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { LanguageSelect } from "../../components/LanguageSelect";
+import { RegionSelect } from "../../components/RegionSelect";
 import { getMyProfile, updateMyProfile, relocaliseProducts, type UserProfile } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
@@ -59,6 +60,7 @@ export function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [shopName, setShopName] = useState("");
+  const [region, setRegion] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -73,6 +75,7 @@ export function ProfileScreen() {
       setProfile(result);
       setDisplayName(result.displayName ?? "");
       setShopName(result.shopName ?? "");
+      setRegion(result.region ?? "");
       setState("loaded");
     } catch {
       setState("error");
@@ -115,16 +118,24 @@ export function ProfileScreen() {
 
   const dirty =
     profile !== null &&
-    (displayName.trim() !== (profile.displayName ?? "") || shopName.trim() !== (profile.shopName ?? ""));
+    (displayName.trim() !== (profile.displayName ?? "") ||
+      shopName.trim() !== (profile.shopName ?? "") ||
+      region !== (profile.region ?? ""));
 
   async function handleSave() {
     setSaving(true);
     setSaveError(false);
     setSaved(false);
     try {
-      await updateMyProfile({ displayName: displayName.trim(), shopName: shopName.trim() });
+      await updateMyProfile({
+        displayName: displayName.trim(),
+        shopName: shopName.trim(),
+        region: region || undefined,
+      });
       setProfile((prev) =>
-        prev ? { ...prev, displayName: displayName.trim(), shopName: shopName.trim() } : prev,
+        prev
+          ? { ...prev, displayName: displayName.trim(), shopName: shopName.trim(), region: region || null }
+          : prev,
       );
       setSaved(true);
     } catch {
@@ -188,6 +199,14 @@ export function ProfileScreen() {
               maxLength={120}
               onChange={(event) => {
                 setShopName(event.target.value);
+                setSaved(false);
+              }}
+            />
+            <RegionSelect
+              label={t("marketplace.regionLabel")}
+              value={region}
+              onChange={(value) => {
+                setRegion(value);
                 setSaved(false);
               }}
             />

@@ -1,8 +1,18 @@
 //importing product apis
-export type { ProductStatus, ProductInput, Product } from "./api/products";
+export type {
+  ProductStatus,
+  ProductInput,
+  Product,
+  ArtisanSummary,
+  ProductWithArtisan,
+  MarketplaceSort,
+  MarketplaceFilters,
+  MarketplaceResult,
+} from "./api/products";
 export type { UserProfile } from "./api/users";
 export type { RawMaterialItem, PricingSuggestionInput, PricingSuggestionOutput } from "./api/pricing";
 export type { UserRole, SelfServeRole, VerifyOtpResult } from "./api/auth";
+export type { InquiryStatus, Inquiry, InquiryProductSummary } from "./api/inquiries";
 export type {
   EnhanceResult,
   RemoveBackgroundResult,
@@ -17,5 +27,14 @@ export { sendOtp, verifyOtp, OTP_LENGTH } from "./api/auth";
 export { enhanceImage, removeImageBackground, finalizeImage } from "./api/images";
 export { transcribeAndDescribe, translateText } from "./api/voice";
 export { suggestPrice } from "./api/pricing";
-export { createProduct, listProducts, updateProduct, deleteProduct, relocaliseProducts } from "./api/products";
+export {
+  createProduct,
+  listProducts,
+  updateProduct,
+  deleteProduct,
+  relocaliseProducts,
+  searchMarketplace,
+  getMarketplaceProduct,
+} from "./api/products";
 export { getMyProfile, updateMyProfile } from "./api/users";
+export { createInquiry, listMyInquiries, closeInquiry } from "./api/inquiries";

@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
-import { Inquiry, InquiryStatus } from "../types";
+import { Inquiry, InquiryStatus, InquiryProductSummary } from "../types";
 
 const router = Router();
 
@@ -20,7 +20,7 @@ interface InquiryRow {
   created_at: string;
 }
 
-function toInquiry(row: InquiryRow): Inquiry {
+function toInquiry(row: InquiryRow, product: InquiryProductSummary | null): Inquiry {
   return {
     inquiryId: row.id,
     productId: row.product_id,
@@ -29,7 +29,35 @@ function toInquiry(row: InquiryRow): Inquiry {
     message: row.message,
     status: row.status as InquiryStatus,
     createdAt: row.created_at,
+    product,
   };
+}
+
+async function attachProducts(rows: InquiryRow[]): Promise<Inquiry[]> {
+  const productIds = [...new Set(rows.map((row) => row.product_id))];
+  if (productIds.length === 0) return rows.map((row) => toInquiry(row, null));
+
+  const { data, error } = await getSupabase()
+    .from("products")
+    .select("id, title_en, title_local, local_language, image_url, price")
+    .in("id", productIds);
+
+  if (error) throw new Error(`Could not load inquiry products: ${error.message}`);
+
+  const byId = new Map(
+    (data ?? []).map((product) => [
+      product.id as string,
+      {
+        titleEn: product.title_en,
+        titleLocal: product.title_local,
+        localLanguage: product.local_language,
+        imageUrl: product.image_url,
+        price: Number(product.price),
+      } satisfies InquiryProductSummary,
+    ]),
+  );
+
+  return rows.map((row) => toInquiry(row, byId.get(row.product_id) ?? null));
 }
 
 const CreateInquirySchema = z.object({
@@ -91,7 +119,7 @@ router.get(
 
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
 
-    res.json((data as InquiryRow[]).map(toInquiry));
+    res.json(await attachProducts(data as InquiryRow[]));
   }),
 );
 
@@ -108,7 +136,7 @@ router.get(
 
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
 
-    res.json((data as InquiryRow[]).map(toInquiry));
+    res.json(await attachProducts(data as InquiryRow[]));
   }),
 );
 

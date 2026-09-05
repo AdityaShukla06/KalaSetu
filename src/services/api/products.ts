@@ -5,6 +5,7 @@ export type ProductStatus = "draft" | "published" | "failed";
 
 export interface ProductInput {
   category: string;
+  material?: string;
   titleEn: string;
   titleLocal: string;
   descriptionEn: string;
@@ -17,8 +18,44 @@ export interface ProductInput {
 
 export interface Product extends ProductInput {
   productId: string;
+  region: string | null;
+  artisanName: string | null;
   status: ProductStatus;
   createdAt: string;
+}
+
+export interface ArtisanSummary {
+  userId: string;
+  shopName: string | null;
+  displayName: string | null;
+  region: string | null;
+  totalProducts: number;
+}
+
+export interface ProductWithArtisan extends Product {
+  artisan: ArtisanSummary;
+}
+
+export type MarketplaceSort = "newest" | "price_asc" | "price_desc";
+
+export interface MarketplaceFilters {
+  q?: string;
+  category?: string;
+  material?: string;
+  region?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: MarketplaceSort;
+  page?: number;
+  limit?: number;
+}
+
+export interface MarketplaceResult {
+  items: Product[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
 }
 
 //endpoints
@@ -61,4 +98,27 @@ export function relocaliseProducts(
     method: "POST",
     body: JSON.stringify({ language }),
   });
+}
+
+function buildQueryString(filters: MarketplaceFilters): string {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.material) params.set("material", filters.material);
+  if (filters.region) params.set("region", filters.region);
+  if (filters.minPrice !== undefined) params.set("minPrice", String(filters.minPrice));
+  if (filters.maxPrice !== undefined) params.set("maxPrice", String(filters.maxPrice));
+  if (filters.sort) params.set("sort", filters.sort);
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+export function searchMarketplace(filters: MarketplaceFilters): Promise<MarketplaceResult> {
+  return apiFetch(`/products/marketplace${buildQueryString(filters)}`, { method: "GET" });
+}
+
+export function getMarketplaceProduct(productId: string): Promise<ProductWithArtisan> {
+  return apiFetch(`/products/marketplace/${encodeURIComponent(productId)}`, { method: "GET" });
 }

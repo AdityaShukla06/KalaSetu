@@ -6,6 +6,7 @@ export interface UserProfile {
   email: string;
   displayName: string | null;
   shopName: string | null;
+  region: string | null;
   language: string;
   role: UserRole;
   totalProducts: number;
@@ -17,7 +18,7 @@ export function getMyProfile(): Promise<UserProfile> {
 }
 
 export function updateMyProfile(
-  updates: Partial<Pick<UserProfile, "displayName" | "shopName" | "language">>,
+  updates: Partial<Pick<UserProfile, "displayName" | "shopName" | "region" | "language">>,
 ): Promise<{ success: boolean }> {
   return apiFetch("/users/me", {
     method: "PATCH",

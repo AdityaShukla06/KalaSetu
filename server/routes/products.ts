@@ -4,10 +4,12 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
-import { Product, ProductStatus } from "../types";
+import { Product, ProductStatus, ProductWithArtisan } from "../types";
 import { buildVoiceAiDependencies } from "../voice-ai";
 import { isAppLanguage } from "../../shared/languages";
 import { DICTIONARIES } from "../../shared/locales";
+import { isProductMaterial } from "../../shared/materials";
+import { isIndianRegion } from "../../shared/regions";
 
 const router = Router();
 
@@ -49,12 +51,15 @@ function getTranslator() {
 }
 
 const PRODUCT_COLUMNS =
-  "id, user_id, category, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, created_at, updated_at";
+  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, created_at, updated_at";
 
 interface ProductRow {
   id: string;
   user_id: string;
   category: string;
+  material: string | null;
+  region: string | null;
+  artisan_name: string | null;
   title_en: string;
   title_local: string;
   description_en: string;
@@ -75,6 +80,9 @@ export function toProduct(row: ProductRow): Product {
     productId: row.id,
     userId: row.user_id,
     category: row.category,
+    material: row.material ?? undefined,
+    region: row.region,
+    artisanName: row.artisan_name,
     titleEn: row.title_en,
     titleLocal: row.title_local,
     descriptionEn: row.description_en,
@@ -93,6 +101,7 @@ export function toProduct(row: ProductRow): Product {
 
 const ProductInputSchema = z.object({
   category: z.string().min(1),
+  material: z.string().refine(isProductMaterial, "Unsupported material").optional(),
   titleEn: z.string().min(1),
   titleLocal: z.string().min(1),
   descriptionEn: z.string().min(1),
@@ -106,6 +115,7 @@ const ProductInputSchema = z.object({
 function toRow(input: Partial<z.infer<typeof ProductInputSchema>>): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   if (input.category !== undefined) row.category = input.category;
+  if (input.material !== undefined) row.material = input.material;
   if (input.titleEn !== undefined) row.title_en = input.titleEn;
   if (input.titleLocal !== undefined) row.title_local = input.titleLocal;
   if (input.descriptionEn !== undefined) row.description_en = input.descriptionEn;
@@ -129,9 +139,26 @@ router.post(
     }
 
     const supabase = getSupabase();
+
+    const { data: artisan, error: artisanError } = await supabase
+      .from("users")
+      .select("shop_name, display_name, region")
+      .eq("id", req.uid)
+      .maybeSingle();
+
+    if (artisanError) throw new Error(`Could not look up the artisan profile: ${artisanError.message}`);
+
+    const artisanName = artisan?.shop_name || artisan?.display_name || null;
+
     const { data, error } = await supabase
       .from("products")
-      .insert({ ...toRow(parsed.data), user_id: req.uid, status: "published" })
+      .insert({
+        ...toRow(parsed.data),
+        user_id: req.uid,
+        status: "published",
+        artisan_name: artisanName,
+        region: artisan?.region ?? null,
+      })
       .select("id")
       .single();
 
@@ -165,20 +192,124 @@ router.get(
   }),
 );
 
+const MAX_MARKETPLACE_CANDIDATES = 1000;
+const DEFAULT_PAGE_SIZE = 12;
+const MAX_PAGE_SIZE = 48;
+
+const MarketplaceQuerySchema = z.object({
+  q: z.string().trim().max(200).optional(),
+  category: z.string().optional(),
+  material: z.string().refine(isProductMaterial, "Unsupported material").optional(),
+  region: z.string().refine(isIndianRegion, "Unsupported region").optional(),
+  minPrice: z.coerce.number().nonnegative().optional(),
+  maxPrice: z.coerce.number().positive().optional(),
+  sort: z.enum(["newest", "price_asc", "price_desc"]).default("newest"),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
+});
+
+export function matchesSearch(row: ProductRow, q: string): boolean {
+  const needle = q.toLowerCase();
+  return (
+    row.title_en.toLowerCase().includes(needle) ||
+    row.title_local.toLowerCase().includes(needle) ||
+    row.description_en.toLowerCase().includes(needle) ||
+    row.description_local.toLowerCase().includes(needle)
+  );
+}
+
 router.get(
   "/marketplace",
   requireAuth,
-  asyncRoute(async (_req: Request, res: Response): Promise<void> => {
-    const { data, error } = await getSupabase()
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const parsed = MarketplaceQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const query = parsed.data;
+
+    let dbQuery = getSupabase()
       .from("products")
       .select(PRODUCT_COLUMNS)
       .eq("status", "published")
-      .eq("flagged", false)
-      .order("created_at", { ascending: false });
+      .eq("flagged", false);
+
+    if (query.category) dbQuery = dbQuery.eq("category", query.category);
+    if (query.material) dbQuery = dbQuery.eq("material", query.material);
+    if (query.region) dbQuery = dbQuery.eq("region", query.region);
+    if (query.minPrice !== undefined) dbQuery = dbQuery.gte("price", query.minPrice);
+    if (query.maxPrice !== undefined) dbQuery = dbQuery.lte("price", query.maxPrice);
+
+    const { data, error } = await dbQuery
+      .order("created_at", { ascending: false })
+      .limit(MAX_MARKETPLACE_CANDIDATES);
 
     if (error) throw new Error(`Could not list marketplace products: ${error.message}`);
 
-    res.json((data as ProductRow[]).map(toProduct));
+    let rows = data as ProductRow[];
+    if (query.q) rows = rows.filter((row) => matchesSearch(row, query.q as string));
+
+    if (query.sort === "price_asc") {
+      rows = [...rows].sort((a, b) => Number(a.price) - Number(b.price));
+    } else if (query.sort === "price_desc") {
+      rows = [...rows].sort((a, b) => Number(b.price) - Number(a.price));
+    }
+
+    const total = rows.length;
+    const start = (query.page - 1) * query.limit;
+    const page = rows.slice(start, start + query.limit);
+
+    res.json({
+      items: page.map(toProduct),
+      page: query.page,
+      limit: query.limit,
+      total,
+      hasMore: start + page.length < total,
+    });
+  }),
+);
+
+router.get(
+  "/marketplace/:id",
+  requireAuth,
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const supabase = getSupabase();
+
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select(PRODUCT_COLUMNS)
+      .eq("id", req.params.id as string)
+      .eq("status", "published")
+      .eq("flagged", false)
+      .maybeSingle();
+
+    if (productError) throw new Error(`Could not load the product: ${productError.message}`);
+    if (!product) {
+      res.status(404).json({ error: "Product not found" });
+      return;
+    }
+
+    const { data: artisan, error: artisanError } = await supabase
+      .from("users")
+      .select("id, shop_name, display_name, region, total_products")
+      .eq("id", (product as ProductRow).user_id)
+      .maybeSingle();
+
+    if (artisanError) throw new Error(`Could not load the artisan profile: ${artisanError.message}`);
+
+    const result: ProductWithArtisan = {
+      ...toProduct(product as ProductRow),
+      artisan: {
+        userId: artisan?.id ?? (product as ProductRow).user_id,
+        shopName: artisan?.shop_name ?? null,
+        displayName: artisan?.display_name ?? null,
+        region: artisan?.region ?? null,
+        totalProducts: artisan?.total_products ?? 0,
+      },
+    };
+
+    res.json(result);
   }),
 );
 

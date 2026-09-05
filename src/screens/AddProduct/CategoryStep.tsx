@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Button } from "../../components/Button";
+import { PRODUCT_MATERIALS } from "../../../shared/materials";
 import { useLanguage } from "../../context/LanguageContext";
 import "./VoiceDescribe.css";
 
 interface CategoryStepProps {
   initialCategory: string | null;
-  onContinue: (category: string) => void;
+  initialMaterial?: string | null;
+  onContinue: (category: string, material?: string) => void;
 }
 
 function TextileIcon() {
@@ -86,9 +88,10 @@ export const CATEGORIES = [
   { id: "other", labelKey: "category.other", Icon: OtherIcon },
 ];
 
-export function CategoryStep({ initialCategory, onContinue }: CategoryStepProps) {
+export function CategoryStep({ initialCategory, initialMaterial, onContinue }: CategoryStepProps) {
   const { t } = useLanguage();
   const [selected, setSelected] = useState<string | null>(initialCategory);
+  const [material, setMaterial] = useState<string | null>(initialMaterial ?? null);
 
   return (
     <div className="describe-screen">
@@ -111,7 +114,30 @@ export function CategoryStep({ initialCategory, onContinue }: CategoryStepProps)
         ))}
       </div>
 
-      <Button variant="primary" disabled={!selected} onClick={() => selected && onContinue(selected)}>
+      {selected && (
+        <div className="material-section">
+          <span className="body-s material-question">{t("category.materialQuestion")}</span>
+          <div className="material-chip-row">
+            {PRODUCT_MATERIALS.map((entry) => (
+              <button
+                key={entry}
+                type="button"
+                className={`material-chip${material === entry ? " material-chip-active" : ""}`}
+                onClick={() => setMaterial(material === entry ? null : entry)}
+                aria-pressed={material === entry}
+              >
+                {entry}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Button
+        variant="primary"
+        disabled={!selected}
+        onClick={() => selected && onContinue(selected, material ?? undefined)}
+      >
         {t("category.continue")}
       </Button>
     </div>
