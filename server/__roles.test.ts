@@ -177,11 +177,11 @@ suite("three role model", () => {
     const buyer = await signInAs(EMAIL_BUYER, "buyer");
     const productId = await createPublishedProduct(a.token);
 
-    const marketplace = await json<Array<{ productId: string }>>(
+    const marketplace = await json<{ items: Array<{ productId: string }> }>(
       await fetch(`${base}/api/products/marketplace`, { headers: auth(buyer.token) }),
     );
 
-    expect(marketplace.some((p) => p.productId === productId)).toBe(true);
+    expect(marketplace.items.some((p) => p.productId === productId)).toBe(true);
   });
 
   it("PASS/FAIL: admin can read all products", async () => {
