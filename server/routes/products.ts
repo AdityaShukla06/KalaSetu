@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
-import { Product, ProductStatus, ProductWithArtisan } from "../types";
+import { Product, ProductStatus, ProductWithArtisan, ProductWithViewCount } from "../types";
 import { buildVoiceAiDependencies } from "../voice-ai";
 import { generatePassportId } from "../lib/passportId";
 import { calculateSmartPrice, assessOvercharge } from "../services/pricingEngine";
@@ -16,6 +16,7 @@ import { isIndianRegion } from "../../shared/regions";
 const router = Router();
 
 const MAX_RELOCALISE = 25;
+const MAX_OWN_VIEW_ROWS = 5000;
 
 const CATEGORY_LABEL_KEYS: Record<string, string> = {
   textiles: "category.textiles",
@@ -280,7 +281,9 @@ router.get(
       return;
     }
 
-    const { data, error } = await getSupabase()
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
       .from("products")
       .select(PRODUCT_COLUMNS)
       .eq("user_id", req.uid)
@@ -288,7 +291,36 @@ router.get(
 
     if (error) throw new Error(`Could not list products: ${error.message}`);
 
-    res.json((data as ProductRow[]).map(toProduct));
+    const rows = data as ProductRow[];
+    const productIds = rows.map((row) => row.id);
+
+    let viewCountByProduct = new Map<string, number>();
+    if (productIds.length > 0) {
+      const { data: viewRows, error: viewError } = await supabase
+        .from("product_views")
+        .select("product_id")
+        .in("product_id", productIds)
+        .limit(MAX_OWN_VIEW_ROWS);
+
+      if (viewError) {
+        console.warn("[products] could not load view counts for My Shop, showing 0 for now", {
+          message: viewError.message,
+        });
+      } else {
+        viewCountByProduct = new Map();
+        for (const row of viewRows ?? []) {
+          const productId = row.product_id as string;
+          viewCountByProduct.set(productId, (viewCountByProduct.get(productId) ?? 0) + 1);
+        }
+      }
+    }
+
+    const result: ProductWithViewCount[] = rows.map((row) => ({
+      ...toProduct(row),
+      viewCount: viewCountByProduct.get(row.id) ?? 0,
+    }));
+
+    res.json(result);
   }),
 );
 

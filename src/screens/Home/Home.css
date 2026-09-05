@@ -5,6 +5,26 @@
   gap: var(--space-5);
 }
 
+.home-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.home-analytics-link {
+  min-height: var(--hit-min);
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-body-s-size);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .gem-banner {
   border: 1.5px dashed var(--color-border);
   border-radius: var(--radius-card);
@@ -194,11 +214,27 @@
 }
 
 .product-card-price {
-  margin: var(--space-1) 0 0;
+  margin: 0;
   font-family: var(--font-body);
   font-size: var(--text-body-s-size);
   font-weight: 700;
   color: var(--color-primary);
+}
+
+.product-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.product-card-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-caption-size);
+  color: var(--color-text-muted);
 }
 
 .sheet-overlay {

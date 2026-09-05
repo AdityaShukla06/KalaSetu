@@ -21,7 +21,7 @@ The original, most-built-out side of the app. Mobile-first, large tap targets, b
 - **Price suggestion.** A rule-based, cost-based, market-anchored pricing formula (not a trained model), using material cost plus an estimated labour/overhead cost and any available market benchmark. A "see how this was calculated" disclosure shows the full plain-language breakdown: material cost, labour, overhead, margin, category. The artisan can always override the suggested price.
 - **Material cost sanity check.** Material cost is the one number in the whole formula the artisan types in directly, so it's checked against a small reference table of typical cost per category. Enter something far outside that range and you'll see a plain note; enter something wildly high and the number actually used in the calculation is capped, so one inflated figure can't drag the suggested price up without limit. Your displayed material cost is never silently changed, only what feeds the formula.
 - **Publish.** Instant. A listing is live in the marketplace the moment it's published; there's no waiting on admin approval to go live (moderation is retrospective, not a gate, see the admin section below). Every published product also gets a Craft Heritage Passport (see below), and the success screen links straight to it. Pricing freedom is complete: any price can be listed. If it's well above the typical range for the category, everyone involved (the artisan before and after publishing, the buyer, and the admin) sees the same neutral, factual note, never an accusation.
-- **My Shop.** A grid of the artisan's own listings with status badges, a detail view to edit price/description or delete a listing (soft, with a confirmation step), and empty/loading/error states.
+- **My Shop.** A grid of the artisan's own listings with status badges, a real view count on every card, a detail view to edit price/description or delete a listing (soft, with a confirmation step), and empty/loading/error states. A "View analytics" link opens the full analytics dashboard (see below).
 - **Profile.** Display name, shop name, region (used for buyer-side filtering), and language, with a save confirmation.
 - **Language switch.** Changing the interface language also offers to re-translate the artisan's existing listings into the new language.
 - **PWA basics.** Install prompt, offline banner, and a cache-first app shell so the app still opens (to cached screens) with no network.
@@ -48,6 +48,15 @@ A digital certificate of origin, generated for every product, meant to be the si
 - **Share and print.** A share button (native share sheet, or copy-link as a fallback) and a print stylesheet that produces a clean, single-page certificate with no buttons or navigation on it.
 - **Linked from everywhere the product itself is shown**: the artisan's own listing detail, the buyer-facing product page, and the publish success screen.
 
+## View tracking and artisan analytics
+
+Every artisan gets a real, honest picture of how their listings are actually doing, no invented numbers anywhere.
+
+- **View tracking.** Opening a product detail page as a buyer quietly records a view: which product, that the viewer was a buyer, a coarse region (copied from the buyer's own profile, never their IP or identity), and when. Refreshing the page or clicking back and forth doesn't inflate the count, each product only counts once per browser session.
+- **Analytics dashboard**, reachable from My Shop: total views, views in the last week, total inquiries, and how many listings are currently active, as plain number cards. A line chart of views over the last 30 days. A sortable table of every listing with its view count and inquiry count, so an artisan can see at a glance what's working.
+- **Honest empty states.** An artisan with no products yet, or products nobody has viewed yet, sees a plain "not enough data yet" message, never a chart or table padded with fake numbers to look impressive.
+- **Per-product view counts** also show right on each product card in My Shop, without needing to open the full dashboard.
+
 ## Admin console
 
 A separate, deliberately hidden part of the app for platform oversight, reachable only by an account with the admin role, at a non-obvious URL that is never linked from anywhere in the public app.
@@ -73,17 +82,17 @@ A separate, deliberately hidden part of the app for platform oversight, reachabl
 - Express API, deployed as a single Vercel serverless function.
 - Supabase (Postgres + file storage), with row-level security enabled on every table.
 - Groq (Whisper for speech, gpt-oss-120b for text) as the default AI provider, Gemini as a swappable fallback, remove.bg as the swappable background-removal provider.
-- Six schema migrations so far: multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story), and the pricing overcharge auto-flag (`products.auto_flag_reason`). **The sixth, `supabase/migrations/006-pricing-overcharge-flag.sql`, has not been run yet** and needs to be applied in the Supabase SQL Editor before the auto-flag feature works live; product creation itself is unaffected (the column is nullable and the check fails safe).
+- Seven schema migrations so far: multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story), the pricing overcharge auto-flag (`products.auto_flag_reason`), and view tracking (the `product_views` table). **Migrations 006 and 007 have not been run yet** and need to be applied in the Supabase SQL Editor; product creation itself is unaffected by 007 (it fails soft, showing 0 views instead), but is unaffected by 006 only once that one is also applied (see the pending-migration note below).
 
 ## Testing
 
-- 247 automated tests (6 of them for the pricing overcharge flag, currently skipping until migration 006 is applied) run against a real Supabase project, covering login, the full artisan publish flow, role and permission boundaries, the marketplace search and filters, the entire admin console (access control, deactivation, moderation, the audit trail), the heritage passport (id format, public visibility rules, story stability), and the pricing overcharge flag (capping, neutral wording, pricing freedom preserved).
+- 255 automated tests (14 of them for the pricing overcharge flag and view tracking, currently skipping until migrations 006 and 007 are applied) run against a real Supabase project, covering login, the full artisan publish flow, role and permission boundaries, the marketplace search and filters, the entire admin console (access control, deactivation, moderation, the audit trail), the heritage passport (id format, public visibility rules, story stability), the pricing overcharge flag (capping, neutral wording, pricing freedom preserved), and view tracking (recording, per-artisan isolation, honest zeroed summaries).
 - A separate script checks the row-level security policies directly against Postgres, independent of the API.
 - Full lint and type checks pass across both the frontend and the server.
 
 ## What is deliberately not built yet
 
-- **Migration 006 has not been run against the live database yet.** `supabase/migrations/006-pricing-overcharge-flag.sql` adds the `auto_flag_reason` column; until it's run, the pricing overcharge auto-flag silently does nothing (fails safe, does not block product creation), and the six pricing-flag tests skip themselves rather than fail.
+- **Migrations 006 and 007 have not been run against the live database yet.** `supabase/migrations/006-pricing-overcharge-flag.sql` adds the `auto_flag_reason` column (the pricing overcharge auto-flag silently does nothing until it's run, fails safe, does not block product creation) and `supabase/migrations/007-product-views.sql` adds the `product_views` table (view tracking and the analytics dashboard show honest zeros until it's run, also fails safe). The fourteen tests covering these two features skip themselves rather than fail in the meantime.
 - **Multi-image galleries.** Each product still stores exactly one photo. The buyer-facing product page is built to show a gallery, but there's only ever one image in it today.
 - **An artisan-facing "resubmit" flow.** If an admin rejects a listing, it returns to draft with no listing UI on the artisan's side to see why or republish it; that data exists (the review reason is stored) but there's no screen for the artisan to read it yet.
 - **Live deployment.** The app has not yet been deployed to a public Vercel URL.

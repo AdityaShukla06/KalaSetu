@@ -77,6 +77,10 @@ export interface ProductWithArtisan extends Product {
   artisan: ArtisanSummary;
 }
 
+export interface ProductWithViewCount extends Product {
+  viewCount: number;
+}
+
 export type InquiryStatus = "open" | "closed";
 
 export interface InquiryProductSummary {
@@ -158,6 +162,28 @@ export interface FlaggedListing extends Product {
 export interface FlaggedListingsResult {
   available: boolean;
   items: FlaggedListing[];
+}
+
+export interface AnalyticsDailyPoint {
+  date: string;
+  count: number;
+}
+
+export interface AnalyticsListingStat {
+  productId: string;
+  titleEn: string;
+  status: ProductStatus;
+  viewCount: number;
+  inquiryCount: number;
+}
+
+export interface AnalyticsSummary {
+  totalViews: number;
+  viewsThisWeek: number;
+  totalInquiries: number;
+  activeListings: number;
+  viewsOverTime: AnalyticsDailyPoint[];
+  listings: AnalyticsListingStat[];
 }
 
 declare global {

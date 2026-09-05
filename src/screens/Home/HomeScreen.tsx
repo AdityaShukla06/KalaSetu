@@ -4,7 +4,7 @@ import { Button } from "../../components/Button";
 import { GemOndcBanner } from "./GemOndcBanner";
 import { ProductCard } from "./ProductCard";
 import { ProductDetailSheet } from "./ProductDetailSheet";
-import { listProducts, type Product } from "../../services/api";
+import { listProducts, type Product, type ProductWithViewCount } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Home.css";
@@ -57,7 +57,7 @@ export function HomeScreen() {
   const { t } = useLanguage();
 
   const [state, setState] = useState<LoadState>("loading");
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithViewCount[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const loadProducts = useCallback(async () => {
@@ -77,7 +77,12 @@ export function HomeScreen() {
 
   return (
     <div className="screen home-screen">
-      <h1>{t("home.title")}</h1>
+      <div className="home-header-row">
+        <h1>{t("home.title")}</h1>
+        <button type="button" className="home-analytics-link" onClick={() => navigate("/analytics")}>
+          {t("home.viewAnalytics")}
+        </button>
+      </div>
 
       <GemOndcBanner />
 

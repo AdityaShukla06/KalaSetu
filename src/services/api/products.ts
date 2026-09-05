@@ -42,6 +42,10 @@ export interface Product extends ProductInput {
   updatedAt: string;
 }
 
+export interface ProductWithViewCount extends Product {
+  viewCount: number;
+}
+
 export interface ArtisanSummary {
   userId: string;
   shopName: string | null;
@@ -87,7 +91,7 @@ export function createProduct(product: ProductInput): Promise<{ productId: strin
 }
 
 //list products
-export function listProducts(userId: string): Promise<Product[]> {
+export function listProducts(userId: string): Promise<ProductWithViewCount[]> {
   return apiFetch(`/products?userId=${encodeURIComponent(userId)}`, { method: "GET" });
 }
 

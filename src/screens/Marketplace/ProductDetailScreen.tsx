@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Skeleton } from "../../components/Skeleton";
 import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
-import { getMarketplaceProduct, createInquiry } from "../../services/api";
+import { getMarketplaceProduct, createInquiry, recordProductView } from "../../services/api";
 import type { ProductWithArtisan } from "../../services/api";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
 import { useLanguage } from "../../context/LanguageContext";
@@ -11,6 +11,31 @@ import "./ProductDetail.css";
 
 type LoadState = "loading" | "error" | "not-found" | "loaded";
 type InquiryState = "idle" | "sending" | "sent" | "error";
+
+const VIEWED_SESSION_KEY = "kalasetu:viewedProducts";
+
+function hasRecordedView(productId: string): boolean {
+  try {
+    const raw = sessionStorage.getItem(VIEWED_SESSION_KEY);
+    const viewed: string[] = raw ? JSON.parse(raw) : [];
+    return viewed.includes(productId);
+  } catch {
+    return false;
+  }
+}
+
+function markViewRecorded(productId: string): void {
+  try {
+    const raw = sessionStorage.getItem(VIEWED_SESSION_KEY);
+    const viewed: string[] = raw ? JSON.parse(raw) : [];
+    if (!viewed.includes(productId)) {
+      viewed.push(productId);
+      sessionStorage.setItem(VIEWED_SESSION_KEY, JSON.stringify(viewed));
+    }
+  } catch {
+    return;
+  }
+}
 
 function BackIcon() {
   return (
@@ -82,6 +107,12 @@ export function ProductDetailScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (state !== "loaded" || !productId || hasRecordedView(productId)) return;
+    markViewRecorded(productId);
+    recordProductView(productId).catch(() => {});
+  }, [state, productId]);
 
   async function handleSendInquiry() {
     if (!productId || !message.trim()) return;

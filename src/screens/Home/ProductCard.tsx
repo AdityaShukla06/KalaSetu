@@ -1,13 +1,27 @@
-import type { Product } from "../../services/api";
+import type { ProductWithViewCount } from "../../services/api";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Home.css";
 
 interface ProductCardProps {
-  product: Product;
+  product: ProductWithViewCount;
   onClick: () => void;
 }
 
-const STATUS_LABEL_KEY: Record<Product["status"], string> = {
+function EyeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+const STATUS_LABEL_KEY: Record<ProductWithViewCount["status"], string> = {
   published: "home.statusPublished",
   draft: "home.statusDraft",
   failed: "home.statusFailed",
@@ -29,7 +43,13 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
       <div className="product-card-body">
         <p className="product-card-title">{title}</p>
         <p className="caption product-card-description">{description}</p>
-        <p className="product-card-price">₹{product.price}</p>
+        <div className="product-card-footer">
+          <p className="product-card-price">₹{product.price}</p>
+          <span className="product-card-views">
+            <EyeIcon />
+            {product.viewCount}
+          </span>
+        </div>
       </div>
     </button>
   );

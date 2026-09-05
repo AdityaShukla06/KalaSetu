@@ -3,6 +3,7 @@ export type {
   ProductStatus,
   ProductInput,
   Product,
+  ProductWithViewCount,
   ReviewStatus,
   ArtisanSummary,
   ProductWithArtisan,
@@ -40,6 +41,7 @@ export type {
   FlaggedListingsResult,
 } from "./api/console";
 export type { PublicPassport } from "./api/passport";
+export type { AnalyticsDailyPoint, AnalyticsListingStat, AnalyticsSummary } from "./api/analytics";
 
 // importing utility apis
 export { sendOtp, verifyOtp, OTP_LENGTH } from "./api/auth";
@@ -70,3 +72,4 @@ export {
   getAuditLog,
 } from "./api/console";
 export { getPublicPassport } from "./api/passport";
+export { getAnalyticsSummary, recordProductView } from "./api/analytics";

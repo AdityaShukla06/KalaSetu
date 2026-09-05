@@ -92,6 +92,22 @@ create index if not exists inquiries_buyer_id_created_at_idx
 create index if not exists inquiries_artisan_id_created_at_idx
   on inquiries (artisan_id, created_at desc);
 
+create table if not exists product_views (
+  id          uuid primary key default gen_random_uuid(),
+  product_id  uuid not null references products(id) on delete cascade,
+  viewer_role text check (viewer_role in ('artisan', 'buyer', 'admin')),
+  region      text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists product_views_product_id_created_at_idx
+  on product_views (product_id, created_at desc);
+
+create index if not exists product_views_created_at_idx
+  on product_views (created_at desc);
+
+alter table product_views enable row level security;
+
 create table if not exists audit_log (
   id          uuid primary key default gen_random_uuid(),
   actor_id    uuid references users(id) on delete set null,
@@ -182,11 +198,12 @@ create trigger products_protect_moderation
 -- server. They exist so the anon/authenticated Postgres roles are locked
 -- down to the same three-role rules if anything ever queries Supabase
 -- directly instead of through the API.
-alter table users      enable row level security;
-alter table products   enable row level security;
-alter table inquiries  enable row level security;
-alter table audit_log  enable row level security;
-alter table otp_codes  enable row level security;
+alter table users         enable row level security;
+alter table products      enable row level security;
+alter table inquiries     enable row level security;
+alter table product_views enable row level security;
+alter table audit_log     enable row level security;
+alter table otp_codes     enable row level security;
 
 revoke update (role) on users from authenticated, anon;
 revoke update (is_active) on users from authenticated, anon;
@@ -280,6 +297,16 @@ create policy inquiries_update_parties on inquiries
   for update to authenticated
   using (buyer_id = auth.uid() or artisan_id = auth.uid())
   with check (buyer_id = auth.uid() or artisan_id = auth.uid());
+
+drop policy if exists product_views_select_own on product_views;
+create policy product_views_select_own on product_views
+  for select to authenticated
+  using (exists (select 1 from products p where p.id = product_views.product_id and p.user_id = auth.uid()));
+
+drop policy if exists product_views_select_admin on product_views;
+create policy product_views_select_admin on product_views
+  for select to authenticated
+  using (app_current_role() = 'admin');
 
 drop policy if exists audit_log_select_admin on audit_log;
 create policy audit_log_select_admin on audit_log

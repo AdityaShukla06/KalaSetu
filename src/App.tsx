@@ -24,6 +24,7 @@ import { ModerationScreen } from "./screens/Console/ModerationScreen";
 import { FlaggedScreen } from "./screens/Console/FlaggedScreen";
 import { NotFoundScreen } from "./screens/NotFound/NotFoundScreen";
 import { PassportScreen } from "./screens/Passport/PassportScreen";
+import { AnalyticsScreen } from "./screens/Analytics/AnalyticsScreen";
 
 function AppLayout() {
   return (
@@ -99,6 +100,7 @@ function App() {
 
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<HomeScreen />} />
+                  <Route path="/analytics" element={<AnalyticsScreen />} />
                   <Route path="/profile" element={<ProfileScreen />} />
                 </Route>
               </Route>

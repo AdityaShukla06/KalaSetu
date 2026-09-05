@@ -56,6 +56,7 @@ src/                 the PWA
     Marketplace/     buyer portal: browse/search/filter, product detail, inquiries, profile
     Console/         admin console: dashboard, artisans, moderation, flagged listings
     Passport/        the public Craft Heritage Passport certificate page
+    Analytics/       artisan-facing view and inquiry analytics dashboard
     NotFound/        generic 404, also used to hide the console route from non-admins
   components/        Button, Card, Input, OtpInput, LanguageToggle, RegionSelect, Skeleton, ConfirmDialog, BottomNav
   context/           Auth, Language, AddProductDraft
@@ -97,7 +98,7 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | POST | `/api/voice/transcribe` | raw audio bytes, `?category=` and `?language=` | `{ transcript, descriptionEn, descriptionLocal, localLanguage, detectedLanguage }` |
 | POST | `/api/pricing/suggest` | `{ category, materialCost or rawMaterials, ... }` | range, confidence, market reference, breakdown |
 | POST | `/api/products` | `ProductInput` | `{ productId, passportId }`, artisan only |
-| GET | `/api/products` | | `Product[]`, the caller's own |
+| GET | `/api/products` | | `ProductWithViewCount[]`, the caller's own, each with a real view count |
 | GET | `/api/products/marketplace` | `?q=&category=&material=&region=&minPrice=&maxPrice=&sort=&page=&limit=` | `{ items, page, limit, total, hasMore }`, published and unflagged only |
 | GET | `/api/products/marketplace/:id` | | `ProductWithArtisan`, a single published listing plus a live artisan summary |
 | PATCH | `/api/products/:id` | partial `ProductInput` | `{ success }`, artisan only, own product |
@@ -117,6 +118,8 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | GET | `/api/internal/console/flagged` | | `{ available, items }`, admin only, listings auto-flagged as priced above the typical range for their category |
 | GET | `/api/internal/console/audit` | `?limit=` | `AuditLogEntry[]`, admin only |
 | GET | `/api/passport/:passportId` | | `PublicPassport`, public, no auth, published and unflagged only |
+| POST | `/api/analytics/view` | `{ productId }` | `{ success }`, buyer only, debounced client side per session |
+| GET | `/api/analytics/summary` | | `AnalyticsSummary`, artisan only, own products only |
 
 Uploads send the file as the raw request body with its real type in an `X-File-Type` header rather than as multipart. Serverless runtimes buffer and consume the request stream before the handler runs, which breaks multipart parsers; reading a raw body works both under a normal Express server and on Vercel.
 
@@ -224,6 +227,22 @@ Row level security is enabled on every table and carries the full three-role rul
 
 `users.total_products` is maintained by a Postgres function rather than a read-modify-write, so it cannot drift under concurrent writes.
 
+## View tracking and artisan analytics
+
+`products.select("id", { count: "exact", head: true })`-style aggregate queries over a new `product_views` table back an artisan-facing analytics dashboard at `/analytics`, linked from the "View analytics" text link on My Shop.
+
+**What gets recorded, and what deliberately doesn't.** `product_views` stores only `product_id`, `viewer_role` (`buyer`, since `POST /api/analytics/view` is buyer-only), an optional coarse `region` copied from the buyer's own profile (never derived from IP), and a timestamp. No buyer identity, no IP address, ever. `POST /api/products/marketplace/:id` is unaffected: recording a view is a separate, fire-and-forget call the frontend makes only after that page has already loaded successfully.
+
+**Debounced client side, not server side.** `ProductDetailScreen` records a view once per product per browser session (a small id list in `sessionStorage`), so a refresh or navigating back and forth doesn't inflate the count; opening the same listing again in a new tab or session is a genuinely new view, which is the right call for an engagement metric like this. The server independently re-validates the product is still published and unflagged before inserting, the same check `POST /api/inquiries` already does.
+
+**Inquiries are not double-tracked.** `inquiries` already has `product_id`, `artisan_id`, and `created_at`; the analytics endpoint reads that table directly for inquiry counts rather than adding a redundant events table for something already normalized.
+
+**`GET /api/analytics/summary` (artisan only)** returns real totals only, computed the same way the admin dashboard's signup chart already is (fetch raw rows in a date range, bucket by day in application code, no new SQL aggregation functions): `totalViews` and `totalInquiries` are all-time exact counts; `viewsThisWeek` is a 7-day count; `viewsOverTime` is a 30-day daily series; and `listings` is every one of the artisan's products with a view count and inquiry count computed over the same 30-day window, sortable by either in the UI. An artisan with no products, or products with no views yet, gets honest zeros back, not invented numbers, and the frontend renders a plain empty-state message instead of a flat chart or table when there's nothing to show yet.
+
+**`GET /api/products` (My Shop)** now also returns a real per-product `viewCount`, computed the same way and shown on each product card. If the view-count lookup fails for any reason (including on a database that predates this migration), My Shop still loads, just with `viewCount: 0` everywhere, the same non-blocking philosophy used for background removal and the heritage story.
+
+**RLS**: `product_views` carries `product_views_select_own` (an artisan reads rows only for products they own, via an `exists` subquery against `products`) and `product_views_select_admin`, mirroring every other table's three-role pattern. There is no insert policy, matching `audit_log`: only the service-role server ever writes a row.
+
 ## How the features work
 
 **Photo.** `getUserMedia` with the rear camera, falling back to a native file picker if the camera is unavailable or denied. The captured image goes to `/api/images/enhance`, which runs a real `sharp` pipeline: EXIF auto rotation, resize to fit 1600px, contrast normalisation, a slight saturation lift, mild sharpening, and mozjpeg encoding. Auto rotation matters most in practice, since phone photos carry an orientation flag that would otherwise show the product sideways. Enhancement is deliberately deterministic rather than generative, because a marketplace photo has to keep showing the artisan's actual product. The original and the enhanced image are both kept, at their own storage paths, so neither is ever overwritten.
@@ -251,7 +270,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, and `server/__pricing_flag.test.ts` drive the whole API against a real Supabase project. All six only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, `server/__pricing_flag.test.ts`, and `server/__analytics.test.ts` drive the whole API against a real Supabase project. All seven only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
 - `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
 - After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 
