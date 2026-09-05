@@ -26,7 +26,7 @@ npm run dev
 
 Then open `http://localhost:5173`.
 
-Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](SETUP.md). The on-device checklist is in [TESTING.md](TESTING.md).
+Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](SETUP.md). The on-device checklist is in [TESTING.md](TESTING.md). The ONDC catalog field mapping is in [ONDC_CATALOG_MAPPING.md](ONDC_CATALOG_MAPPING.md).
 
 ## Scripts
 
@@ -76,6 +76,7 @@ api/index.ts         Vercel entry point, exports the Express app
 shared/languages.ts  the language registry, used by both halves
 shared/regions.ts    the fixed list of Indian states/UTs, used by both halves
 shared/materials.ts  the fixed list of product materials, used by both halves
+shared/ondcCatalog.ts the ONDC retail catalog field mapping, used by the frontend export today
 supabase/
   schema.sql         tables, index, counter function, RLS, storage bucket
   migrations/        run these against a database created before a change
@@ -242,6 +243,20 @@ Row level security is enabled on every table and carries the full three-role rul
 **`GET /api/products` (My Shop)** now also returns a real per-product `viewCount`, computed the same way and shown on each product card. If the view-count lookup fails for any reason (including on a database that predates this migration), My Shop still loads, just with `viewCount: 0` everywhere, the same non-blocking philosophy used for background removal and the heritage story.
 
 **RLS**: `product_views` carries `product_views_select_own` (an artisan reads rows only for products they own, via an `exists` subquery against `products`) and `product_views_select_admin`, mirroring every other table's three-role pattern. There is no insert policy, matching `audit_log`: only the service-role server ever writes a row.
+
+## ONDC catalog export
+
+"Export catalog (ONDC format)" on My Shop, and "Export this product (ONDC format)" on a single listing, download a JSON file that maps KalaSetu's product data onto the ONDC retail catalog structure (`Provider` and `Item` objects). Full field-by-field mapping and the list of gaps is in [ONDC_CATALOG_MAPPING.md](ONDC_CATALOG_MAPPING.md); the short version:
+
+**This is a mapping, not a network integration**, and the code and copy are deliberately built to only claim the former. KalaSetu is not registered as an ONDC network participant, has no subscriber ID or signing keys, and makes no network calls anywhere in this feature. The exported file carries a `_kalasetu_export.note` field saying so explicitly, and there is no UI anywhere implying a live connection. Going live is a registration and onboarding process on ONDC's side, not further development on ours; that is the entire claim this feature makes.
+
+**Verified against the real spec, not memory.** Every field name (`Item.descriptor`, `Item.price.value`, `Item.category_id`, `Item.tags`, `Provider.locations[].address.state`, and so on) is taken from the official [`ONDC-Official/ONDC-Protocol-Specs`](https://github.com/ONDC-Official/ONDC-Protocol-Specs/blob/master/protocol-specifications/core/v0/api/retail-hyperlocal.yaml) repository, fetched and quoted directly while building this feature.
+
+**[`shared/ondcCatalog.ts`](shared/ondcCatalog.ts)** holds the pure mapping (no React, no Express), the same "used by both halves" pattern as `shared/languages.ts`/`shared/regions.ts`/`shared/materials.ts`, so it's covered by the same `shared/**/*.test.ts` suite rather than needing a new frontend test setup. `src/services/ondcExport.ts` adapts the frontend `Product` shape into the mapper's input and triggers the browser download; there is no new API route, since every field the mapper needs is already present client side.
+
+**Fields ONDC expects that KalaSetu doesn't have yet** (inventory quantity, fulfillment/shipping configuration, return and COD policy, a real network provider ID, a full pickup address) are listed as gaps in the export's own `gaps` array and in the mapping doc, never filled with an invented value. A few fields that do exist in KalaSetu but have no dedicated ONDC slot (technique, time taken, GI/ODOP tag, care instructions, the passport link) are carried in `Item.tags`, which is ONDC's own documented mechanism for exactly this kind of extended metadata.
+
+**GeM is untouched.** The existing "Connect to GeM / ONDC" banner on My Shop stays exactly as it was, a "coming soon" roadmap placeholder; this feature is a separate, additional action, not a replacement for that banner.
 
 ## How the features work
 

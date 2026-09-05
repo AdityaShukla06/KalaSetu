@@ -5,6 +5,7 @@ import { GemOndcBanner } from "./GemOndcBanner";
 import { ProductCard } from "./ProductCard";
 import { ProductDetailSheet } from "./ProductDetailSheet";
 import { listProducts, type Product, type ProductWithViewCount } from "../../services/api";
+import { buildCatalogExport, downloadJson } from "../../services/ondcExport";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./Home.css";
@@ -51,6 +52,20 @@ function ErrorIcon() {
   );
 }
 
+function DownloadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function HomeScreen() {
   const navigate = useNavigate();
   const { userId } = useAuth();
@@ -74,6 +89,13 @@ export function HomeScreen() {
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
+
+  const publishedProducts = products.filter((product) => product.status === "published" && !product.flagged);
+
+  function handleExportCatalog() {
+    const exportData = buildCatalogExport(userId ?? "", publishedProducts);
+    downloadJson(`kalasetu-ondc-catalog-${new Date().toISOString().slice(0, 10)}.json`, exportData);
+  }
 
   return (
     <div className="screen home-screen">
@@ -125,6 +147,15 @@ export function HomeScreen() {
           {products.map((product) => (
             <ProductCard key={product.productId} product={product} onClick={() => setSelectedProduct(product)} />
           ))}
+        </div>
+      )}
+
+      {state === "loaded" && publishedProducts.length > 0 && (
+        <div className="home-export-section">
+          <Button variant="secondary" icon={<DownloadIcon />} onClick={handleExportCatalog}>
+            {t("home.exportCatalog")}
+          </Button>
+          <p className="caption home-export-note">{t("home.exportCatalogNote")}</p>
         </div>
       )}
 

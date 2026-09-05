@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Button } from "../../components/Button";
 import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
 import { deleteProduct, updateProduct, type Product } from "../../services/api";
+import { buildSingleProductExport, downloadJson } from "../../services/ondcExport";
+import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { useMirroredDescription } from "../AddProduct/useMirroredDescription";
 import { CATEGORIES } from "../AddProduct/CategoryStep";
@@ -59,11 +61,17 @@ function SaveIcon() {
 }
 
 export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetailSheetProps) {
+  const { userId } = useAuth();
   const { language, t } = useLanguage();
   const [descriptionTab, setDescriptionTab] = useState<DescriptionTab>(language === "en" ? "en" : "local");
   const [mode, setMode] = useState<Mode>("view");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleExportOndc() {
+    const exportData = buildSingleProductExport(userId ?? "", product);
+    downloadJson(`kalasetu-ondc-${product.passportId}.json`, exportData);
+  }
 
   const [price, setPrice] = useState(String(product.price));
   const [descriptionEn, setDescriptionEn] = useState(product.descriptionEn);
@@ -179,6 +187,12 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
           >
             {t("passport.viewLink")}
           </a>
+
+          {mode === "view" && (
+            <button type="button" className="sheet-export-link" onClick={handleExportOndc}>
+              {t("home.exportOndcSingle")}
+            </button>
+          )}
 
           {mode === "view" && product.autoFlagReason && (
             <p className="sheet-price-note">

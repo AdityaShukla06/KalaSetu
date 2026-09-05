@@ -21,7 +21,7 @@ The original, most-built-out side of the app. Mobile-first, large tap targets, b
 - **Price suggestion.** A rule-based, cost-based, market-anchored pricing formula (not a trained model), using material cost plus an estimated labour/overhead cost and any available market benchmark. A "see how this was calculated" disclosure shows the full plain-language breakdown: material cost, labour, overhead, margin, category. The artisan can always override the suggested price.
 - **Material cost sanity check.** Material cost is the one number in the whole formula the artisan types in directly, so it's checked against a small reference table of typical cost per category. Enter something far outside that range and you'll see a plain note; enter something wildly high and the number actually used in the calculation is capped, so one inflated figure can't drag the suggested price up without limit. Your displayed material cost is never silently changed, only what feeds the formula.
 - **Publish.** Instant. A listing is live in the marketplace the moment it's published; there's no waiting on admin approval to go live (moderation is retrospective, not a gate, see the admin section below). Every published product also gets a Craft Heritage Passport (see below), and the success screen links straight to it. Pricing freedom is complete: any price can be listed. If it's well above the typical range for the category, everyone involved (the artisan before and after publishing, the buyer, and the admin) sees the same neutral, factual note, never an accusation.
-- **My Shop.** A grid of the artisan's own listings with status badges, a real view count on every card, a detail view to edit price/description or delete a listing (soft, with a confirmation step), and empty/loading/error states. A "View analytics" link opens the full analytics dashboard (see below).
+- **My Shop.** A grid of the artisan's own listings with status badges, a real view count on every card, a detail view to edit price/description or delete a listing (soft, with a confirmation step), and empty/loading/error states. A "View analytics" link opens the full analytics dashboard (see below), and an "Export catalog (ONDC format)" action downloads a JSON file (see below).
 - **Profile.** Display name, shop name, region (used for buyer-side filtering), and language, with a save confirmation.
 - **Language switch.** Changing the interface language also offers to re-translate the artisan's existing listings into the new language.
 - **PWA basics.** Install prompt, offline banner, and a cache-first app shell so the app still opens (to cached screens) with no network.
@@ -57,6 +57,16 @@ Every artisan gets a real, honest picture of how their listings are actually doi
 - **Honest empty states.** An artisan with no products yet, or products nobody has viewed yet, sees a plain "not enough data yet" message, never a chart or table padded with fake numbers to look impressive.
 - **Per-product view counts** also show right on each product card in My Shop, without needing to open the full dashboard.
 
+## ONDC catalog export
+
+A JSON export that maps KalaSetu's product data onto the real ONDC retail catalog structure, verified against the official ONDC protocol specification (not written from memory), so an artisan's listings are engineering-ready to bring onto the ONDC network.
+
+- **What it is, in plain terms.** "Export catalog (ONDC format)" on My Shop downloads every currently published listing, mapped field by field onto ONDC's `Provider`/`Item` catalog objects. "Export this product (ONDC format)" does the same for one listing at a time.
+- **What it deliberately is not.** KalaSetu is not registered on the ONDC network, has no subscriber ID, and makes no network calls anywhere in this feature. Nothing in the UI implies otherwise. The exported file says so explicitly. Going live on ONDC is a registration process on ONDC's side from here, not more development on ours, and that is the entire claim this feature makes.
+- **Where the field names came from.** Every ONDC field name used (`Item.descriptor`, `Item.price`, `Item.category_id`, `Item.tags`, and so on) was looked up directly from ONDC's own public GitHub specification while building this feature, not recalled from memory. The exact source and the full field-by-field mapping are in `ONDC_CATALOG_MAPPING.md` at the repo root.
+- **Gaps are listed, never invented.** Things ONDC expects that KalaSetu doesn't track yet, stock quantity, shipping/fulfillment setup, return and cash-on-delivery policy, a real network provider ID, a full pickup address, are called out by name in the export itself and in the mapping doc, and simply left out rather than filled with a guessed value.
+- **GeM is untouched.** The existing "Connect to GeM / ONDC" banner stays exactly as it was, a "coming soon" placeholder; this is a separate, real, additional feature next to it, not a replacement.
+
 ## Admin console
 
 A separate, deliberately hidden part of the app for platform oversight, reachable only by an account with the admin role, at a non-obvious URL that is never linked from anywhere in the public app.
@@ -83,12 +93,13 @@ A separate, deliberately hidden part of the app for platform oversight, reachabl
 - Supabase (Postgres + file storage), with row-level security enabled on every table.
 - Groq (Whisper for speech, gpt-oss-120b for text) as the default AI provider, Gemini as a swappable fallback, remove.bg as the swappable background-removal provider.
 - Seven schema migrations so far: multilingual product fields, the three-role model, buyer marketplace fields (region, material), the admin console (deactivation, review status, audit log), the Craft Heritage Passport (passport id, technique/time-taken/GI-tag/care-instructions, product story), the pricing overcharge auto-flag (`products.auto_flag_reason`), and view tracking (the `product_views` table). **Migrations 006 and 007 have not been run yet** and need to be applied in the Supabase SQL Editor; product creation itself is unaffected by 007 (it fails soft, showing 0 views instead), but is unaffected by 006 only once that one is also applied (see the pending-migration note below).
+- The ONDC catalog export needs no new schema at all; it's computed entirely from data already in `products`.
 
 ## Testing
 
-- 255 automated tests (14 of them for the pricing overcharge flag and view tracking, currently skipping until migrations 006 and 007 are applied) run against a real Supabase project, covering login, the full artisan publish flow, role and permission boundaries, the marketplace search and filters, the entire admin console (access control, deactivation, moderation, the audit trail), the heritage passport (id format, public visibility rules, story stability), the pricing overcharge flag (capping, neutral wording, pricing freedom preserved), and view tracking (recording, per-artisan isolation, honest zeroed summaries).
+- 268 automated tests (14 of them for the pricing overcharge flag and view tracking, currently skipping until migrations 006 and 007 are applied; 13 more for the ONDC catalog mapping, which need no database and always run) cover login, the full artisan publish flow, role and permission boundaries, the marketplace search and filters, the entire admin console (access control, deactivation, moderation, the audit trail), the heritage passport (id format, public visibility rules, story stability), the pricing overcharge flag (capping, neutral wording, pricing freedom preserved), view tracking (recording, per-artisan isolation, honest zeroed summaries), and the ONDC catalog mapping (correct field mapping, gaps always reported, cost and moderation data never leaking into an export).
 - A separate script checks the row-level security policies directly against Postgres, independent of the API.
-- Full lint and type checks pass across both the frontend and the server.
+- Full lint and type checks pass across both the frontend and the server, and a production build succeeds.
 
 ## What is deliberately not built yet
 
