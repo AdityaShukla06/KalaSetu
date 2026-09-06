@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "یہ لنک نا موزون یا ختم چھُ",
+  "support.invalidMessage": "سپورٹ ٹکٹ لنکس 30 دن پٹھ بند چھُ۔ اگر توہند مدد درکار چھُ تو پلیٹ فارم ایڈمن سُ رابطہ کرن۔",
+  "support.permanentNote": "یہ ہٹاون دائمی چھُ اور لسٹنگ واپس نہ بنایٔی جاؤن۔ ٹکٹ صرف سوالات لئی چھُ، واپس لئی نہ۔",
+  "support.messagePlaceholder": "ہنز بیاں کرن کہ کیا ہونٛدٕ اور کیوں توہند خیال چھُ کہ یہ چھُ جائزہ گژھ۔",
+  "support.messageRequired": "جمع کرن سۂ پہلۂ پیغام لکھن۔",
+  "support.submit": "ٹکٹ بھیژ",
+  "support.submitError": "ٹکٹ جمع نہ ہند، مہربانی کر کے دوبار کوشش کرن۔",
+  "support.sentTitle": "ٹکٹ جمع ہوچُھ",
+  "support.sentMessage": "ایڈمن یہ جائزہ گژھ اور توہند سۂ واپس آؤن۔"
 }

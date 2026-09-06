@@ -59,8 +59,9 @@ src/                 the PWA
     AddProduct/      camera, enhancement studio, category, voice description, pricing, publish
     Profile/         profile and language
     Marketplace/     buyer portal: browse/search/filter, product detail, inquiries, profile
-    Console/         admin console: dashboard, artisans, moderation, flagged listings
+    Console/         admin console: dashboard, artisans, moderation, flagged listings, tickets
     Passport/        the public Craft Heritage Passport certificate page
+    Support/         the public support ticket page, reached from a signed email link
     Analytics/       artisan-facing view and inquiry analytics dashboard
     Inquiries/       artisan-facing inbox for buyer inquiries
     NotFound/        generic 404, also used to hide the console route from non-admins
@@ -126,12 +127,17 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | GET | `/api/internal/console/artisans` | `?q=&page=&limit=` | `{ items, page, limit, total, hasMore }`, admin only |
 | GET | `/api/internal/console/artisans/:id` | | `ConsoleArtisanDetail` (profile + every listing), admin only |
 | PATCH | `/api/internal/console/artisans/:id` | `{ isActive, reason? }` | `{ success }`, admin only, deactivation blocks that artisan's next login |
-| GET | `/api/internal/console/moderation/queue` | `?page=&limit=` | `{ items, page, limit, total, hasMore }`, `review_status = 'pending'` only, admin only |
+| GET | `/api/internal/console/moderation/queue` | `?q=&page=&limit=` | `{ items, page, limit, total, hasMore }`, `review_status = 'pending'` only, admin only |
 | PATCH | `/api/internal/console/moderation/:id/approve` | | `{ success }`, admin only |
 | PATCH | `/api/internal/console/moderation/:id/reject` | `{ reason }` | `{ success }`, admin only, pulls the listing from the marketplace |
 | PATCH | `/api/internal/console/moderation/:id/flag` | `{ reason }` | `{ success }`, admin only, pulls the listing from the marketplace |
+| DELETE | `/api/internal/console/products/:id` | `{ reason }` | `{ success }`, admin only, permanent, emails the artisan with a ticket link |
 | GET | `/api/internal/console/flagged` | | `{ available, items }`, admin only, listings auto-flagged as priced above the typical range for their category |
 | GET | `/api/internal/console/audit` | `?limit=` | `AuditLogEntry[]`, admin only |
+| GET | `/api/internal/console/tickets` | `?status=open\|resolved\|all` | `SupportTicket[]`, admin only |
+| PATCH | `/api/internal/console/tickets/:id/resolve` | `{ response? }` | `{ success }`, admin only |
+| GET | `/api/tickets/preview` | `?token=` | `{ ticketType, title, context }`, public, no auth, reads a signed ticket link |
+| POST | `/api/tickets` | `{ token, message }` | `{ ticketId }`, public, no auth, the token itself is the credential |
 | GET | `/api/passport/:passportId` | | `PublicPassport`, public, no auth, published and unflagged only |
 | POST | `/api/analytics/view` | `{ productId }` | `{ success }`, buyer only, debounced client side per session |
 | GET | `/api/analytics/summary` | | `AnalyticsSummary`, artisan only, own products only |
@@ -220,7 +226,7 @@ Product prices exclude shipping, which used to make the buyer's total misleading
 
 ## Admin console
 
-Four screens under `src/screens/Console/`, deliberately unlinked from anywhere in the public app: dashboard (stat cards, a hand-rolled SVG bar chart of signups, recent audit activity), artisan management (searchable paginated table, per-artisan profile and listing history, deactivate/reactivate, and a permanent delete-with-reason on any of that artisan's own listings), listing moderation (a search box, a queue, approve/reject-with-reason/flag-with-reason), and flagged listings. It's the one part of this app written in plain English with no `t()` calls: the audience is internal admin staff, not artisans or buyers, and translating a dense data table across 22 languages for that audience isn't a good trade.
+Five screens under `src/screens/Console/`, deliberately unlinked from anywhere in the public app: dashboard (stat cards, a hand-rolled SVG bar chart of signups, recent audit activity), artisan management (searchable paginated table, per-artisan profile and listing history, deactivate/reactivate, and a permanent delete-with-reason on any of that artisan's own listings), listing moderation (a search box, a queue, approve/reject-with-reason/flag-with-reason), flagged listings, and support tickets (below). It's the one part of this app written in plain English with no `t()` calls: the audience is internal admin staff, not artisans or buyers, and translating a dense data table across 22 languages for that audience isn't a good trade.
 
 **Route obscurity is convenience, not the security boundary, exactly as asked.** The path is `/internal/console`, linked from nowhere. A non-admin hitting any `/api/internal/console/*` endpoint gets a bare `404`, indistinguishable from a route that doesn't exist, whether they're a logged-in artisan, a logged-in buyer, or not logged in at all: `requireAdminOr404` in [server/middleware/requireAdminOr404.ts](server/middleware/requireAdminOr404.ts) verifies the session token and re-checks the role from the database itself, and answers 404 for every failure mode uniformly, never 401 or 403, since either of those would confirm to a curious visitor that a gated route exists here. The frontend guard (`RequireAdminOr404` in `App.tsx`) does the same: a non-admin sees the same generic "Page not found" screen as any bad URL, never a redirect, since a redirect would itself leak "you're logged in as someone this route knows about." RLS backs both: `products_select_admin`/`users_select_admin`/`users_update_admin` already gate the tables this reads and writes.
 
@@ -228,9 +234,11 @@ Four screens under `src/screens/Console/`, deliberately unlinked from anywhere i
 
 **Moderation queue search** follows the same pattern as artisan search: fetch pending candidates (capped at 1000), filter by title/artisan/category in application code, then paginate the filtered result, rather than building a raw filter string out of admin-typed search text.
 
-**Deactivating an artisan** sets `users.is_active = false`, checked at `verify-otp`, so the very next sign-in attempt is refused; it does not touch their existing listings. Reactivating is the same endpoint with the flag flipped back.
+**Deactivating an artisan** sets `users.is_active = false`, checked at `verify-otp`, so the very next sign-in attempt is refused; it does not touch their existing listings. Reactivating is the same endpoint with the flag flipped back, available both from the artisan detail screen and, more directly, from an open deactivation ticket on the new Tickets screen.
 
-**Deleting a listing is the one genuine hard delete in this feature**, and it's deliberately scoped narrowly: `DELETE /api/internal/console/products/:id`, admin only, requires a reason like reject/flag do, removes the row outright (its passport link and inquiry history go with it, both foreign keys cascade), and decrements the artisan's `total_products` the same way an artisan deleting their own listing does. It exists specifically so an admin can remove a listing that should never have existed (spam, a genuine policy violation) rather than only ever being able to reject or flag it back into draft. Every other moderation action in this console stays reversible; this one is the deliberate exception, gated behind a required, audited reason.
+**Deleting a listing is the one genuine hard delete in this feature**, and it's deliberately scoped narrowly: `DELETE /api/internal/console/products/:id`, admin only, requires a reason like reject/flag do, removes the row outright (its passport link and inquiry history go with it, both foreign keys cascade), and decrements the artisan's `total_products` the same way an artisan deleting their own listing does. It exists specifically so an admin can remove a listing that should never have existed (spam, a genuine policy violation) rather than only ever being able to reject or flag it back into draft. Every other moderation action in this console stays reversible; this one is the deliberate exception, gated behind a required, audited reason, and raising a support ticket about it (below) never brings the listing back.
+
+**Both of those actions now email the artisan, with a way to push back.** Deactivating sends "your account has been deactivated" with the reason; deleting a listing sends "your listing was removed" with the reason and an explicit line that it's permanent. Both link to `/support/ticket?token=...`, a public page (no login) that lets the artisan explain their side. The link works even for a deactivated account, which is the whole reason it isn't a normal authenticated route: `verify-otp` refuses a deactivated account a session token outright, so there is no way for that account to reach an ordinary `requireAuth` endpoint. Instead the link itself carries a short-lived, signed JWT (`signTicketToken`/`verifyTicketToken` in [server/lib/jwt.ts](server/lib/jwt.ts), 30 days, a distinct `purpose` claim so it can't be replayed as a session token) identifying the artisan and what happened; submitting the form is `POST /api/tickets` with that token in the body, no `Authorization` header involved. The new **Tickets** screen lists them (open by default, a filter for resolved/all), and for an open deactivation ticket on a still-deactivated artisan, a "Reactivate artisan" button sits right there, reusing the same endpoint as the artisan detail screen's toggle. A product-removal ticket has no equivalent restore action anywhere in the codebase, deliberately: the artisan can ask about it, an admin can respond, but the listing itself is gone for good.
 
 **Every moderation action and every deactivate/reactivate writes to `audit_log`** (actor, action, target table and id, an optional reason, optional metadata, timestamp) via `recordAudit()` in [server/lib/auditLog.ts](server/lib/auditLog.ts). It's best-effort: a failed audit write is logged server side and does not roll back or block the underlying action, a deliberate choice given the scope here (an admin tool's activity trail, not a financial ledger needing transactional guarantees).
 
@@ -302,7 +310,7 @@ The cooldown map lives in memory, so on Vercel it only spans a warm instance. Th
 
 ## Data and ownership
 
-`users`, `products`, `inquiries`, `audit_log`, and `otp_codes`, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product and inquiry read, update, and delete is scoped by ownership in the query itself, so knowing an ID is not enough to touch someone else's row. The API uses the service role key server side only, which bypasses row level security entirely, so this ownership scoping in the route code is what actually gates every request that comes through the API today.
+`users`, `products`, `inquiries`, `audit_log`, `otp_codes`, and `support_tickets`, defined in [`supabase/schema.sql`](supabase/schema.sql). Every product and inquiry read, update, and delete is scoped by ownership in the query itself, so knowing an ID is not enough to touch someone else's row. The API uses the service role key server side only, which bypasses row level security entirely, so this ownership scoping in the route code is what actually gates every request that comes through the API today.
 
 Row level security is enabled on every table and carries the full three-role rule set: an artisan sees and writes only their own products and profile, a buyer reads published listings and writes only their own inquiries and profile, and an admin reads everything and can update moderation fields. It exists as a second, independent layer for anything that isn't the service-role-authenticated API, such as a leaked anon key or a future direct-from-browser read. [`scripts/verify-rls.mjs`](scripts/verify-rls.mjs) proves those policies directly against Postgres, and [`server/__roles.test.ts`](server/__roles.test.ts) proves the same six rules through the live API.
 
@@ -385,7 +393,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 - Test UI changes in English and at least one Indian language. Devanagari and Tamil strings run longer than English and break layouts first, and Urdu flips the layout right to left.
 - New user-facing copy goes into `src/context/locales/en.json`, then run `node scripts/build-translations.mjs` to fill in the rest.
 - House style: no comments in committed files, and no em dashes anywhere.
-- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, `server/__pricing_flag.test.ts`, `server/__analytics.test.ts`, `server/__inquiries.test.ts`, and `server/__shipping.test.ts` drive the whole API against a real Supabase project. All nine only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
+- `server/__smoke.test.ts`, `server/__roles.test.ts`, `server/__marketplace.test.ts`, `server/__console.test.ts`, `server/__passport.test.ts`, `server/__pricing_flag.test.ts`, `server/__analytics.test.ts`, `server/__inquiries.test.ts`, `server/__shipping.test.ts`, `server/__admin_login.test.ts`, `server/__stock_and_moderation.test.ts`, and `server/__tickets.test.ts` drive the whole API against a real Supabase project. All twelve only run when `.env` has credentials, skip themselves in CI, and clean up everything they create.
 - `npm run verify:rls` checks the row level security policies directly against Postgres, independent of the API. It needs `SUPABASE_ANON_KEY` and `SUPABASE_JWT_SECRET` in `.env` on top of the usual credentials.
 - After a schema change, run the matching file in `supabase/migrations/` against your Supabase project (SQL Editor) before pulling in code that depends on it. The API and the tests above expect the new columns and policies to already exist.
 

@@ -136,3 +136,32 @@ export function getFlaggedListings(): Promise<FlaggedListingsResult> {
 export function getAuditLog(limit = 20): Promise<AuditLogEntry[]> {
   return apiFetch(`${BASE}/audit?limit=${limit}`, { method: "GET" });
 }
+
+export type TicketStatus = "open" | "resolved";
+export type TicketType = "deactivation" | "product_removal";
+
+export interface SupportTicket {
+  ticketId: string;
+  artisanId: string;
+  artisanEmail: string;
+  artisanDisplayName: string | null;
+  ticketType: TicketType;
+  context: string | null;
+  message: string;
+  status: TicketStatus;
+  adminResponse: string | null;
+  artisanIsActive: boolean;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export function getTickets(status: TicketStatus | "all" = "open"): Promise<SupportTicket[]> {
+  return apiFetch(`${BASE}/tickets?status=${status}`, { method: "GET" });
+}
+
+export function resolveTicket(ticketId: string, response?: string): Promise<{ success: boolean }> {
+  return apiFetch(`${BASE}/tickets/${encodeURIComponent(ticketId)}/resolve`, {
+    method: "PATCH",
+    body: JSON.stringify({ response }),
+  });
+}

@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "लिंक अमान्यः अथवा समाप्तः",
+  "support.invalidMessage": "समर्थन टिकेट लिंक ३० दिनानन्तर कार्य न करिष्यति। यदि सहायता आवश्यकं भवति तर्हि मंचस्य प्रशासकं सम्पर्कतु।",
+  "support.permanentNote": "एतत् विलोपनं शाश्वतं अस्ति च सूचीं पुनःस्थापितुं न शक्यते। टिकेट् प्रश्नार्थं अस्ति, पुनः प्राप्त्यर्थं न।",
+  "support.messagePlaceholder": "किम् अभवत् तथा किमर्थं इदं पुनरावलोकनं योग्यं इति वदतु।",
+  "support.messageRequired": "प्रस्तावितुं पूर्वं संदेशं लिखतु।",
+  "support.submit": "टिकेट् प्रेषयतु",
+  "support.submitError": "टिकेट् प्रेषितुं न शक्यते, कृपया पुनः प्रयत्नं कुर्वन्तु।",
+  "support.sentTitle": "टिकेट् प्रेषितः",
+  "support.sentMessage": "प्रशासकः इदं निरीक्ष्य उत्तरं दास्यति।"
 }

@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "यो लिङ्क अमान्य छ वा म्याद समाप्त भएको छ",
+  "support.invalidMessage": "सहयोग टिकटको लिङ्क ३० दिनपछि काम गर्दैन। यदि अझै मद्दत चाहियो भने प्लेटफर्म प्रशासकलाई सम्पर्क गर्नुहोस्।",
+  "support.permanentNote": "यो हटाउने स्थायी हो र सूची पुनःस्थापित गर्न सकिँदैन। टिकट प्रश्नका लागि हो, पुनः प्राप्त गर्नको लागि होइन।",
+  "support.messagePlaceholder": "के भयो र किन पुनरावलोकन चाहनुहुन्छ बताउनुहोस्",
+  "support.messageRequired": "पेश गर्नु अघि सन्देश लेख्नुहोस्",
+  "support.submit": "टिकट पेश गर्नुहोस्",
+  "support.submitError": "टिकट पेश गर्न सकेन, कृपया फेरि प्रयास गर्नुहोस्",
+  "support.sentTitle": "टिकट पेश गरियो",
+  "support.sentMessage": "प्रशासकले यसलाई जाँच्नेछन् र तपाईंलाई जवाफ दिनेछन्।"
 }

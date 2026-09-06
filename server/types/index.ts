@@ -184,6 +184,23 @@ export interface FlaggedListingsResult {
   items: FlaggedListing[];
 }
 
+export type TicketStatus = "open" | "resolved";
+
+export interface SupportTicket {
+  ticketId: string;
+  artisanId: string;
+  artisanEmail: string;
+  artisanDisplayName: string | null;
+  ticketType: "deactivation" | "product_removal";
+  context: string | null;
+  message: string;
+  status: TicketStatus;
+  adminResponse: string | null;
+  artisanIsActive: boolean;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
 export interface AnalyticsDailyPoint {
   date: string;
   count: number;

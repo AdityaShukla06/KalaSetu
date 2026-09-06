@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "Link adu thokpa leirabadi amasung thokpagi leirabadi",
+  "support.invalidMessage": "Support ticket link-sing 30 nunga leirabadi thokpa ngamloi. Houjik sahariba amasung platform admin-gi contact touriba",
+  "support.permanentNote": "Mahak thokpa adu permanent leirabadi listing adu phangba ngamloi. Ticket adu adubu adu khangba phangba adu oirabadi, phangba phangba adu oirabadi",
+  "support.messagePlaceholder": "Masi adu oirabadi amasung adubu review tourabani haibadi haibadi haibadi",
+  "support.messageRequired": "Submit tourabagi adu ama message thok",
+  "support.submit": "Ticket submit touraba",
+  "support.submitError": "Ticket submit tourabadi ngamloi, thajaba",
+  "support.sentTitle": "Ticket submit toubirak-i",
+  "support.sentMessage": "Admin adu adu review touri haibadi nungsibani"
 }

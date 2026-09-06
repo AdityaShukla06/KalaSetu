@@ -24,8 +24,10 @@ import { ArtisansScreen } from "./screens/Console/ArtisansScreen";
 import { ArtisanDetailScreen } from "./screens/Console/ArtisanDetailScreen";
 import { ModerationScreen } from "./screens/Console/ModerationScreen";
 import { FlaggedScreen } from "./screens/Console/FlaggedScreen";
+import { TicketsScreen } from "./screens/Console/TicketsScreen";
 import { NotFoundScreen } from "./screens/NotFound/NotFoundScreen";
 import { PassportScreen } from "./screens/Passport/PassportScreen";
+import { SupportTicketScreen } from "./screens/Support/SupportTicketScreen";
 import { AnalyticsScreen } from "./screens/Analytics/AnalyticsScreen";
 import { InquiriesScreen } from "./screens/Inquiries/InquiriesScreen";
 
@@ -80,6 +82,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/passport/:passportId" element={<PassportScreen />} />
+            <Route path="/support/ticket" element={<SupportTicketScreen />} />
 
             <Route element={<RedirectIfAuthed />}>
               <Route path="/login" element={<LoginScreen />} />
@@ -92,6 +95,7 @@ function App() {
                 <Route path="/internal/console/artisans/:artisanId" element={<ArtisanDetailScreen />} />
                 <Route path="/internal/console/moderation" element={<ModerationScreen />} />
                 <Route path="/internal/console/flagged" element={<FlaggedScreen />} />
+                <Route path="/internal/console/tickets" element={<TicketsScreen />} />
               </Route>
             </Route>
 

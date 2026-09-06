@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "नायाब लिंक नायाब आरो बिसराय जाब",
+  "support.invalidMessage": "सपोर्ट टिकेट लिंक 30 दिन बाद काम नायाब। जदि थांनि मदद दुरुंगो थांबाय, प्लेटफॉर्म एडमिन सोंगै संपर्क कर।",
+  "support.permanentNote": "हाबा हटायनाय स्थायी आरो लिस्टिंग फिन थांबाय नायाब। टिकेट हाबा बिसाबनि बिसाबनि थांबाय, फिन थांबाय बिसाबनि नायाब।",
+  "support.messagePlaceholder": "हाबा थांबाय बिसाबनि आरो थांनि बिसाबनि बिसाबनि बिसाबनि",
+  "support.messageRequired": "सबमिट करनाय पहिला सन्देस लिखाब",
+  "support.submit": "टिकेट सबमिट कर",
+  "support.submitError": "थांनि टिकेट सबमिट नायाब, फिन थांनि कोशिश कर",
+  "support.sentTitle": "टिकेट सबमिट होबाय",
+  "support.sentMessage": "एडमिन हाबा बिसाबनि आरो थांनि लाबाय"
 }

@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "ଏହି ଲିଙ୍କ୍ ଅବୈଧ କିମ୍ବା ସମୟ ସମାପ୍ତ ହୋଇଛି",
+  "support.invalidMessage": "ସହାୟତା ଟିକେଟ୍ ଲିଙ୍କ୍ 30 ଦିନ ପରେ କାମ କରିବା ବନ୍ଦ କରିଦିଏ। ଆପଣଙ୍କୁ ଆହୁରି ସହାୟତା ଦରକାର ହେଲେ ପ୍ଲାଟଫର୍ମ ଏଡମିନ୍‌କୁ ସମ୍ପର୍କ କରନ୍ତୁ।",
+  "support.permanentNote": "ଏହି ହଟାଇବା ସ୍ଥାୟୀ ଏବଂ ଲିଷ୍ଟିଂ ପୁନରୁଦ୍ଧାର ହେବ ନାହିଁ। ଟିକେଟ୍ ଏହା ବିଷୟରେ ପ୍ରଶ୍ନ ପାଇଁ, ପୁନର୍ବାସନ ପାଇଁ ନୁହେଁ।",
+  "support.messagePlaceholder": "କ’ଣ ଘଟିଲା ଏବଂ କାହିଁକି ଏହାକୁ ପୁନଃବିଚାର କରିବା ଉଚିତ ବୋଲି ଆପଣ ଭାବୁଛନ୍ତି, ଆମକୁ କୁହନ୍ତୁ",
+  "support.messageRequired": "ଦାଖଲ କରିବା ପୂର୍ବରୁ ଏକ ବାର୍ତ୍ତା ଲେଖନ୍ତୁ",
+  "support.submit": "ଟିକେଟ୍ ପଠାନ୍ତୁ",
+  "support.submitError": "ଟିକେଟ୍ ପଠାଇ ପାରିଲା ନାହିଁ, ଦୟାକରି ପୁନଃଚେଷ୍ଟା କରନ୍ତୁ",
+  "support.sentTitle": "ଟିକେଟ୍ ପଠାଇ ଦିଆଗଲା",
+  "support.sentMessage": "ଏକ ଏଡମିନ୍‌ ଏହାକୁ ପୁନଃବିଚାର କରି ଆପଣଙ୍କୁ ଉତ୍ତର ଦେବେ।"
 }

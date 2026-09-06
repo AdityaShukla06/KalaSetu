@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "ई लिंक अमान्य अछि या समाप्त भ' गेल अछि",
+  "support.invalidMessage": "सपोर्ट टिकटक लिंक 30 दिन बाद काज नहि करैत अछि। यदि अहाँकेँ अबहियो मदद चाही त' प्लेटफ़ॉर्म एडमिन सँ संपर्क करू।",
+  "support.permanentNote": "ई हटाब स्थायी अछि आ लिस्टिंग वापस नहि होयत। टिकट प्रश्न पूछबाक लेल अछि, वापस लाबय लेल नहि।",
+  "support.messagePlaceholder": "की भेल आ अहाँ किएक सोचैत छी जे ई पुनः जाँच होय, से बताउ।",
+  "support.messageRequired": "जमा करबाक पहिने संदेश लिखू।",
+  "support.submit": "टिकट जमा करू",
+  "support.submitError": "टिकट जमा नहि भ' सकल, कृपया फेर प्रयास करू।",
+  "support.sentTitle": "टिकट जमा भ' गेल",
+  "support.sentMessage": "एडमिन एकर जाँच क' अहाँ सँ संपर्क करथिन।"
 }

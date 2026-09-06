@@ -87,6 +87,11 @@ export {
   deleteListing,
   getFlaggedListings,
   getAuditLog,
+  getTickets,
+  resolveTicket,
 } from "./api/console";
+export type { TicketStatus, TicketType, SupportTicket } from "./api/console";
 export { getPublicPassport } from "./api/passport";
 export { getAnalyticsSummary, recordProductView } from "./api/analytics";
+export { getTicketPreview, raiseTicket } from "./api/ticket";
+export type { TicketPreview } from "./api/ticket";

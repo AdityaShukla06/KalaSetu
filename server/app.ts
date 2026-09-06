@@ -12,6 +12,7 @@ import inquiriesRouter from "./routes/inquiries";
 import internalConsoleRouter from "./routes/internalConsole";
 import passportRouter from "./routes/passport";
 import analyticsRouter from "./routes/analytics";
+import ticketsRouter from "./routes/tickets";
 import { PayloadTooLargeError } from "./middleware/rawBody";
 
 const app = express();
@@ -31,6 +32,7 @@ app.use("/api/inquiries", inquiriesRouter);
 app.use("/api/internal/console", internalConsoleRouter);
 app.use("/api/passport", passportRouter);
 app.use("/api/analytics", analyticsRouter);
+app.use("/api/tickets", ticketsRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });

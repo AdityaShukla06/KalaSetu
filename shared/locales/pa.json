@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "ਇਹ ਲਿੰਕ ਅਵੈਧ ਹੈ ਜਾਂ ਮਿਆਦ ਖਤਮ ਹੋ ਚੁੱਕੀ ਹੈ",
+  "support.invalidMessage": "ਸਹਾਇਤਾ ਟਿਕਟ ਲਿੰਕ 30 ਦਿਨਾਂ ਬਾਅਦ ਕੰਮ ਕਰਨਾ ਬੰਦ ਕਰਦੇ ਹਨ। ਜੇ ਤੁਹਾਨੂੰ ਹਾਲੇ ਵੀ ਮਦਦ ਚਾਹੀਦੀ ਹੈ ਤਾਂ ਪਲੇਟਫਾਰਮ ਐਡਮਿਨ ਨਾਲ ਸੰਪਰਕ ਕਰੋ।",
+  "support.permanentNote": "ਇਹ ਹਟਾਉਣਾ ਸਥਾਈ ਹੈ ਅਤੇ ਲਿਸਟਿੰਗ ਨੂੰ ਮੁੜ ਨਹੀਂ ਲਿਆ ਸਕਦੇ। ਟਿਕਟ ਸਿਰਫ਼ ਸਵਾਲਾਂ ਲਈ ਹੈ, ਵਾਪਸ ਲਿਆਉਣ ਲਈ ਨਹੀਂ।",
+  "support.messagePlaceholder": "ਸਾਨੂੰ ਦੱਸੋ ਕੀ ਹੋਇਆ ਅਤੇ ਤੁਸੀਂ ਕਿਉਂ ਸੋਚਦੇ ਹੋ ਕਿ ਇਸ ਦੀ ਸਮੀਖਿਆ ਹੋਣੀ ਚਾਹੀਦੀ ਹੈ",
+  "support.messageRequired": "ਜਮ੍ਹਾਂ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ ਸੁਨੇਹਾ ਲਿਖੋ",
+  "support.submit": "ਟਿਕਟ ਜਮ੍ਹਾਂ ਕਰੋ",
+  "support.submitError": "ਟਿਕਟ ਜਮ੍ਹਾਂ ਨਹੀਂ ਹੋ ਸਕੀ, ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ",
+  "support.sentTitle": "ਟਿਕਟ ਜਮ੍ਹਾਂ ਹੋ ਗਈ",
+  "support.sentMessage": "ਐਡਮਿਨ ਇਸ ਦੀ ਸਮੀਖਿਆ ਕਰੇਗਾ ਅਤੇ ਤੁਹਾਨੂੰ ਜਵਾਬ ਦੇਵੇਗਾ।"
 }

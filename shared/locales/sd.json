@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "هي لنڪ غلط يا ختم ٿيل آهي",
+  "support.invalidMessage": "سپورٽ ٽڪيٽ جا لنڪ 30 ڏينهن بعد ڪم نٿا ڪن. جيڪڏھن توھان کي اڃا مدد گھربل آھي ته پليٽ فارم ايڊمن سان رابطو ڪريو.",
+  "support.permanentNote": "هي ختم ڪرڻ دائمي آهي ۽ لسٽ واپس نه آڻي سگهجي. ٽڪيٽ صرف سوالن لاءِ آهي، واپس آڻڻ لاءِ نه.",
+  "support.messagePlaceholder": "اسان کي ٻڌايو ڇا ٿيو ۽ ڇو توھان سمجھو ٿا ته ان جي جائزي جي ضرورت آهي",
+  "support.messageRequired": "جمع ڪرڻ کان اڳ پيغام لکجو",
+  "support.submit": "ٽڪيٽ جمع ڪريو",
+  "support.submitError": "ٽڪيٽ جمع نه ٿي سگهيو، مهرباني ڪري ٻيهر ڪوشش ڪريو",
+  "support.sentTitle": "ٽڪيٽ جمع ٿيو",
+  "support.sentMessage": "ايڊمن ان جو جائزو وٺندو ۽ توھان سان رابطو ڪندو."
 }

@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "ఈ లింక్ చెల్లదు లేదా గడువు ముగిసింది",
+  "support.invalidMessage": "సపోర్ట్ టికెట్ లింక్‌లు 30 రోజులకు తర్వాత పనిచేయవు. ఇంకా సహాయం కావాలంటే ప్లాట్‌ఫార్మ్ అడ్మిన్‌ను సంప్రదించండి.",
+  "support.permanentNote": "ఈ తొలగింపు శాశ్వతం, లిస్టింగ్‌ను తిరిగి పొందలేరు. టికెట్‌లు దీనిపై ప్రశ్నల కోసం, తిరిగి పొందడానికి కాదు.",
+  "support.messagePlaceholder": "ఏమైంది, ఎందుకు సమీక్షించాలి అనుకుంటున్నారు చెప్పండి",
+  "support.messageRequired": "సబ్మిట్ చేయడానికి ముందు సందేశాన్ని రాయండి",
+  "support.submit": "టికెట్ పంపండి",
+  "support.submitError": "టికెట్ పంపడంలో విఫలమైంది, మళ్లీ ప్రయత్నించండి",
+  "support.sentTitle": "టికెట్ పంపబడింది",
+  "support.sentMessage": "ఒక అడ్మిన్ దీనిని సమీక్షించి, మీకు తిరిగి స్పందిస్తారు."
 }

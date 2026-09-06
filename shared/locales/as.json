@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "এই লিংকটো অবৈধ বা মেয়াদ শেষ হৈছে",
+  "support.invalidMessage": "সহায় টিকিট লিংক ৩০ দিনত শেষ হয়। যদি সহায় লাগে, প্লেটফৰ্ম এডমিনক যোগাযোগ কৰক।",
+  "support.permanentNote": "এই মচি পেলোৱা স্থায়ী আৰু তালিকাখন পুনৰুদ্ধাৰ কৰিব নোৱাৰি। টিকিটটো প্ৰশ্নৰ বাবে, পুনৰুদ্ধাৰৰ বাবে নহয়।",
+  "support.messagePlaceholder": "কি ঘটিল আৰু কিয় পুনৰীক্ষা কৰিব লাগে, সেয়া আমাক ক'ব।",
+  "support.messageRequired": "দাখল কৰাৰ আগতে এখন বাৰ্তা লিখক।",
+  "support.submit": "টিকিট দাখল কৰক",
+  "support.submitError": "আপোনাৰ টিকিট দাখল কৰিব নোৱাৰি, অনুগ্ৰহ কৰি পুনৰ চেষ্টা কৰক।",
+  "support.sentTitle": "টিকিট দাখল কৰা হৈছে",
+  "support.sentMessage": "এডমিনে ইয়াক পৰ্যালোচনা কৰি আপোনালোকক উত্তৰ দিব।"
 }

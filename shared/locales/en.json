@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "This link is invalid or has expired",
+  "support.invalidMessage": "Support ticket links stop working after 30 days. Contact the platform admin if you still need help.",
+  "support.permanentNote": "This removal is permanent and the listing cannot be restored. A ticket is for questions about it, not for getting it back.",
+  "support.messagePlaceholder": "Tell us what happened and why you think this should be reviewed",
+  "support.messageRequired": "Write a message before submitting",
+  "support.submit": "Submit ticket",
+  "support.submitError": "Could not submit your ticket, please try again",
+  "support.sentTitle": "Ticket submitted",
+  "support.sentMessage": "An admin will review this and get back to you."
 }

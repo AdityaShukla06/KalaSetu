@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "இந்த இணைப்பு தவறானது அல்லது காலாவதியாகிவிட்டது",
+  "support.invalidMessage": "ஆதரவு டிக்கெட் இணைப்புகள் 30 நாட்களுக்கு பிறகு செயல்படாது. இன்னும் உதவி தேவைப்பட்டால் தள நிர்வாகியை தொடர்பு கொள்ளுங்கள்.",
+  "support.permanentNote": "இந்த நீக்கம் நிரந்தரமானது, பட்டியலை மீட்டெடுக்க முடியாது. டிக்கெட் என்பது இதை பற்றிய கேள்விகளுக்காக, அதை மீட்டெடுக்க அல்ல.",
+  "support.messagePlaceholder": "என்ன நடந்தது, ஏன் இது மறுபரிசீலனை செய்யப்பட வேண்டும் என்று நினைக்கிறீர்கள் என்பதை எங்களுக்கு சொல்லுங்கள்.",
+  "support.messageRequired": "சமர்ப்பிக்கும் முன் ஒரு செய்தியை எழுதுங்கள்.",
+  "support.submit": "டிக்கெட் சமர்ப்பிக்க",
+  "support.submitError": "உங்கள் டிக்கெட்டை சமர்ப்பிக்க முடியவில்லை, மீண்டும் முயற்சிக்கவும்.",
+  "support.sentTitle": "டிக்கெட் சமர்ப்பிக்கப்பட்டது",
+  "support.sentMessage": "ஒரு நிர்வாகி இதை பரிசீலித்து உங்களுக்கு பதில் வழங்குவார்."
 }

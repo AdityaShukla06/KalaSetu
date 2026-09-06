@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "ह्या लिंकाचो वैध नाय वा ती समाप्त जाल्या",
+  "support.invalidMessage": "सपोर्ट टिकेटांच्या लिंकां 30 दिवसांनंतर काम करपाचो नाय. जर तुमका अजून मदत जाय, तर प्लॅटफॉर्म प्रशासकां संपर्क करात",
+  "support.permanentNote": "ह्या काडपाचो कायमचा आसा आणि लिस्टिंग परत आणपाक शक्य नाय. टिकेट फक्त प्रश्नांक खातीर आसा, परत मिळवपाक नाय",
+  "support.messagePlaceholder": "काय घडलें आनी ह्याचें पुनरावलोकन करपाचो कारण काय, ते सांगात",
+  "support.messageRequired": "सबमिट करपाचो पयली मेसेज लिहा",
+  "support.submit": "टिकेट सबमिट करात",
+  "support.submitError": "तुमचो टिकेट सबमिट करपाक जालो नाय, फुडें प्रयत्न करात",
+  "support.sentTitle": "टिकेट सबमिट जालो",
+  "support.sentMessage": "एक प्रशासक ह्याचें पुनरावलोकन करप आणि तुमका उत्तर द्यतले"
 }

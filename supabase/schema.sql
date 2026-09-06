@@ -163,6 +163,25 @@ create table if not exists otp_codes (
 create index if not exists otp_codes_email_created_at_idx
   on otp_codes (email, created_at desc);
 
+create table if not exists support_tickets (
+  id            uuid primary key default gen_random_uuid(),
+  artisan_id    uuid not null references users(id) on delete cascade,
+  ticket_type   text not null check (ticket_type in ('deactivation', 'product_removal')),
+  context       text,
+  message       text not null,
+  status        text not null default 'open' check (status in ('open', 'resolved')),
+  admin_response text,
+  resolved_at   timestamptz,
+  resolved_by   uuid references users(id),
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists support_tickets_artisan_id_created_at_idx
+  on support_tickets (artisan_id, created_at desc);
+
+create index if not exists support_tickets_status_idx
+  on support_tickets (status);
+
 -- Keeps users.total_products correct without a read-modify-write race.
 create or replace function increment_total_products(target_user uuid, delta integer)
 returns void
@@ -229,6 +248,7 @@ alter table inquiries     enable row level security;
 alter table product_views enable row level security;
 alter table audit_log     enable row level security;
 alter table otp_codes     enable row level security;
+alter table support_tickets enable row level security;
 
 revoke update (role) on users from authenticated, anon;
 revoke update (is_active) on users from authenticated, anon;
@@ -337,6 +357,16 @@ drop policy if exists audit_log_select_admin on audit_log;
 create policy audit_log_select_admin on audit_log
   for select to authenticated
   using (app_current_role() = 'admin');
+
+drop policy if exists support_tickets_select_admin on support_tickets;
+create policy support_tickets_select_admin on support_tickets
+  for select to authenticated
+  using (app_current_role() = 'admin');
+
+drop policy if exists support_tickets_select_own on support_tickets;
+create policy support_tickets_select_own on support_tickets
+  for select to authenticated
+  using (artisan_id = auth.uid());
 
 -- Storage bucket for product images. Public read so <img src> works,
 -- writes only ever happen server side with the service role key.

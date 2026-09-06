@@ -37,6 +37,9 @@ export function ConsoleLayout() {
           <NavLink to="/internal/console/flagged" className={({ isActive }) => `console-nav-link${isActive ? " console-nav-link-active" : ""}`}>
             Flagged
           </NavLink>
+          <NavLink to="/internal/console/tickets" className={({ isActive }) => `console-nav-link${isActive ? " console-nav-link-active" : ""}`}>
+            Tickets
+          </NavLink>
           <button type="button" className="console-nav-logout" onClick={handleLogout}>
             Log out
           </button>

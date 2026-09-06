@@ -215,6 +215,31 @@ function verifySessionToken(token) {
   }
   return { sub: decoded.sub, email };
 }
+var TICKET_TOKEN_TTL = "30d";
+function signTicketToken(claims) {
+  const env = loadEnv();
+  return jwt.sign({ ...claims, purpose: "raise_ticket" }, env.JWT_SECRET, {
+    expiresIn: TICKET_TOKEN_TTL
+  });
+}
+function verifyTicketToken(token) {
+  const env = loadEnv();
+  const decoded = jwt.verify(token, env.JWT_SECRET);
+  if (typeof decoded === "string" || decoded.purpose !== "raise_ticket" || typeof decoded.sub !== "string") {
+    throw new Error("Not a valid ticket link");
+  }
+  const ticketType = decoded.ticketType;
+  if (ticketType !== "deactivation" && ticketType !== "product_removal") {
+    throw new Error("Ticket link has an unrecognised type");
+  }
+  const context = decoded.context;
+  return {
+    purpose: "raise_ticket",
+    sub: decoded.sub,
+    ticketType,
+    context: typeof context === "string" ? context : void 0
+  };
+}
 
 // server/lib/otp.ts
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
@@ -424,6 +449,119 @@ function buildReplyHtmlBody(input) {
   <p style="font-size:13px;line-height:1.5;margin:0 0 4px;color:#6b6b6b"><strong>Reply</strong></p>
   <p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#FBF4EA;border-radius:8px">${input.replyMessage}</p>
   <a href="${input.inboxUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">View in KalaSetu</a>
+</div>`;
+}
+async function sendDeactivationEmail(input) {
+  const env = loadEnv();
+  if (!env.RESEND_API_KEY) {
+    console.warn("[moderation] RESEND_API_KEY is not set, deactivation email was not sent", {
+      artisanEmail: input.artisanEmail
+    });
+    return { delivered: false, reason: "email_not_configured" };
+  }
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: env.OTP_FROM_EMAIL,
+        to: [input.artisanEmail],
+        subject: "Your KalaSetu account has been deactivated",
+        text: buildDeactivationPlainTextBody(input),
+        html: buildDeactivationHtmlBody(input)
+      })
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error("[moderation] deactivation email provider rejected the request", {
+        status: response.status,
+        detail: detail.slice(0, 500)
+      });
+      return { delivered: false, reason: `provider_error_${response.status}` };
+    }
+    return { delivered: true };
+  } catch (err) {
+    console.error("[moderation] deactivation email send failed", err);
+    return { delivered: false, reason: "send_failed" };
+  }
+}
+function buildDeactivationPlainTextBody(input) {
+  return [
+    `Your KalaSetu artisan account has been deactivated by an admin.`,
+    ``,
+    `Reason: ${input.reason}`,
+    ``,
+    `If you believe this is a mistake, you can raise a ticket and an admin will review it:`,
+    input.ticketUrl
+  ].join("\n");
+}
+function buildDeactivationHtmlBody(input) {
+  return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#2b2b2b">
+  <h1 style="font-size:20px;margin:0 0 16px">Your account has been deactivated</h1>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 4px;color:#6b6b6b"><strong>Reason</strong></p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#f4f4f4;border-radius:8px">${input.reason}</p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px">If you believe this is a mistake, you can raise a ticket and an admin will review it.</p>
+  <a href="${input.ticketUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Raise a ticket</a>
+</div>`;
+}
+async function sendProductRemovedEmail(input) {
+  const env = loadEnv();
+  if (!env.RESEND_API_KEY) {
+    console.warn("[moderation] RESEND_API_KEY is not set, product removal email was not sent", {
+      artisanEmail: input.artisanEmail
+    });
+    return { delivered: false, reason: "email_not_configured" };
+  }
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: env.OTP_FROM_EMAIL,
+        to: [input.artisanEmail],
+        subject: `Your listing "${input.productTitle}" was removed from KalaSetu`,
+        text: buildProductRemovedPlainTextBody(input),
+        html: buildProductRemovedHtmlBody(input)
+      })
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error("[moderation] product removed email provider rejected the request", {
+        status: response.status,
+        detail: detail.slice(0, 500)
+      });
+      return { delivered: false, reason: `provider_error_${response.status}` };
+    }
+    return { delivered: true };
+  } catch (err) {
+    console.error("[moderation] product removed email send failed", err);
+    return { delivered: false, reason: "send_failed" };
+  }
+}
+function buildProductRemovedPlainTextBody(input) {
+  return [
+    `Your KalaSetu listing "${input.productTitle}" has been permanently removed by an admin.`,
+    ``,
+    `Reason: ${input.reason}`,
+    ``,
+    `This removal cannot be undone and the listing cannot be restored. If you have questions about it, you can raise a ticket:`,
+    input.ticketUrl
+  ].join("\n");
+}
+function buildProductRemovedHtmlBody(input) {
+  return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#2b2b2b">
+  <h1 style="font-size:20px;margin:0 0 16px">Your listing was removed</h1>
+  <p style="font-size:15px;line-height:1.5;margin:0 0 16px"><strong>${input.productTitle}</strong></p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 4px;color:#6b6b6b"><strong>Reason</strong></p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#f4f4f4;border-radius:8px">${input.reason}</p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px">This removal is permanent and the listing cannot be restored. If you have questions about it, you can raise a ticket.</p>
+  <a href="${input.ticketUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Raise a ticket</a>
 </div>`;
 }
 
@@ -2334,7 +2472,16 @@ var as_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u098F\u0987 \u09B2\u09BF\u0982\u0995\u099F\u09CB \u0985\u09AC\u09C8\u09A7 \u09AC\u09BE \u09AE\u09C7\u09AF\u09BC\u09BE\u09A6 \u09B6\u09C7\u09B7 \u09B9\u09C8\u099B\u09C7",
+  "support.invalidMessage": "\u09B8\u09B9\u09BE\u09AF\u09BC \u099F\u09BF\u0995\u09BF\u099F \u09B2\u09BF\u0982\u0995 \u09E9\u09E6 \u09A6\u09BF\u09A8\u09A4 \u09B6\u09C7\u09B7 \u09B9\u09AF\u09BC\u0964 \u09AF\u09A6\u09BF \u09B8\u09B9\u09BE\u09AF\u09BC \u09B2\u09BE\u0997\u09C7, \u09AA\u09CD\u09B2\u09C7\u099F\u09AB\u09F0\u09CD\u09AE \u098F\u09A1\u09AE\u09BF\u09A8\u0995 \u09AF\u09CB\u0997\u09BE\u09AF\u09CB\u0997 \u0995\u09F0\u0995\u0964",
+  "support.permanentNote": "\u098F\u0987 \u09AE\u099A\u09BF \u09AA\u09C7\u09B2\u09CB\u09F1\u09BE \u09B8\u09CD\u09A5\u09BE\u09AF\u09BC\u09C0 \u0986\u09F0\u09C1 \u09A4\u09BE\u09B2\u09BF\u0995\u09BE\u0996\u09A8 \u09AA\u09C1\u09A8\u09F0\u09C1\u09A6\u09CD\u09A7\u09BE\u09F0 \u0995\u09F0\u09BF\u09AC \u09A8\u09CB\u09F1\u09BE\u09F0\u09BF\u0964 \u099F\u09BF\u0995\u09BF\u099F\u099F\u09CB \u09AA\u09CD\u09F0\u09B6\u09CD\u09A8\u09F0 \u09AC\u09BE\u09AC\u09C7, \u09AA\u09C1\u09A8\u09F0\u09C1\u09A6\u09CD\u09A7\u09BE\u09F0\u09F0 \u09AC\u09BE\u09AC\u09C7 \u09A8\u09B9\u09AF\u09BC\u0964",
+  "support.messagePlaceholder": "\u0995\u09BF \u0998\u099F\u09BF\u09B2 \u0986\u09F0\u09C1 \u0995\u09BF\u09AF\u09BC \u09AA\u09C1\u09A8\u09F0\u09C0\u0995\u09CD\u09B7\u09BE \u0995\u09F0\u09BF\u09AC \u09B2\u09BE\u0997\u09C7, \u09B8\u09C7\u09AF\u09BC\u09BE \u0986\u09AE\u09BE\u0995 \u0995'\u09AC\u0964",
+  "support.messageRequired": "\u09A6\u09BE\u0996\u09B2 \u0995\u09F0\u09BE\u09F0 \u0986\u0997\u09A4\u09C7 \u098F\u0996\u09A8 \u09AC\u09BE\u09F0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u0995\u0964",
+  "support.submit": "\u099F\u09BF\u0995\u09BF\u099F \u09A6\u09BE\u0996\u09B2 \u0995\u09F0\u0995",
+  "support.submitError": "\u0986\u09AA\u09CB\u09A8\u09BE\u09F0 \u099F\u09BF\u0995\u09BF\u099F \u09A6\u09BE\u0996\u09B2 \u0995\u09F0\u09BF\u09AC \u09A8\u09CB\u09F1\u09BE\u09F0\u09BF, \u0985\u09A8\u09C1\u0997\u09CD\u09F0\u09B9 \u0995\u09F0\u09BF \u09AA\u09C1\u09A8\u09F0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09F0\u0995\u0964",
+  "support.sentTitle": "\u099F\u09BF\u0995\u09BF\u099F \u09A6\u09BE\u0996\u09B2 \u0995\u09F0\u09BE \u09B9\u09C8\u099B\u09C7",
+  "support.sentMessage": "\u098F\u09A1\u09AE\u09BF\u09A8\u09C7 \u0987\u09AF\u09BC\u09BE\u0995 \u09AA\u09F0\u09CD\u09AF\u09BE\u09B2\u09CB\u099A\u09A8\u09BE \u0995\u09F0\u09BF \u0986\u09AA\u09CB\u09A8\u09BE\u09B2\u09CB\u0995\u0995 \u0989\u09A4\u09CD\u09A4\u09F0 \u09A6\u09BF\u09AC\u0964"
 };
 
 // shared/locales/bn.json
@@ -2683,7 +2830,16 @@ var bn_default = {
   "passport.scanHint": "\u0985\u09A8\u09B2\u09BE\u0987\u09A8\u09C7 \u09AA\u09BE\u09B8\u09AA\u09CB\u09B0\u09CD\u099F \u09A6\u09C7\u0996\u09A4\u09C7 \u09B8\u09CD\u0995\u09CD\u09AF\u09BE\u09A8 \u0995\u09B0\u09C1\u09A8",
   "passport.notFoundTitle": "\u09AA\u09BE\u09B8\u09AA\u09CB\u09B0\u09CD\u099F \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF",
   "passport.notFoundMessage": "\u098F\u0987 \u0990\u09A4\u09BF\u09B9\u09CD\u09AF\u09AC\u09BE\u09B9\u09C0 \u09AA\u09BE\u09B8\u09AA\u09CB\u09B0\u09CD\u099F\u099F\u09BF \u09A8\u09C7\u0987, \u0985\u09A5\u09AC\u09BE \u09A4\u09BE\u09B2\u09BF\u0995\u09BE\u099F\u09BF \u0986\u09B0 \u09AA\u09BE\u09AC\u09B2\u09BF\u0995 \u09A8\u09AF\u09BC\u0964",
-  "passport.loadError": "\u098F\u0987 \u09AA\u09BE\u09B8\u09AA\u09CB\u09B0\u09CD\u099F \u09B2\u09CB\u09A1 \u0995\u09B0\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF"
+  "passport.loadError": "\u098F\u0987 \u09AA\u09BE\u09B8\u09AA\u09CB\u09B0\u09CD\u099F \u09B2\u09CB\u09A1 \u0995\u09B0\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF",
+  "support.invalidTitle": "\u098F\u0987 \u09B2\u09BF\u0999\u09CD\u0995\u099F\u09BF \u0985\u09AC\u09C8\u09A7 \u0985\u09A5\u09AC\u09BE \u09AE\u09C7\u09AF\u09BC\u09BE\u09A6 \u09B6\u09C7\u09B7 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7",
+  "support.invalidMessage": "\u09B8\u09BE\u09AA\u09CB\u09B0\u09CD\u099F \u099F\u09BF\u0995\u09BF\u099F\u09C7\u09B0 \u09B2\u09BF\u0999\u09CD\u0995 \u09E9\u09E6 \u09A6\u09BF\u09A8 \u09AA\u09B0\u09C7 \u0995\u09BE\u099C \u0995\u09B0\u09BE \u09AC\u09A8\u09CD\u09A7 \u0995\u09B0\u09C7\u0964 \u09AF\u09A6\u09BF \u098F\u0996\u09A8\u0993 \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u09A6\u09B0\u0995\u09BE\u09B0 \u09B9\u09AF\u09BC, \u09AA\u09CD\u09B2\u09CD\u09AF\u09BE\u099F\u09AB\u09B0\u09CD\u09AE\u09C7\u09B0 \u0985\u09CD\u09AF\u09BE\u09A1\u09AE\u09BF\u09A8\u09C7\u09B0 \u09B8\u09BE\u09A5\u09C7 \u09AF\u09CB\u0997\u09BE\u09AF\u09CB\u0997 \u0995\u09B0\u09C1\u09A8\u0964",
+  "support.permanentNote": "\u098F\u0987 \u09AE\u09C1\u099B\u09C7 \u09AB\u09C7\u09B2\u09BE \u09B8\u09CD\u09A5\u09BE\u09AF\u09BC\u09C0 \u098F\u09AC\u0982 \u09A4\u09BE\u09B2\u09BF\u0995\u09BE\u099F\u09BF \u09AA\u09C1\u09A8\u09B0\u09C1\u09A6\u09CD\u09A7\u09BE\u09B0 \u0995\u09B0\u09BE \u09AF\u09BE\u09AC\u09C7 \u09A8\u09BE\u0964 \u099F\u09BF\u0995\u09BF\u099F\u099F\u09BF \u0995\u09C7\u09AC\u09B2 \u09AA\u09CD\u09B0\u09B6\u09CD\u09A8\u09C7\u09B0 \u099C\u09A8\u09CD\u09AF, \u09AA\u09C1\u09A8\u09B0\u09C1\u09A6\u09CD\u09A7\u09BE\u09B0\u09C7\u09B0 \u099C\u09A8\u09CD\u09AF \u09A8\u09AF\u09BC\u0964",
+  "support.messagePlaceholder": "\u0986\u09AA\u09A8\u09BF \u0995\u09C0 \u0998\u099F\u09C7\u099B\u09C7 \u098F\u09AC\u0982 \u0995\u09C7\u09A8 \u098F\u099F\u09BF \u09AA\u09C1\u09A8\u09B0\u09CD\u09AC\u09BF\u09AC\u09C7\u099A\u09A8\u09BE \u0995\u09B0\u09BE \u0989\u099A\u09BF\u09A4 \u09A4\u09BE \u0986\u09AE\u09BE\u09A6\u09C7\u09B0 \u099C\u09BE\u09A8\u09BE\u09A8",
+  "support.messageRequired": "\u099C\u09AE\u09BE \u09A6\u09C7\u0993\u09AF\u09BC\u09BE\u09B0 \u0986\u0997\u09C7 \u098F\u0995\u099F\u09BF \u09AC\u09BE\u09B0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u09C1\u09A8",
+  "support.submit": "\u099F\u09BF\u0995\u09BF\u099F \u099C\u09AE\u09BE \u09A6\u09BF\u09A8",
+  "support.submitError": "\u099F\u09BF\u0995\u09BF\u099F \u099C\u09AE\u09BE \u09A6\u09BF\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7, \u09A6\u09AF\u09BC\u09BE \u0995\u09B0\u09C7 \u0986\u09AC\u09BE\u09B0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09B0\u09C1\u09A8",
+  "support.sentTitle": "\u099F\u09BF\u0995\u09BF\u099F \u099C\u09AE\u09BE \u09B9\u09AF\u09BC\u09C7\u099B\u09C7",
+  "support.sentMessage": "\u098F\u0995\u099C\u09A8 \u0985\u09CD\u09AF\u09BE\u09A1\u09AE\u09BF\u09A8 \u098F\u099F\u09BF \u09AA\u09B0\u09CD\u09AF\u09BE\u09B2\u09CB\u099A\u09A8\u09BE \u0995\u09B0\u09AC\u09C7 \u098F\u09AC\u0982 \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u0989\u09A4\u09CD\u09A4\u09B0 \u09A6\u09C7\u09AC\u09C7\u0964"
 };
 
 // shared/locales/brx.json
@@ -3032,7 +3188,16 @@ var brx_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0928\u093E\u092F\u093E\u092C \u0932\u093F\u0902\u0915 \u0928\u093E\u092F\u093E\u092C \u0906\u0930\u094B \u092C\u093F\u0938\u0930\u093E\u092F \u091C\u093E\u092C",
+  "support.invalidMessage": "\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u0947\u091F \u0932\u093F\u0902\u0915 30 \u0926\u093F\u0928 \u092C\u093E\u0926 \u0915\u093E\u092E \u0928\u093E\u092F\u093E\u092C\u0964 \u091C\u0926\u093F \u0925\u093E\u0902\u0928\u093F \u092E\u0926\u0926 \u0926\u0941\u0930\u0941\u0902\u0917\u094B \u0925\u093E\u0902\u092C\u093E\u092F, \u092A\u094D\u0932\u0947\u091F\u092B\u0949\u0930\u094D\u092E \u090F\u0921\u092E\u093F\u0928 \u0938\u094B\u0902\u0917\u0948 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0964",
+  "support.permanentNote": "\u0939\u093E\u092C\u093E \u0939\u091F\u093E\u092F\u0928\u093E\u092F \u0938\u094D\u0925\u093E\u092F\u0940 \u0906\u0930\u094B \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u092B\u093F\u0928 \u0925\u093E\u0902\u092C\u093E\u092F \u0928\u093E\u092F\u093E\u092C\u0964 \u091F\u093F\u0915\u0947\u091F \u0939\u093E\u092C\u093E \u092C\u093F\u0938\u093E\u092C\u0928\u093F \u092C\u093F\u0938\u093E\u092C\u0928\u093F \u0925\u093E\u0902\u092C\u093E\u092F, \u092B\u093F\u0928 \u0925\u093E\u0902\u092C\u093E\u092F \u092C\u093F\u0938\u093E\u092C\u0928\u093F \u0928\u093E\u092F\u093E\u092C\u0964",
+  "support.messagePlaceholder": "\u0939\u093E\u092C\u093E \u0925\u093E\u0902\u092C\u093E\u092F \u092C\u093F\u0938\u093E\u092C\u0928\u093F \u0906\u0930\u094B \u0925\u093E\u0902\u0928\u093F \u092C\u093F\u0938\u093E\u092C\u0928\u093F \u092C\u093F\u0938\u093E\u092C\u0928\u093F \u092C\u093F\u0938\u093E\u092C\u0928\u093F",
+  "support.messageRequired": "\u0938\u092C\u092E\u093F\u091F \u0915\u0930\u0928\u093E\u092F \u092A\u0939\u093F\u0932\u093E \u0938\u0928\u094D\u0926\u0947\u0938 \u0932\u093F\u0916\u093E\u092C",
+  "support.submit": "\u091F\u093F\u0915\u0947\u091F \u0938\u092C\u092E\u093F\u091F \u0915\u0930",
+  "support.submitError": "\u0925\u093E\u0902\u0928\u093F \u091F\u093F\u0915\u0947\u091F \u0938\u092C\u092E\u093F\u091F \u0928\u093E\u092F\u093E\u092C, \u092B\u093F\u0928 \u0925\u093E\u0902\u0928\u093F \u0915\u094B\u0936\u093F\u0936 \u0915\u0930",
+  "support.sentTitle": "\u091F\u093F\u0915\u0947\u091F \u0938\u092C\u092E\u093F\u091F \u0939\u094B\u092C\u093E\u092F",
+  "support.sentMessage": "\u090F\u0921\u092E\u093F\u0928 \u0939\u093E\u092C\u093E \u092C\u093F\u0938\u093E\u092C\u0928\u093F \u0906\u0930\u094B \u0925\u093E\u0902\u0928\u093F \u0932\u093E\u092C\u093E\u092F"
 };
 
 // shared/locales/doi.json
@@ -3381,7 +3546,16 @@ var doi_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0907\u0939 \u0932\u093F\u0902\u0915 \u0905\u092E\u093E\u0928\u094D\u092F \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948",
+  "support.invalidMessage": "\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u091F \u0932\u093F\u0902\u0915 30 \u0926\u093F\u0928 \u092C\u093E\u0926 \u092C\u0902\u0926 \u0939\u094B \u091C\u093E\u0902\u0926\u0947 \u0928\u0947\u0964 \u092E\u0926\u0926 \u0932\u0908 \u092A\u094D\u0932\u0947\u091F\u092B\u093C\u0949\u0930\u094D\u092E \u090F\u0921\u092E\u093F\u0928 \u0928\u093E\u0932 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u094B\u0964",
+  "support.permanentNote": "\u0907\u0939 \u0939\u091F\u093E\u0928\u093E \u0938\u094D\u0925\u093E\u092F\u0940 \u0939\u0948 \u0905\u0924\u0947 \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u0935\u093E\u092A\u0938 \u0928\u0939\u0940\u0902 \u0906 \u0938\u0915\u0926\u0940\u0964 \u091F\u093F\u0915\u091F \u0938\u0935\u093E\u0932\u093E\u0902 \u0932\u0908 \u0939\u0948, \u0935\u093E\u092A\u0938 \u0932\u0908 \u0928\u0939\u0940\u0902\u0964",
+  "support.messagePlaceholder": "\u0938\u093E\u0921\u0947 \u0928\u093E\u0932 \u0926\u0938\u094B \u0915\u0940 \u0939\u094B\u092F\u093E \u0905\u0924\u0947 \u0915\u094D\u092F\u0942\u0901 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u091A\u093E\u0939\u093F\u090F",
+  "support.messageRequired": "\u0938\u092C\u092E\u093F\u091F \u0915\u0930\u0928\u0947 \u0924\u094B \u092A\u0939\u0932\u0947 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u094B",
+  "support.submit": "\u091F\u093F\u0915\u091F \u091C\u092E\u093E \u0915\u0930\u094B",
+  "support.submitError": "\u091F\u093F\u0915\u091F \u091C\u092E\u093E \u0928\u0939\u0940\u0902 \u0939\u094B\u092F\u093E, \u092B\u0947\u0930 \u0915\u094B\u0936\u093F\u0936 \u0915\u0930\u094B\u0964",
+  "support.sentTitle": "\u091F\u093F\u0915\u091F \u091C\u092E\u093E \u0939\u094B \u0917\u092F\u093E",
+  "support.sentMessage": "\u090F\u0921\u092E\u093F\u0928 \u0907\u0939 \u0926\u0947\u0916\u0947\u0917\u093E \u0905\u0924\u0947 \u0924\u0941\u0939\u093E\u0921\u0947 \u0928\u093E\u0932 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u093E\u0964"
 };
 
 // shared/locales/en.json
@@ -3730,7 +3904,16 @@ var en_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "This link is invalid or has expired",
+  "support.invalidMessage": "Support ticket links stop working after 30 days. Contact the platform admin if you still need help.",
+  "support.permanentNote": "This removal is permanent and the listing cannot be restored. A ticket is for questions about it, not for getting it back.",
+  "support.messagePlaceholder": "Tell us what happened and why you think this should be reviewed",
+  "support.messageRequired": "Write a message before submitting",
+  "support.submit": "Submit ticket",
+  "support.submitError": "Could not submit your ticket, please try again",
+  "support.sentTitle": "Ticket submitted",
+  "support.sentMessage": "An admin will review this and get back to you."
 };
 
 // shared/locales/gu.json
@@ -4079,7 +4262,16 @@ var gu_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0A86 \u0AB2\u0ABF\u0A82\u0A95 \u0A85\u0AAE\u0ABE\u0AA8\u0ACD\u0AAF \u0A9B\u0AC7 \u0A85\u0AA5\u0AB5\u0ABE \u0AB8\u0AAE\u0AAF\u0AB8\u0AAE\u0ABE\u0AAA\u0ACD\u0AA4\u0ABF \u0AA5\u0A88 \u0A97\u0A88 \u0A9B\u0AC7",
+  "support.invalidMessage": "\u0AB8\u0AAA\u0ACB\u0AB0\u0ACD\u0A9F \u0A9F\u0ABF\u0A95\u0ABF\u0A9F\u0AA8\u0AC0 \u0AB2\u0ABF\u0A82\u0A95\u0ACD\u0AB8 30 \u0AA6\u0ABF\u0AB5\u0AB8 \u0AAA\u0A9B\u0AC0 \u0A95\u0ABE\u0AAE \u0A95\u0AB0\u0AB5\u0AC0 \u0AAC\u0A82\u0AA7 \u0A95\u0AB0\u0AC7 \u0A9B\u0AC7. \u0A9C\u0ACB \u0AA4\u0AAE\u0AA8\u0AC7 \u0AB9\u0A9C\u0AC1 \u0AAE\u0AA6\u0AA6 \u0A9C\u0ACB\u0A88\u0A8F \u0AA4\u0ACB \u0AAA\u0ACD\u0AB2\u0AC7\u0A9F\u0AAB\u0ACB\u0AB0\u0ACD\u0AAE \u0A8F\u0AA1\u0AAE\u0ABF\u0AA8\u0AA8\u0AC7 \u0AB8\u0A82\u0AAA\u0AB0\u0ACD\u0A95 \u0A95\u0AB0\u0ACB.",
+  "support.permanentNote": "\u0A86 \u0AA6\u0AC2\u0AB0 \u0A95\u0AB0\u0AB5\u0AC1\u0A82 \u0A95\u0ABE\u0AAF\u0AAE\u0AC0 \u0A9B\u0AC7 \u0A85\u0AA8\u0AC7 \u0AAF\u0ABE\u0AA6\u0AC0 \u0AAA\u0AC1\u0AA8\u0A83\u0AB8\u0ACD\u0AA5\u0ABE\u0AAA\u0ABF\u0AA4 \u0A95\u0AB0\u0AC0 \u0AB6\u0A95\u0ABE\u0AA4\u0AC0 \u0AA8\u0AA5\u0AC0. \u0A9F\u0ABF\u0A95\u0ABF\u0A9F \u0AAA\u0ACD\u0AB0\u0AB6\u0ACD\u0AA8\u0ACB \u0AAE\u0ABE\u0A9F\u0AC7 \u0A9B\u0AC7, \u0AAA\u0ABE\u0A9B\u0AC0 \u0AAE\u0AC7\u0AB3\u0AB5\u0AB5\u0ABE \u0AAE\u0ABE\u0A9F\u0AC7 \u0AA8\u0AB9\u0AC0\u0A82.",
+  "support.messagePlaceholder": "\u0AB6\u0AC1\u0A82 \u0AA5\u0AAF\u0AC1\u0A82 \u0A85\u0AA8\u0AC7 \u0AA4\u0AAE\u0AC7 \u0A95\u0AC7\u0AAE \u0AB5\u0ABF\u0A9A\u0ABE\u0AB0 \u0A9B\u0ACB \u0A95\u0AC7 \u0A86\u0AA8\u0AC0 \u0AB8\u0AAE\u0AC0\u0A95\u0ACD\u0AB7\u0ABE \u0AA5\u0AB5\u0AC0 \u0A9C\u0ACB\u0A88\u0A8F, \u0A85\u0AAE\u0AA8\u0AC7 \u0A9C\u0AA3\u0ABE\u0AB5\u0ACB",
+  "support.messageRequired": "\u0AB8\u0AAC\u0AAE\u0ABF\u0A9F \u0A95\u0AB0\u0AA4\u0ABE \u0AAA\u0AB9\u0AC7\u0AB2\u0ABE \u0AB8\u0A82\u0AA6\u0AC7\u0AB6 \u0AB2\u0A96\u0ACB",
+  "support.submit": "\u0A9F\u0ABF\u0A95\u0ABF\u0A9F \u0AB8\u0AAC\u0AAE\u0ABF\u0A9F \u0A95\u0AB0\u0ACB",
+  "support.submitError": "\u0AA4\u0AAE\u0ABE\u0AB0\u0AC0 \u0A9F\u0ABF\u0A95\u0ABF\u0A9F \u0AB8\u0AAC\u0AAE\u0ABF\u0A9F \u0A95\u0AB0\u0AC0 \u0AB6\u0A95\u0ABE\u0A88 \u0AA8\u0AB9\u0AC0\u0A82, \u0A95\u0AC3\u0AAA\u0ABE \u0A95\u0AB0\u0AC0\u0AA8\u0AC7 \u0AAB\u0AB0\u0AC0 \u0AAA\u0ACD\u0AB0\u0AAF\u0ABE\u0AB8 \u0A95\u0AB0\u0ACB",
+  "support.sentTitle": "\u0A9F\u0ABF\u0A95\u0ABF\u0A9F \u0AB8\u0AAC\u0AAE\u0ABF\u0A9F \u0AA5\u0A88",
+  "support.sentMessage": "\u0A8F\u0AA1\u0AAE\u0ABF\u0AA8 \u0A86\u0AA8\u0AC0 \u0AB8\u0AAE\u0AC0\u0A95\u0ACD\u0AB7\u0ABE \u0A95\u0AB0\u0AB6\u0AC7 \u0A85\u0AA8\u0AC7 \u0AA4\u0AAE\u0AA8\u0AC7 \u0A9C\u0AB5\u0ABE\u0AAC \u0A86\u0AAA\u0AB6\u0AC7."
 };
 
 // shared/locales/hi.json
@@ -4428,7 +4620,16 @@ var hi_default = {
   "passport.scanHint": "\u0938\u094D\u0915\u0948\u0928 \u0915\u0930\u0915\u0947 \u0907\u0938 \u092A\u093E\u0938\u092A\u094B\u0930\u094D\u091F \u0915\u094B \u0911\u0928\u0932\u093E\u0907\u0928 \u0926\u0947\u0916\u0947\u0902",
   "passport.notFoundTitle": "\u092A\u093E\u0938\u092A\u094B\u0930\u094D\u091F \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E",
   "passport.notFoundMessage": "\u092F\u0939 \u0935\u093F\u0930\u093E\u0938\u0924 \u092A\u093E\u0938\u092A\u094B\u0930\u094D\u091F \u092E\u094C\u091C\u0942\u0926 \u0928\u0939\u0940\u0902 \u0939\u0948, \u092F\u093E \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u0905\u092C \u0938\u093E\u0930\u094D\u0935\u091C\u0928\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964",
-  "passport.loadError": "\u0907\u0938 \u092A\u093E\u0938\u092A\u094B\u0930\u094D\u091F \u0915\u094B \u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u093E"
+  "passport.loadError": "\u0907\u0938 \u092A\u093E\u0938\u092A\u094B\u0930\u094D\u091F \u0915\u094B \u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u093E",
+  "support.invalidTitle": "\u092F\u0939 \u0932\u093F\u0902\u0915 \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948 \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948",
+  "support.invalidMessage": "\u0938\u0939\u093E\u092F\u0924\u093E \u091F\u093F\u0915\u091F \u0932\u093F\u0902\u0915 30 \u0926\u093F\u0928\u094B\u0902 \u0915\u0947 \u092C\u093E\u0926 \u0915\u093E\u092E \u0928\u0939\u0940\u0902 \u0915\u0930\u0924\u0947\u0964 \u092F\u0926\u093F \u0906\u092A\u0915\u094B \u0905\u092D\u0940 \u092D\u0940 \u092E\u0926\u0926 \u091A\u093E\u0939\u093F\u090F \u0924\u094B \u092A\u094D\u0932\u0947\u091F\u092B\u093C\u0949\u0930\u094D\u092E \u090F\u0921\u092E\u093F\u0928 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+  "support.permanentNote": "\u092F\u0939 \u0939\u091F\u093E\u0928\u093E \u0938\u094D\u0925\u093E\u092F\u0940 \u0939\u0948 \u0914\u0930 \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u0915\u094B \u092A\u0941\u0928\u0930\u094D\u0938\u094D\u0925\u093E\u092A\u093F\u0924 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E\u0964 \u091F\u093F\u0915\u091F \u0915\u0947\u0935\u0932 \u092A\u094D\u0930\u0936\u094D\u0928\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0939\u0948, \u0907\u0938\u0947 \u0935\u093E\u092A\u0938 \u092A\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0928\u0939\u0940\u0902\u0964",
+  "support.messagePlaceholder": "\u0939\u092E\u0947\u0902 \u092C\u0924\u093E\u0907\u090F \u0915\u094D\u092F\u093E \u0939\u0941\u0906 \u0914\u0930 \u0915\u094D\u092F\u094B\u0902 \u0906\u092A\u0915\u094B \u0932\u0917\u0924\u093E \u0939\u0948 \u0915\u093F \u0907\u0938\u0947 \u092A\u0941\u0928\u0903 \u091C\u093E\u0902\u091A\u093E \u091C\u093E\u0928\u093E \u091A\u093E\u0939\u093F\u090F",
+  "support.messageRequired": "\u0938\u092C\u092E\u093F\u091F \u0915\u0930\u0928\u0947 \u0938\u0947 \u092A\u0939\u0932\u0947 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0947\u0902",
+  "support.submit": "\u091F\u093F\u0915\u091F \u092D\u0947\u091C\u0947\u0902",
+  "support.submitError": "\u0906\u092A\u0915\u093E \u091F\u093F\u0915\u091F \u092D\u0947\u091C\u093E \u0928\u0939\u0940\u0902 \u091C\u093E \u0938\u0915\u093E, \u0915\u0943\u092A\u092F\u093E \u092B\u093F\u0930 \u0938\u0947 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902",
+  "support.sentTitle": "\u091F\u093F\u0915\u091F \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E",
+  "support.sentMessage": "\u090F\u0915 \u090F\u0921\u092E\u093F\u0928 \u0907\u0938\u0947 \u091C\u093E\u0902\u091A\u0947\u0917\u093E \u0914\u0930 \u0906\u092A\u0915\u094B \u091C\u0935\u093E\u092C \u0926\u0947\u0917\u093E\u0964"
 };
 
 // shared/locales/kn.json
@@ -4777,7 +4978,16 @@ var kn_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0C88 \u0CB2\u0CBF\u0C82\u0C95\u0CCD \u0C85\u0CAE\u0CBE\u0CA8\u0CCD\u0CAF\u0CB5\u0CBE\u0C97\u0CBF\u0CA6\u0CC6 \u0C85\u0CA5\u0CB5\u0CBE \u0C85\u0CB5\u0CA7\u0CBF \u0CAE\u0CC1\u0C97\u0CBF\u0CA6\u0CBF\u0CA6\u0CC6",
+  "support.invalidMessage": "\u0CB8\u0CB9\u0CBE\u0CAF \u0C9F\u0CBF\u0C95\u0CC6\u0C9F\u0CCD \u0CB2\u0CBF\u0C82\u0C95\u0CCD\u200C\u0C97\u0CB3\u0CC1 30 \u0CA6\u0CBF\u0CA8\u0C97\u0CB3 \u0CA8\u0C82\u0CA4\u0CB0 \u0C95\u0CC6\u0CB2\u0CB8 \u0CAE\u0CBE\u0CA1\u0CC1\u0CA4\u0CCD\u0CA4\u0CBF\u0CB2\u0CCD\u0CB2. \u0C87\u0CA8\u0CCD\u0CA8\u0CC2 \u0CB8\u0CB9\u0CBE\u0CAF \u0CAC\u0CC7\u0C95\u0CBF\u0CA6\u0CCD\u0CA6\u0CB0\u0CC6 \u0CAA\u0CCD\u0CB2\u0CBE\u0C9F\u0CCD\u200C\u0CAB\u0CBE\u0CB0\u0CCD\u0CAE\u0CCD \u0CA8\u0CBF\u0CB0\u0CCD\u0CB5\u0CBE\u0CB9\u0C95\u0CB0\u0CA8\u0CCD\u0CA8\u0CC1 \u0CB8\u0C82\u0CAA\u0CB0\u0CCD\u0C95\u0CBF\u0CB8\u0CBF.",
+  "support.permanentNote": "\u0C88 \u0CA4\u0CC6\u0C97\u0CC6\u0CA6\u0CC1\u0CB9\u0CBE\u0C95\u0CC1\u0CB5\u0CBF\u0C95\u0CC6 \u0CB6\u0CBE\u0CB6\u0CCD\u0CB5\u0CA4\u0CB5\u0CBE\u0C97\u0CBF\u0CA6\u0CCD\u0CA6\u0CC1, \u0CAA\u0C9F\u0CCD\u0C9F\u0CBF\u0CAF\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAE\u0CB0\u0CC1\u0CB8\u0CCD\u0CA5\u0CBE\u0CAA\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CC1\u0CB5\u0CC1\u0CA6\u0CBF\u0CB2\u0CCD\u0CB2. \u0C9F\u0CBF\u0C95\u0CC6\u0C9F\u0CCD \u0C85\u0CA8\u0CCD\u0CA8\u0CC1 \u0C87\u0CA6\u0C95\u0CCD\u0C95\u0CC6 \u0CB8\u0C82\u0CAC\u0C82\u0CA7\u0CBF\u0CB8\u0CBF\u0CA6 \u0CAA\u0CCD\u0CB0\u0CB6\u0CCD\u0CA8\u0CC6\u0C97\u0CB3\u0CBF\u0C97\u0CC6 \u0CAC\u0CB3\u0CB8\u0CAC\u0CC7\u0C95\u0CC1, \u0CAE\u0CB0\u0CC1\u0CAA\u0CA1\u0CC6\u0CAF\u0CB2\u0CC1 \u0C85\u0CB2\u0CCD\u0CB2.",
+  "support.messagePlaceholder": "\u0C8F\u0CA8\u0CC1 \u0CB8\u0C82\u0CAD\u0CB5\u0CBF\u0CB8\u0CBF\u0CA6\u0CC6 \u0CAE\u0CA4\u0CCD\u0CA4\u0CC1 \u0C87\u0CA6\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAA\u0CB0\u0CBF\u0CB6\u0CC0\u0CB2\u0CBF\u0CB8\u0CAC\u0CC7\u0C95\u0CC6\u0C82\u0CA6\u0CC1 \u0CA8\u0CBF\u0CAE\u0C97\u0CC6 \u0C8F\u0C95\u0CC6 \u0C85\u0CA8\u0CBF\u0CB8\u0CC1\u0CA4\u0CCD\u0CA4\u0CA6\u0CC6 \u0C8E\u0C82\u0CA6\u0CC1 \u0CA8\u0CAE\u0C97\u0CC6 \u0CB9\u0CC7\u0CB3\u0CBF",
+  "support.messageRequired": "\u0CB8\u0CB2\u0CCD\u0CB2\u0CBF\u0CB8\u0CC1\u0CB5 \u0CAE\u0CCA\u0CA6\u0CB2\u0CC1 \u0CB8\u0C82\u0CA6\u0CC7\u0CB6\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAC\u0CB0\u0CC6\u0CAF\u0CBF\u0CB0\u0CBF",
+  "support.submit": "\u0C9F\u0CBF\u0C95\u0CC6\u0C9F\u0CCD \u0CB8\u0CB2\u0CCD\u0CB2\u0CBF\u0CB8\u0CBF",
+  "support.submitError": "\u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0C9F\u0CBF\u0C95\u0CC6\u0C9F\u0CCD \u0C85\u0CA8\u0CCD\u0CA8\u0CC1 \u0CB8\u0CB2\u0CCD\u0CB2\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CB2\u0CBF\u0CB2\u0CCD\u0CB2, \u0CA6\u0CAF\u0CB5\u0CBF\u0C9F\u0CCD\u0C9F\u0CC1 \u0CAE\u0CA4\u0CCD\u0CA4\u0CC6 \u0CAA\u0CCD\u0CB0\u0CAF\u0CA4\u0CCD\u0CA8\u0CBF\u0CB8\u0CBF",
+  "support.sentTitle": "\u0C9F\u0CBF\u0C95\u0CC6\u0C9F\u0CCD \u0CB8\u0CB2\u0CCD\u0CB2\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
+  "support.sentMessage": "\u0CA8\u0CBF\u0CB0\u0CCD\u0CB5\u0CBE\u0CB9\u0C95 \u0C87\u0CA6\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAA\u0CB0\u0CBF\u0CB6\u0CC0\u0CB2\u0CBF\u0CB8\u0CBF \u0CA8\u0CBF\u0CAE\u0C97\u0CC6 \u0C89\u0CA4\u0CCD\u0CA4\u0CB0 \u0CA8\u0CC0\u0CA1\u0CC1\u0CB5\u0CB0\u0CC1."
 };
 
 // shared/locales/kok.json
@@ -5126,7 +5336,16 @@ var kok_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0939\u094D\u092F\u093E \u0932\u093F\u0902\u0915\u093E\u091A\u094B \u0935\u0948\u0927 \u0928\u093E\u092F \u0935\u093E \u0924\u0940 \u0938\u092E\u093E\u092A\u094D\u0924 \u091C\u093E\u0932\u094D\u092F\u093E",
+  "support.invalidMessage": "\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u0947\u091F\u093E\u0902\u091A\u094D\u092F\u093E \u0932\u093F\u0902\u0915\u093E\u0902 30 \u0926\u093F\u0935\u0938\u093E\u0902\u0928\u0902\u0924\u0930 \u0915\u093E\u092E \u0915\u0930\u092A\u093E\u091A\u094B \u0928\u093E\u092F. \u091C\u0930 \u0924\u0941\u092E\u0915\u093E \u0905\u091C\u0942\u0928 \u092E\u0926\u0924 \u091C\u093E\u092F, \u0924\u0930 \u092A\u094D\u0932\u0945\u091F\u092B\u0949\u0930\u094D\u092E \u092A\u094D\u0930\u0936\u093E\u0938\u0915\u093E\u0902 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u093E\u0924",
+  "support.permanentNote": "\u0939\u094D\u092F\u093E \u0915\u093E\u0921\u092A\u093E\u091A\u094B \u0915\u093E\u092F\u092E\u091A\u093E \u0906\u0938\u093E \u0906\u0923\u093F \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u092A\u0930\u0924 \u0906\u0923\u092A\u093E\u0915 \u0936\u0915\u094D\u092F \u0928\u093E\u092F. \u091F\u093F\u0915\u0947\u091F \u092B\u0915\u094D\u0924 \u092A\u094D\u0930\u0936\u094D\u0928\u093E\u0902\u0915 \u0916\u093E\u0924\u0940\u0930 \u0906\u0938\u093E, \u092A\u0930\u0924 \u092E\u093F\u0933\u0935\u092A\u093E\u0915 \u0928\u093E\u092F",
+  "support.messagePlaceholder": "\u0915\u093E\u092F \u0918\u0921\u0932\u0947\u0902 \u0906\u0928\u0940 \u0939\u094D\u092F\u093E\u091A\u0947\u0902 \u092A\u0941\u0928\u0930\u093E\u0935\u0932\u094B\u0915\u0928 \u0915\u0930\u092A\u093E\u091A\u094B \u0915\u093E\u0930\u0923 \u0915\u093E\u092F, \u0924\u0947 \u0938\u093E\u0902\u0917\u093E\u0924",
+  "support.messageRequired": "\u0938\u092C\u092E\u093F\u091F \u0915\u0930\u092A\u093E\u091A\u094B \u092A\u092F\u0932\u0940 \u092E\u0947\u0938\u0947\u091C \u0932\u093F\u0939\u093E",
+  "support.submit": "\u091F\u093F\u0915\u0947\u091F \u0938\u092C\u092E\u093F\u091F \u0915\u0930\u093E\u0924",
+  "support.submitError": "\u0924\u0941\u092E\u091A\u094B \u091F\u093F\u0915\u0947\u091F \u0938\u092C\u092E\u093F\u091F \u0915\u0930\u092A\u093E\u0915 \u091C\u093E\u0932\u094B \u0928\u093E\u092F, \u092B\u0941\u0921\u0947\u0902 \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E\u0924",
+  "support.sentTitle": "\u091F\u093F\u0915\u0947\u091F \u0938\u092C\u092E\u093F\u091F \u091C\u093E\u0932\u094B",
+  "support.sentMessage": "\u090F\u0915 \u092A\u094D\u0930\u0936\u093E\u0938\u0915 \u0939\u094D\u092F\u093E\u091A\u0947\u0902 \u092A\u0941\u0928\u0930\u093E\u0935\u0932\u094B\u0915\u0928 \u0915\u0930\u092A \u0906\u0923\u093F \u0924\u0941\u092E\u0915\u093E \u0909\u0924\u094D\u0924\u0930 \u0926\u094D\u092F\u0924\u0932\u0947"
 };
 
 // shared/locales/ks.json
@@ -5475,7 +5694,16 @@ var ks_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u06CC\u06C1 \u0644\u0646\u06A9 \u0646\u0627 \u0645\u0648\u0632\u0648\u0646 \u06CC\u0627 \u062E\u062A\u0645 \u0686\u06BE\u064F",
+  "support.invalidMessage": "\u0633\u067E\u0648\u0631\u0679 \u0679\u06A9\u0679 \u0644\u0646\u06A9\u0633 30 \u062F\u0646 \u067E\u0679\u06BE \u0628\u0646\u062F \u0686\u06BE\u064F\u06D4 \u0627\u06AF\u0631 \u062A\u0648\u06C1\u0646\u062F \u0645\u062F\u062F \u062F\u0631\u06A9\u0627\u0631 \u0686\u06BE\u064F \u062A\u0648 \u067E\u0644\u06CC\u0679 \u0641\u0627\u0631\u0645 \u0627\u06CC\u0688\u0645\u0646 \u0633\u064F \u0631\u0627\u0628\u0637\u06C1 \u06A9\u0631\u0646\u06D4",
+  "support.permanentNote": "\u06CC\u06C1 \u06C1\u0679\u0627\u0648\u0646 \u062F\u0627\u0626\u0645\u06CC \u0686\u06BE\u064F \u0627\u0648\u0631 \u0644\u0633\u0679\u0646\u06AF \u0648\u0627\u067E\u0633 \u0646\u06C1 \u0628\u0646\u0627\u06CC\u0654\u06CC \u062C\u0627\u0648\u0654\u0646\u06D4 \u0679\u06A9\u0679 \u0635\u0631\u0641 \u0633\u0648\u0627\u0644\u0627\u062A \u0644\u0626\u06CC \u0686\u06BE\u064F\u060C \u0648\u0627\u067E\u0633 \u0644\u0626\u06CC \u0646\u06C1\u06D4",
+  "support.messagePlaceholder": "\u06C1\u0646\u0632 \u0628\u06CC\u0627\u06BA \u06A9\u0631\u0646 \u06A9\u06C1 \u06A9\u06CC\u0627 \u06C1\u0648\u0646\u065B\u062F\u0655 \u0627\u0648\u0631 \u06A9\u06CC\u0648\u06BA \u062A\u0648\u06C1\u0646\u062F \u062E\u06CC\u0627\u0644 \u0686\u06BE\u064F \u06A9\u06C1 \u06CC\u06C1 \u0686\u06BE\u064F \u062C\u0627\u0626\u0632\u06C1 \u06AF\u0698\u06BE\u06D4",
+  "support.messageRequired": "\u062C\u0645\u0639 \u06A9\u0631\u0646 \u0633\u06C2 \u067E\u06C1\u0644\u06C2 \u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u0646\u06D4",
+  "support.submit": "\u0679\u06A9\u0679 \u0628\u06BE\u06CC\u0698",
+  "support.submitError": "\u0679\u06A9\u0679 \u062C\u0645\u0639 \u0646\u06C1 \u06C1\u0646\u062F\u060C \u0645\u06C1\u0631\u0628\u0627\u0646\u06CC \u06A9\u0631 \u06A9\u06D2 \u062F\u0648\u0628\u0627\u0631 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u0646\u06D4",
+  "support.sentTitle": "\u0679\u06A9\u0679 \u062C\u0645\u0639 \u06C1\u0648\u0686\u064F\u06BE",
+  "support.sentMessage": "\u0627\u06CC\u0688\u0645\u0646 \u06CC\u06C1 \u062C\u0627\u0626\u0632\u06C1 \u06AF\u0698\u06BE \u0627\u0648\u0631 \u062A\u0648\u06C1\u0646\u062F \u0633\u06C2 \u0648\u0627\u067E\u0633 \u0622\u0648\u0654\u0646\u06D4"
 };
 
 // shared/locales/mai.json
@@ -5824,7 +6052,16 @@ var mai_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0908 \u0932\u093F\u0902\u0915 \u0905\u092E\u093E\u0928\u094D\u092F \u0905\u091B\u093F \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u092D' \u0917\u0947\u0932 \u0905\u091B\u093F",
+  "support.invalidMessage": "\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u091F\u0915 \u0932\u093F\u0902\u0915 30 \u0926\u093F\u0928 \u092C\u093E\u0926 \u0915\u093E\u091C \u0928\u0939\u093F \u0915\u0930\u0948\u0924 \u0905\u091B\u093F\u0964 \u092F\u0926\u093F \u0905\u0939\u093E\u0901\u0915\u0947\u0901 \u0905\u092C\u0939\u093F\u092F\u094B \u092E\u0926\u0926 \u091A\u093E\u0939\u0940 \u0924' \u092A\u094D\u0932\u0947\u091F\u092B\u093C\u0949\u0930\u094D\u092E \u090F\u0921\u092E\u093F\u0928 \u0938\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0942\u0964",
+  "support.permanentNote": "\u0908 \u0939\u091F\u093E\u092C \u0938\u094D\u0925\u093E\u092F\u0940 \u0905\u091B\u093F \u0906 \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u0935\u093E\u092A\u0938 \u0928\u0939\u093F \u0939\u094B\u092F\u0924\u0964 \u091F\u093F\u0915\u091F \u092A\u094D\u0930\u0936\u094D\u0928 \u092A\u0942\u091B\u092C\u093E\u0915 \u0932\u0947\u0932 \u0905\u091B\u093F, \u0935\u093E\u092A\u0938 \u0932\u093E\u092C\u092F \u0932\u0947\u0932 \u0928\u0939\u093F\u0964",
+  "support.messagePlaceholder": "\u0915\u0940 \u092D\u0947\u0932 \u0906 \u0905\u0939\u093E\u0901 \u0915\u093F\u090F\u0915 \u0938\u094B\u091A\u0948\u0924 \u091B\u0940 \u091C\u0947 \u0908 \u092A\u0941\u0928\u0903 \u091C\u093E\u0901\u091A \u0939\u094B\u092F, \u0938\u0947 \u092C\u0924\u093E\u0909\u0964",
+  "support.messageRequired": "\u091C\u092E\u093E \u0915\u0930\u092C\u093E\u0915 \u092A\u0939\u093F\u0928\u0947 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0942\u0964",
+  "support.submit": "\u091F\u093F\u0915\u091F \u091C\u092E\u093E \u0915\u0930\u0942",
+  "support.submitError": "\u091F\u093F\u0915\u091F \u091C\u092E\u093E \u0928\u0939\u093F \u092D' \u0938\u0915\u0932, \u0915\u0943\u092A\u092F\u093E \u092B\u0947\u0930 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0942\u0964",
+  "support.sentTitle": "\u091F\u093F\u0915\u091F \u091C\u092E\u093E \u092D' \u0917\u0947\u0932",
+  "support.sentMessage": "\u090F\u0921\u092E\u093F\u0928 \u090F\u0915\u0930 \u091C\u093E\u0901\u091A \u0915' \u0905\u0939\u093E\u0901 \u0938\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0925\u093F\u0928\u0964"
 };
 
 // shared/locales/ml.json
@@ -6173,7 +6410,16 @@ var ml_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0D08 \u0D32\u0D3F\u0D19\u0D4D\u0D15\u0D4D \u0D05\u0D38\u0D3E\u0D27\u0D41\u0D35\u0D3E\u0D23\u0D4D \u0D05\u0D32\u0D4D\u0D32\u0D46\u0D19\u0D4D\u0D15\u0D3F\u0D7D \u0D15\u0D3E\u0D32\u0D39\u0D30\u0D23\u0D2A\u0D4D\u0D2A\u0D46\u0D1F\u0D4D\u0D1F\u0D41",
+  "support.invalidMessage": "\u0D38\u0D2A\u0D4D\u0D2A\u0D4B\u0D7C\u0D1F\u0D4D\u0D1F\u0D4D \u0D1F\u0D3F\u0D15\u0D4D\u0D15\u0D31\u0D4D\u0D31\u0D4D \u0D32\u0D3F\u0D19\u0D4D\u0D15\u0D41\u0D15\u0D7E 30 \u0D26\u0D3F\u0D35\u0D38\u0D24\u0D4D\u0D24\u0D3F\u0D28\u0D4D \u0D36\u0D47\u0D37\u0D02 \u0D2A\u0D4D\u0D30\u0D35\u0D7C\u0D24\u0D4D\u0D24\u0D3F\u0D15\u0D4D\u0D15\u0D3F\u0D32\u0D4D\u0D32. \u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D7E\u0D15\u0D4D\u0D15\u0D4D \u0D38\u0D39\u0D3E\u0D2F\u0D02 \u0D06\u0D35\u0D36\u0D4D\u0D2F\u0D2E\u0D41\u0D23\u0D4D\u0D1F\u0D46\u0D19\u0D4D\u0D15\u0D3F\u0D7D \u0D2A\u0D4D\u0D32\u0D3E\u0D31\u0D4D\u0D31\u0D4D\u0D2B\u0D4B\u0D02 \u0D05\u0D21\u0D4D\u0D2E\u0D3F\u0D28\u0D41\u0D2E\u0D3E\u0D2F\u0D3F \u0D2C\u0D28\u0D4D\u0D27\u0D2A\u0D4D\u0D2A\u0D46\u0D1F\u0D41\u0D15.",
+  "support.permanentNote": "\u0D08 \u0D28\u0D40\u0D15\u0D4D\u0D15\u0D02 \u0D38\u0D4D\u0D25\u0D3F\u0D30\u0D2E\u0D3E\u0D23\u0D4D, \u0D32\u0D3F\u0D38\u0D4D\u0D31\u0D4D\u0D31\u0D3F\u0D02\u0D17\u0D4D \u0D24\u0D3F\u0D30\u0D3F\u0D15\u0D46 \u0D15\u0D4A\u0D23\u0D4D\u0D1F\u0D41\u0D35\u0D30\u0D3E\u0D7B \u0D15\u0D34\u0D3F\u0D2F\u0D3F\u0D32\u0D4D\u0D32. \u0D1F\u0D3F\u0D15\u0D4D\u0D15\u0D31\u0D4D\u0D31\u0D4D \u0D1A\u0D4B\u0D26\u0D4D\u0D2F\u0D02 \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D3E\u0D7B \u0D06\u0D23\u0D4D, \u0D24\u0D3F\u0D30\u0D3F\u0D15\u0D46 \u0D32\u0D2D\u0D3F\u0D15\u0D4D\u0D15\u0D3E\u0D7B \u0D05\u0D32\u0D4D\u0D32.",
+  "support.messagePlaceholder": "\u0D0E\u0D28\u0D4D\u0D24\u0D3E\u0D23\u0D4D \u0D38\u0D02\u0D2D\u0D35\u0D3F\u0D1A\u0D4D\u0D1A\u0D24\u0D4D, \u0D0E\u0D28\u0D4D\u0D24\u0D41\u0D15\u0D4A\u0D23\u0D4D\u0D1F\u0D4D \u0D07\u0D24\u0D4D \u0D2A\u0D30\u0D3F\u0D36\u0D4B\u0D27\u0D3F\u0D15\u0D4D\u0D15\u0D23\u0D02 \u0D0E\u0D28\u0D4D\u0D28\u0D4D \u0D1E\u0D19\u0D4D\u0D19\u0D33\u0D4B\u0D1F\u0D4D \u0D2A\u0D31\u0D2F\u0D42.",
+  "support.messageRequired": "\u0D38\u0D2E\u0D7C\u0D2A\u0D4D\u0D2A\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D24\u0D3F\u0D28\u0D4D \u0D2E\u0D41\u0D2E\u0D4D\u0D2A\u0D4D \u0D12\u0D30\u0D41 \u0D38\u0D28\u0D4D\u0D26\u0D47\u0D36\u0D02 \u0D0E\u0D34\u0D41\u0D24\u0D41\u0D15.",
+  "support.submit": "\u0D1F\u0D3F\u0D15\u0D4D\u0D15\u0D31\u0D4D\u0D31\u0D4D \u0D38\u0D2E\u0D7C\u0D2A\u0D4D\u0D2A\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15",
+  "support.submitError": "\u0D1F\u0D3F\u0D15\u0D4D\u0D15\u0D31\u0D4D\u0D31\u0D4D \u0D38\u0D2E\u0D7C\u0D2A\u0D4D\u0D2A\u0D3F\u0D15\u0D4D\u0D15\u0D3E\u0D7B \u0D15\u0D34\u0D3F\u0D1E\u0D4D\u0D1E\u0D3F\u0D32\u0D4D\u0D32, \u0D26\u0D2F\u0D35\u0D3E\u0D2F\u0D3F \u0D35\u0D40\u0D23\u0D4D\u0D1F\u0D41\u0D02 \u0D36\u0D4D\u0D30\u0D2E\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15.",
+  "support.sentTitle": "\u0D1F\u0D3F\u0D15\u0D4D\u0D15\u0D31\u0D4D\u0D31\u0D4D \u0D38\u0D2E\u0D7C\u0D2A\u0D4D\u0D2A\u0D3F\u0D1A\u0D4D\u0D1A\u0D41",
+  "support.sentMessage": "\u0D12\u0D30\u0D41 \u0D05\u0D21\u0D4D\u0D2E\u0D3F\u0D7B \u0D07\u0D24\u0D4D \u0D2A\u0D30\u0D3F\u0D36\u0D4B\u0D27\u0D3F\u0D1A\u0D4D\u0D1A\u0D4D \u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D33\u0D46 \u0D2C\u0D28\u0D4D\u0D27\u0D2A\u0D4D\u0D2A\u0D46\u0D1F\u0D41\u0D02."
 };
 
 // shared/locales/mni.json
@@ -6522,7 +6768,16 @@ var mni_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "Link adu thokpa leirabadi amasung thokpagi leirabadi",
+  "support.invalidMessage": "Support ticket link-sing 30 nunga leirabadi thokpa ngamloi. Houjik sahariba amasung platform admin-gi contact touriba",
+  "support.permanentNote": "Mahak thokpa adu permanent leirabadi listing adu phangba ngamloi. Ticket adu adubu adu khangba phangba adu oirabadi, phangba phangba adu oirabadi",
+  "support.messagePlaceholder": "Masi adu oirabadi amasung adubu review tourabani haibadi haibadi haibadi",
+  "support.messageRequired": "Submit tourabagi adu ama message thok",
+  "support.submit": "Ticket submit touraba",
+  "support.submitError": "Ticket submit tourabadi ngamloi, thajaba",
+  "support.sentTitle": "Ticket submit toubirak-i",
+  "support.sentMessage": "Admin adu adu review touri haibadi nungsibani"
 };
 
 // shared/locales/mr.json
@@ -6871,7 +7126,16 @@ var mr_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0939\u0940 \u0932\u093F\u0902\u0915 \u0905\u0935\u0948\u0927 \u0906\u0939\u0947 \u0915\u093F\u0902\u0935\u093E \u0915\u093E\u0932\u092C\u093E\u0939\u094D\u092F \u091D\u093E\u0932\u0940 \u0906\u0939\u0947",
+  "support.invalidMessage": "\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u093F\u091F \u0932\u093F\u0902\u0915 30 \u0926\u093F\u0935\u0938\u093E\u0902\u0928\u0902\u0924\u0930 \u0915\u093E\u0930\u094D\u092F\u0930\u0924 \u0930\u093E\u0939\u093E\u0924 \u0928\u093E\u0939\u0940. \u0905\u091C\u0942\u0928\u0939\u0940 \u092E\u0926\u0924\u0940\u091A\u0940 \u0917\u0930\u091C \u0905\u0938\u0932\u094D\u092F\u093E\u0938 \u092A\u094D\u0932\u0945\u091F\u092B\u0949\u0930\u094D\u092E \u092A\u094D\u0930\u0936\u093E\u0938\u0915\u093E\u0936\u0940 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u093E.",
+  "support.permanentNote": "\u0939\u0940 \u0915\u093E\u0922\u0923\u0940 \u0915\u093E\u092F\u092E\u091A\u0940 \u0906\u0939\u0947 \u0906\u0923\u093F \u0932\u093F\u0938\u094D\u091F\u093F\u0902\u0917 \u092A\u0941\u0928\u094D\u0939\u093E \u092E\u093F\u0933\u0935\u0924\u093E \u092F\u0947\u0923\u093E\u0930 \u0928\u093E\u0939\u0940. \u091F\u093F\u0915\u093F\u091F \u092B\u0915\u094D\u0924 \u092A\u094D\u0930\u0936\u094D\u0928\u093E\u0902\u0938\u093E\u0920\u0940 \u0906\u0939\u0947, \u092A\u0930\u0924 \u092E\u093F\u0933\u0935\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0928\u093E\u0939\u0940.",
+  "support.messagePlaceholder": "\u0915\u093E\u092F \u0918\u0921\u0932\u0947 \u0906\u0923\u093F \u0924\u0941\u092E\u094D\u0939\u093E\u0932\u093E \u0915\u093E \u0935\u093E\u091F\u0924\u0947 \u0915\u0940 \u092F\u093E\u091A\u0940 \u092A\u0941\u0928\u0930\u093E\u0935\u0932\u094B\u0915\u0928 \u0915\u0930\u093E\u0935\u0940, \u0924\u0947 \u0938\u093E\u0902\u0917\u093E",
+  "support.messageRequired": "\u0938\u092C\u092E\u093F\u091F \u0915\u0930\u0923\u094D\u092F\u093E\u092A\u0942\u0930\u094D\u0935\u0940 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0939\u093E",
+  "support.submit": "\u091F\u093F\u0915\u093F\u091F \u092A\u093E\u0920\u0935\u093E",
+  "support.submitError": "\u0924\u0941\u092E\u091A\u0947 \u091F\u093F\u0915\u093F\u091F \u0938\u093E\u0926\u0930 \u0915\u0930\u0924\u093E \u0906\u0932\u0947 \u0928\u093E\u0939\u0940, \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u094D\u0939\u093E \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E",
+  "support.sentTitle": "\u091F\u093F\u0915\u093F\u091F \u0938\u093E\u0926\u0930 \u0915\u0947\u0932\u0947",
+  "support.sentMessage": "\u092A\u094D\u0930\u0936\u093E\u0938\u0915 \u092F\u093E\u091A\u0940 \u0924\u092A\u093E\u0938\u0923\u0940 \u0915\u0930\u0947\u0932 \u0906\u0923\u093F \u0924\u0941\u092E\u094D\u0939\u093E\u0932\u093E \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0908\u0932."
 };
 
 // shared/locales/ne.json
@@ -7220,7 +7484,16 @@ var ne_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u092F\u094B \u0932\u093F\u0919\u094D\u0915 \u0905\u092E\u093E\u0928\u094D\u092F \u091B \u0935\u093E \u092E\u094D\u092F\u093E\u0926 \u0938\u092E\u093E\u092A\u094D\u0924 \u092D\u090F\u0915\u094B \u091B",
+  "support.invalidMessage": "\u0938\u0939\u092F\u094B\u0917 \u091F\u093F\u0915\u091F\u0915\u094B \u0932\u093F\u0919\u094D\u0915 \u0969\u0966 \u0926\u093F\u0928\u092A\u091B\u093F \u0915\u093E\u092E \u0917\u0930\u094D\u0926\u0948\u0928\u0964 \u092F\u0926\u093F \u0905\u091D\u0948 \u092E\u0926\u094D\u0926\u0924 \u091A\u093E\u0939\u093F\u092F\u094B \u092D\u0928\u0947 \u092A\u094D\u0932\u0947\u091F\u092B\u0930\u094D\u092E \u092A\u094D\u0930\u0936\u093E\u0938\u0915\u0932\u093E\u0908 \u0938\u092E\u094D\u092A\u0930\u094D\u0915 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D\u0964",
+  "support.permanentNote": "\u092F\u094B \u0939\u091F\u093E\u0909\u0928\u0947 \u0938\u094D\u0925\u093E\u092F\u0940 \u0939\u094B \u0930 \u0938\u0942\u091A\u0940 \u092A\u0941\u0928\u0903\u0938\u094D\u0925\u093E\u092A\u093F\u0924 \u0917\u0930\u094D\u0928 \u0938\u0915\u093F\u0901\u0926\u0948\u0928\u0964 \u091F\u093F\u0915\u091F \u092A\u094D\u0930\u0936\u094D\u0928\u0915\u093E \u0932\u093E\u0917\u093F \u0939\u094B, \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0917\u0930\u094D\u0928\u0915\u094B \u0932\u093E\u0917\u093F \u0939\u094B\u0907\u0928\u0964",
+  "support.messagePlaceholder": "\u0915\u0947 \u092D\u092F\u094B \u0930 \u0915\u093F\u0928 \u092A\u0941\u0928\u0930\u093E\u0935\u0932\u094B\u0915\u0928 \u091A\u093E\u0939\u0928\u0941\u0939\u0941\u0928\u094D\u091B \u092C\u0924\u093E\u0909\u0928\u0941\u0939\u094B\u0938\u094D",
+  "support.messageRequired": "\u092A\u0947\u0936 \u0917\u0930\u094D\u0928\u0941 \u0905\u0918\u093F \u0938\u0928\u094D\u0926\u0947\u0936 \u0932\u0947\u0916\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
+  "support.submit": "\u091F\u093F\u0915\u091F \u092A\u0947\u0936 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
+  "support.submitError": "\u091F\u093F\u0915\u091F \u092A\u0947\u0936 \u0917\u0930\u094D\u0928 \u0938\u0915\u0947\u0928, \u0915\u0943\u092A\u092F\u093E \u092B\u0947\u0930\u093F \u092A\u094D\u0930\u092F\u093E\u0938 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
+  "support.sentTitle": "\u091F\u093F\u0915\u091F \u092A\u0947\u0936 \u0917\u0930\u093F\u092F\u094B",
+  "support.sentMessage": "\u092A\u094D\u0930\u0936\u093E\u0938\u0915\u0932\u0947 \u092F\u0938\u0932\u093E\u0908 \u091C\u093E\u0901\u091A\u094D\u0928\u0947\u091B\u0928\u094D \u0930 \u0924\u092A\u093E\u0908\u0902\u0932\u093E\u0908 \u091C\u0935\u093E\u092B \u0926\u093F\u0928\u0947\u091B\u0928\u094D\u0964"
 };
 
 // shared/locales/or.json
@@ -7569,7 +7842,16 @@ var or_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0B0F\u0B39\u0B3F \u0B32\u0B3F\u0B19\u0B4D\u0B15\u0B4D \u0B05\u0B2C\u0B48\u0B27 \u0B15\u0B3F\u0B2E\u0B4D\u0B2C\u0B3E \u0B38\u0B2E\u0B5F \u0B38\u0B2E\u0B3E\u0B2A\u0B4D\u0B24 \u0B39\u0B4B\u0B07\u0B1B\u0B3F",
+  "support.invalidMessage": "\u0B38\u0B39\u0B3E\u0B5F\u0B24\u0B3E \u0B1F\u0B3F\u0B15\u0B47\u0B1F\u0B4D \u0B32\u0B3F\u0B19\u0B4D\u0B15\u0B4D 30 \u0B26\u0B3F\u0B28 \u0B2A\u0B30\u0B47 \u0B15\u0B3E\u0B2E \u0B15\u0B30\u0B3F\u0B2C\u0B3E \u0B2C\u0B28\u0B4D\u0B26 \u0B15\u0B30\u0B3F\u0B26\u0B3F\u0B0F\u0964 \u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15\u0B41 \u0B06\u0B39\u0B41\u0B30\u0B3F \u0B38\u0B39\u0B3E\u0B5F\u0B24\u0B3E \u0B26\u0B30\u0B15\u0B3E\u0B30 \u0B39\u0B47\u0B32\u0B47 \u0B2A\u0B4D\u0B32\u0B3E\u0B1F\u0B2B\u0B30\u0B4D\u0B2E \u0B0F\u0B21\u0B2E\u0B3F\u0B28\u0B4D\u200C\u0B15\u0B41 \u0B38\u0B2E\u0B4D\u0B2A\u0B30\u0B4D\u0B15 \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41\u0964",
+  "support.permanentNote": "\u0B0F\u0B39\u0B3F \u0B39\u0B1F\u0B3E\u0B07\u0B2C\u0B3E \u0B38\u0B4D\u0B25\u0B3E\u0B5F\u0B40 \u0B0F\u0B2C\u0B02 \u0B32\u0B3F\u0B37\u0B4D\u0B1F\u0B3F\u0B02 \u0B2A\u0B41\u0B28\u0B30\u0B41\u0B26\u0B4D\u0B27\u0B3E\u0B30 \u0B39\u0B47\u0B2C \u0B28\u0B3E\u0B39\u0B3F\u0B01\u0964 \u0B1F\u0B3F\u0B15\u0B47\u0B1F\u0B4D \u0B0F\u0B39\u0B3E \u0B2C\u0B3F\u0B37\u0B5F\u0B30\u0B47 \u0B2A\u0B4D\u0B30\u0B36\u0B4D\u0B28 \u0B2A\u0B3E\u0B07\u0B01, \u0B2A\u0B41\u0B28\u0B30\u0B4D\u0B2C\u0B3E\u0B38\u0B28 \u0B2A\u0B3E\u0B07\u0B01 \u0B28\u0B41\u0B39\u0B47\u0B01\u0964",
+  "support.messagePlaceholder": "\u0B15\u2019\u0B23 \u0B18\u0B1F\u0B3F\u0B32\u0B3E \u0B0F\u0B2C\u0B02 \u0B15\u0B3E\u0B39\u0B3F\u0B01\u0B15\u0B3F \u0B0F\u0B39\u0B3E\u0B15\u0B41 \u0B2A\u0B41\u0B28\u0B03\u0B2C\u0B3F\u0B1A\u0B3E\u0B30 \u0B15\u0B30\u0B3F\u0B2C\u0B3E \u0B09\u0B1A\u0B3F\u0B24 \u0B2C\u0B4B\u0B32\u0B3F \u0B06\u0B2A\u0B23 \u0B2D\u0B3E\u0B2C\u0B41\u0B1B\u0B28\u0B4D\u0B24\u0B3F, \u0B06\u0B2E\u0B15\u0B41 \u0B15\u0B41\u0B39\u0B28\u0B4D\u0B24\u0B41",
+  "support.messageRequired": "\u0B26\u0B3E\u0B16\u0B32 \u0B15\u0B30\u0B3F\u0B2C\u0B3E \u0B2A\u0B42\u0B30\u0B4D\u0B2C\u0B30\u0B41 \u0B0F\u0B15 \u0B2C\u0B3E\u0B30\u0B4D\u0B24\u0B4D\u0B24\u0B3E \u0B32\u0B47\u0B16\u0B28\u0B4D\u0B24\u0B41",
+  "support.submit": "\u0B1F\u0B3F\u0B15\u0B47\u0B1F\u0B4D \u0B2A\u0B20\u0B3E\u0B28\u0B4D\u0B24\u0B41",
+  "support.submitError": "\u0B1F\u0B3F\u0B15\u0B47\u0B1F\u0B4D \u0B2A\u0B20\u0B3E\u0B07 \u0B2A\u0B3E\u0B30\u0B3F\u0B32\u0B3E \u0B28\u0B3E\u0B39\u0B3F\u0B01, \u0B26\u0B5F\u0B3E\u0B15\u0B30\u0B3F \u0B2A\u0B41\u0B28\u0B03\u0B1A\u0B47\u0B37\u0B4D\u0B1F\u0B3E \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41",
+  "support.sentTitle": "\u0B1F\u0B3F\u0B15\u0B47\u0B1F\u0B4D \u0B2A\u0B20\u0B3E\u0B07 \u0B26\u0B3F\u0B06\u0B17\u0B32\u0B3E",
+  "support.sentMessage": "\u0B0F\u0B15 \u0B0F\u0B21\u0B2E\u0B3F\u0B28\u0B4D\u200C \u0B0F\u0B39\u0B3E\u0B15\u0B41 \u0B2A\u0B41\u0B28\u0B03\u0B2C\u0B3F\u0B1A\u0B3E\u0B30 \u0B15\u0B30\u0B3F \u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15\u0B41 \u0B09\u0B24\u0B4D\u0B24\u0B30 \u0B26\u0B47\u0B2C\u0B47\u0964"
 };
 
 // shared/locales/pa.json
@@ -7918,7 +8200,16 @@ var pa_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0A07\u0A39 \u0A32\u0A3F\u0A70\u0A15 \u0A05\u0A35\u0A48\u0A27 \u0A39\u0A48 \u0A1C\u0A3E\u0A02 \u0A2E\u0A3F\u0A06\u0A26 \u0A16\u0A24\u0A2E \u0A39\u0A4B \u0A1A\u0A41\u0A71\u0A15\u0A40 \u0A39\u0A48",
+  "support.invalidMessage": "\u0A38\u0A39\u0A3E\u0A07\u0A24\u0A3E \u0A1F\u0A3F\u0A15\u0A1F \u0A32\u0A3F\u0A70\u0A15 30 \u0A26\u0A3F\u0A28\u0A3E\u0A02 \u0A2C\u0A3E\u0A05\u0A26 \u0A15\u0A70\u0A2E \u0A15\u0A30\u0A28\u0A3E \u0A2C\u0A70\u0A26 \u0A15\u0A30\u0A26\u0A47 \u0A39\u0A28\u0964 \u0A1C\u0A47 \u0A24\u0A41\u0A39\u0A3E\u0A28\u0A42\u0A70 \u0A39\u0A3E\u0A32\u0A47 \u0A35\u0A40 \u0A2E\u0A26\u0A26 \u0A1A\u0A3E\u0A39\u0A40\u0A26\u0A40 \u0A39\u0A48 \u0A24\u0A3E\u0A02 \u0A2A\u0A32\u0A47\u0A1F\u0A2B\u0A3E\u0A30\u0A2E \u0A10\u0A21\u0A2E\u0A3F\u0A28 \u0A28\u0A3E\u0A32 \u0A38\u0A70\u0A2A\u0A30\u0A15 \u0A15\u0A30\u0A4B\u0964",
+  "support.permanentNote": "\u0A07\u0A39 \u0A39\u0A1F\u0A3E\u0A09\u0A23\u0A3E \u0A38\u0A25\u0A3E\u0A08 \u0A39\u0A48 \u0A05\u0A24\u0A47 \u0A32\u0A3F\u0A38\u0A1F\u0A3F\u0A70\u0A17 \u0A28\u0A42\u0A70 \u0A2E\u0A41\u0A5C \u0A28\u0A39\u0A40\u0A02 \u0A32\u0A3F\u0A06 \u0A38\u0A15\u0A26\u0A47\u0964 \u0A1F\u0A3F\u0A15\u0A1F \u0A38\u0A3F\u0A30\u0A2B\u0A3C \u0A38\u0A35\u0A3E\u0A32\u0A3E\u0A02 \u0A32\u0A08 \u0A39\u0A48, \u0A35\u0A3E\u0A2A\u0A38 \u0A32\u0A3F\u0A06\u0A09\u0A23 \u0A32\u0A08 \u0A28\u0A39\u0A40\u0A02\u0964",
+  "support.messagePlaceholder": "\u0A38\u0A3E\u0A28\u0A42\u0A70 \u0A26\u0A71\u0A38\u0A4B \u0A15\u0A40 \u0A39\u0A4B\u0A07\u0A06 \u0A05\u0A24\u0A47 \u0A24\u0A41\u0A38\u0A40\u0A02 \u0A15\u0A3F\u0A09\u0A02 \u0A38\u0A4B\u0A1A\u0A26\u0A47 \u0A39\u0A4B \u0A15\u0A3F \u0A07\u0A38 \u0A26\u0A40 \u0A38\u0A2E\u0A40\u0A16\u0A3F\u0A06 \u0A39\u0A4B\u0A23\u0A40 \u0A1A\u0A3E\u0A39\u0A40\u0A26\u0A40 \u0A39\u0A48",
+  "support.messageRequired": "\u0A1C\u0A2E\u0A4D\u0A39\u0A3E\u0A02 \u0A15\u0A30\u0A28 \u0A24\u0A4B\u0A02 \u0A2A\u0A39\u0A3F\u0A32\u0A3E\u0A02 \u0A38\u0A41\u0A28\u0A47\u0A39\u0A3E \u0A32\u0A3F\u0A16\u0A4B",
+  "support.submit": "\u0A1F\u0A3F\u0A15\u0A1F \u0A1C\u0A2E\u0A4D\u0A39\u0A3E\u0A02 \u0A15\u0A30\u0A4B",
+  "support.submitError": "\u0A1F\u0A3F\u0A15\u0A1F \u0A1C\u0A2E\u0A4D\u0A39\u0A3E\u0A02 \u0A28\u0A39\u0A40\u0A02 \u0A39\u0A4B \u0A38\u0A15\u0A40, \u0A15\u0A3F\u0A30\u0A2A\u0A3E \u0A15\u0A30\u0A15\u0A47 \u0A26\u0A41\u0A2C\u0A3E\u0A30\u0A3E \u0A15\u0A4B\u0A36\u0A3F\u0A36 \u0A15\u0A30\u0A4B",
+  "support.sentTitle": "\u0A1F\u0A3F\u0A15\u0A1F \u0A1C\u0A2E\u0A4D\u0A39\u0A3E\u0A02 \u0A39\u0A4B \u0A17\u0A08",
+  "support.sentMessage": "\u0A10\u0A21\u0A2E\u0A3F\u0A28 \u0A07\u0A38 \u0A26\u0A40 \u0A38\u0A2E\u0A40\u0A16\u0A3F\u0A06 \u0A15\u0A30\u0A47\u0A17\u0A3E \u0A05\u0A24\u0A47 \u0A24\u0A41\u0A39\u0A3E\u0A28\u0A42\u0A70 \u0A1C\u0A35\u0A3E\u0A2C \u0A26\u0A47\u0A35\u0A47\u0A17\u0A3E\u0964"
 };
 
 // shared/locales/sa.json
@@ -8267,7 +8558,16 @@ var sa_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0932\u093F\u0902\u0915 \u0905\u092E\u093E\u0928\u094D\u092F\u0903 \u0905\u0925\u0935\u093E \u0938\u092E\u093E\u092A\u094D\u0924\u0903",
+  "support.invalidMessage": "\u0938\u092E\u0930\u094D\u0925\u0928 \u091F\u093F\u0915\u0947\u091F \u0932\u093F\u0902\u0915 \u0969\u0966 \u0926\u093F\u0928\u093E\u0928\u0928\u094D\u0924\u0930 \u0915\u093E\u0930\u094D\u092F \u0928 \u0915\u0930\u093F\u0937\u094D\u092F\u0924\u093F\u0964 \u092F\u0926\u093F \u0938\u0939\u093E\u092F\u0924\u093E \u0906\u0935\u0936\u094D\u092F\u0915\u0902 \u092D\u0935\u0924\u093F \u0924\u0930\u094D\u0939\u093F \u092E\u0902\u091A\u0938\u094D\u092F \u092A\u094D\u0930\u0936\u093E\u0938\u0915\u0902 \u0938\u092E\u094D\u092A\u0930\u094D\u0915\u0924\u0941\u0964",
+  "support.permanentNote": "\u090F\u0924\u0924\u094D \u0935\u093F\u0932\u094B\u092A\u0928\u0902 \u0936\u093E\u0936\u094D\u0935\u0924\u0902 \u0905\u0938\u094D\u0924\u093F \u091A \u0938\u0942\u091A\u0940\u0902 \u092A\u0941\u0928\u0903\u0938\u094D\u0925\u093E\u092A\u093F\u0924\u0941\u0902 \u0928 \u0936\u0915\u094D\u092F\u0924\u0947\u0964 \u091F\u093F\u0915\u0947\u091F\u094D \u092A\u094D\u0930\u0936\u094D\u0928\u093E\u0930\u094D\u0925\u0902 \u0905\u0938\u094D\u0924\u093F, \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u093E\u092A\u094D\u0924\u094D\u092F\u0930\u094D\u0925\u0902 \u0928\u0964",
+  "support.messagePlaceholder": "\u0915\u093F\u092E\u094D \u0905\u092D\u0935\u0924\u094D \u0924\u0925\u093E \u0915\u093F\u092E\u0930\u094D\u0925\u0902 \u0907\u0926\u0902 \u092A\u0941\u0928\u0930\u093E\u0935\u0932\u094B\u0915\u0928\u0902 \u092F\u094B\u0917\u094D\u092F\u0902 \u0907\u0924\u093F \u0935\u0926\u0924\u0941\u0964",
+  "support.messageRequired": "\u092A\u094D\u0930\u0938\u094D\u0924\u093E\u0935\u093F\u0924\u0941\u0902 \u092A\u0942\u0930\u094D\u0935\u0902 \u0938\u0902\u0926\u0947\u0936\u0902 \u0932\u093F\u0916\u0924\u0941\u0964",
+  "support.submit": "\u091F\u093F\u0915\u0947\u091F\u094D \u092A\u094D\u0930\u0947\u0937\u092F\u0924\u0941",
+  "support.submitError": "\u091F\u093F\u0915\u0947\u091F\u094D \u092A\u094D\u0930\u0947\u0937\u093F\u0924\u0941\u0902 \u0928 \u0936\u0915\u094D\u092F\u0924\u0947, \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u0924\u094D\u0928\u0902 \u0915\u0941\u0930\u094D\u0935\u0928\u094D\u0924\u0941\u0964",
+  "support.sentTitle": "\u091F\u093F\u0915\u0947\u091F\u094D \u092A\u094D\u0930\u0947\u0937\u093F\u0924\u0903",
+  "support.sentMessage": "\u092A\u094D\u0930\u0936\u093E\u0938\u0915\u0903 \u0907\u0926\u0902 \u0928\u093F\u0930\u0940\u0915\u094D\u0937\u094D\u092F \u0909\u0924\u094D\u0924\u0930\u0902 \u0926\u093E\u0938\u094D\u092F\u0924\u093F\u0964"
 };
 
 // shared/locales/sat.json
@@ -8616,7 +8916,16 @@ var sat_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "This link is invalid or has expired",
+  "support.invalidMessage": "Support ticket links stop working after 30 days. Contact the platform admin if you still need help.",
+  "support.permanentNote": "This removal is permanent and the listing cannot be restored. A ticket is for questions about it, not for getting it back.",
+  "support.messagePlaceholder": "Tell us what happened and why you think this should be reviewed",
+  "support.messageRequired": "Write a message before submitting",
+  "support.submit": "Submit ticket",
+  "support.submitError": "Could not submit your ticket, please try again",
+  "support.sentTitle": "Ticket submitted",
+  "support.sentMessage": "An admin will review this and get back to you."
 };
 
 // shared/locales/sd.json
@@ -8965,7 +9274,16 @@ var sd_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0647\u064A \u0644\u0646\u06AA \u063A\u0644\u0637 \u064A\u0627 \u062E\u062A\u0645 \u067F\u064A\u0644 \u0622\u0647\u064A",
+  "support.invalidMessage": "\u0633\u067E\u0648\u0631\u067D \u067D\u06AA\u064A\u067D \u062C\u0627 \u0644\u0646\u06AA 30 \u068F\u064A\u0646\u0647\u0646 \u0628\u0639\u062F \u06AA\u0645 \u0646\u067F\u0627 \u06AA\u0646. \u062C\u064A\u06AA\u068F\u06BE\u0646 \u062A\u0648\u06BE\u0627\u0646 \u06A9\u064A \u0627\u0683\u0627 \u0645\u062F\u062F \u06AF\u06BE\u0631\u0628\u0644 \u0622\u06BE\u064A \u062A\u0647 \u067E\u0644\u064A\u067D \u0641\u0627\u0631\u0645 \u0627\u064A\u068A\u0645\u0646 \u0633\u0627\u0646 \u0631\u0627\u0628\u0637\u0648 \u06AA\u0631\u064A\u0648.",
+  "support.permanentNote": "\u0647\u064A \u062E\u062A\u0645 \u06AA\u0631\u06BB \u062F\u0627\u0626\u0645\u064A \u0622\u0647\u064A \u06FD \u0644\u0633\u067D \u0648\u0627\u067E\u0633 \u0646\u0647 \u0622\u06BB\u064A \u0633\u06AF\u0647\u062C\u064A. \u067D\u06AA\u064A\u067D \u0635\u0631\u0641 \u0633\u0648\u0627\u0644\u0646 \u0644\u0627\u0621\u0650 \u0622\u0647\u064A\u060C \u0648\u0627\u067E\u0633 \u0622\u06BB\u06BB \u0644\u0627\u0621\u0650 \u0646\u0647.",
+  "support.messagePlaceholder": "\u0627\u0633\u0627\u0646 \u06A9\u064A \u067B\u068C\u0627\u064A\u0648 \u0687\u0627 \u067F\u064A\u0648 \u06FD \u0687\u0648 \u062A\u0648\u06BE\u0627\u0646 \u0633\u0645\u062C\u06BE\u0648 \u067F\u0627 \u062A\u0647 \u0627\u0646 \u062C\u064A \u062C\u0627\u0626\u0632\u064A \u062C\u064A \u0636\u0631\u0648\u0631\u062A \u0622\u0647\u064A",
+  "support.messageRequired": "\u062C\u0645\u0639 \u06AA\u0631\u06BB \u06A9\u0627\u0646 \u0627\u06B3 \u067E\u064A\u063A\u0627\u0645 \u0644\u06A9\u062C\u0648",
+  "support.submit": "\u067D\u06AA\u064A\u067D \u062C\u0645\u0639 \u06AA\u0631\u064A\u0648",
+  "support.submitError": "\u067D\u06AA\u064A\u067D \u062C\u0645\u0639 \u0646\u0647 \u067F\u064A \u0633\u06AF\u0647\u064A\u0648\u060C \u0645\u0647\u0631\u0628\u0627\u0646\u064A \u06AA\u0631\u064A \u067B\u064A\u0647\u0631 \u06AA\u0648\u0634\u0634 \u06AA\u0631\u064A\u0648",
+  "support.sentTitle": "\u067D\u06AA\u064A\u067D \u062C\u0645\u0639 \u067F\u064A\u0648",
+  "support.sentMessage": "\u0627\u064A\u068A\u0645\u0646 \u0627\u0646 \u062C\u0648 \u062C\u0627\u0626\u0632\u0648 \u0648\u067A\u0646\u062F\u0648 \u06FD \u062A\u0648\u06BE\u0627\u0646 \u0633\u0627\u0646 \u0631\u0627\u0628\u0637\u0648 \u06AA\u0646\u062F\u0648."
 };
 
 // shared/locales/ta.json
@@ -9314,7 +9632,16 @@ var ta_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0B87\u0BA8\u0BCD\u0BA4 \u0B87\u0BA3\u0BC8\u0BAA\u0BCD\u0BAA\u0BC1 \u0BA4\u0BB5\u0BB1\u0BBE\u0BA9\u0BA4\u0BC1 \u0B85\u0BB2\u0BCD\u0BB2\u0BA4\u0BC1 \u0B95\u0BBE\u0BB2\u0BBE\u0BB5\u0BA4\u0BBF\u0BAF\u0BBE\u0B95\u0BBF\u0BB5\u0BBF\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
+  "support.invalidMessage": "\u0B86\u0BA4\u0BB0\u0BB5\u0BC1 \u0B9F\u0BBF\u0B95\u0BCD\u0B95\u0BC6\u0B9F\u0BCD \u0B87\u0BA3\u0BC8\u0BAA\u0BCD\u0BAA\u0BC1\u0B95\u0BB3\u0BCD 30 \u0BA8\u0BBE\u0B9F\u0BCD\u0B95\u0BB3\u0BC1\u0B95\u0BCD\u0B95\u0BC1 \u0BAA\u0BBF\u0BB1\u0B95\u0BC1 \u0B9A\u0BC6\u0BAF\u0BB2\u0BCD\u0BAA\u0B9F\u0BBE\u0BA4\u0BC1. \u0B87\u0BA9\u0BCD\u0BA9\u0BC1\u0BAE\u0BCD \u0B89\u0BA4\u0BB5\u0BBF \u0BA4\u0BC7\u0BB5\u0BC8\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BBE\u0BB2\u0BCD \u0BA4\u0BB3 \u0BA8\u0BBF\u0BB0\u0BCD\u0BB5\u0BBE\u0B95\u0BBF\u0BAF\u0BC8 \u0BA4\u0BCA\u0B9F\u0BB0\u0BCD\u0BAA\u0BC1 \u0B95\u0BCA\u0BB3\u0BCD\u0BB3\u0BC1\u0B99\u0BCD\u0B95\u0BB3\u0BCD.",
+  "support.permanentNote": "\u0B87\u0BA8\u0BCD\u0BA4 \u0BA8\u0BC0\u0B95\u0BCD\u0B95\u0BAE\u0BCD \u0BA8\u0BBF\u0BB0\u0BA8\u0BCD\u0BA4\u0BB0\u0BAE\u0BBE\u0BA9\u0BA4\u0BC1, \u0BAA\u0B9F\u0BCD\u0B9F\u0BBF\u0BAF\u0BB2\u0BC8 \u0BAE\u0BC0\u0B9F\u0BCD\u0B9F\u0BC6\u0B9F\u0BC1\u0B95\u0BCD\u0B95 \u0BAE\u0BC1\u0B9F\u0BBF\u0BAF\u0BBE\u0BA4\u0BC1. \u0B9F\u0BBF\u0B95\u0BCD\u0B95\u0BC6\u0B9F\u0BCD \u0B8E\u0BA9\u0BCD\u0BAA\u0BA4\u0BC1 \u0B87\u0BA4\u0BC8 \u0BAA\u0BB1\u0BCD\u0BB1\u0BBF\u0BAF \u0B95\u0BC7\u0BB3\u0BCD\u0BB5\u0BBF\u0B95\u0BB3\u0BC1\u0B95\u0BCD\u0B95\u0BBE\u0B95, \u0B85\u0BA4\u0BC8 \u0BAE\u0BC0\u0B9F\u0BCD\u0B9F\u0BC6\u0B9F\u0BC1\u0B95\u0BCD\u0B95 \u0B85\u0BB2\u0BCD\u0BB2.",
+  "support.messagePlaceholder": "\u0B8E\u0BA9\u0BCD\u0BA9 \u0BA8\u0B9F\u0BA8\u0BCD\u0BA4\u0BA4\u0BC1, \u0B8F\u0BA9\u0BCD \u0B87\u0BA4\u0BC1 \u0BAE\u0BB1\u0BC1\u0BAA\u0BB0\u0BBF\u0B9A\u0BC0\u0BB2\u0BA9\u0BC8 \u0B9A\u0BC6\u0BAF\u0BCD\u0BAF\u0BAA\u0BCD\u0BAA\u0B9F \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD \u0B8E\u0BA9\u0BCD\u0BB1\u0BC1 \u0BA8\u0BBF\u0BA9\u0BC8\u0B95\u0BCD\u0B95\u0BBF\u0BB1\u0BC0\u0BB0\u0BCD\u0B95\u0BB3\u0BCD \u0B8E\u0BA9\u0BCD\u0BAA\u0BA4\u0BC8 \u0B8E\u0B99\u0BCD\u0B95\u0BB3\u0BC1\u0B95\u0BCD\u0B95\u0BC1 \u0B9A\u0BCA\u0BB2\u0BCD\u0BB2\u0BC1\u0B99\u0BCD\u0B95\u0BB3\u0BCD.",
+  "support.messageRequired": "\u0B9A\u0BAE\u0BB0\u0BCD\u0BAA\u0BCD\u0BAA\u0BBF\u0B95\u0BCD\u0B95\u0BC1\u0BAE\u0BCD \u0BAE\u0BC1\u0BA9\u0BCD \u0B92\u0BB0\u0BC1 \u0B9A\u0BC6\u0BAF\u0BCD\u0BA4\u0BBF\u0BAF\u0BC8 \u0B8E\u0BB4\u0BC1\u0BA4\u0BC1\u0B99\u0BCD\u0B95\u0BB3\u0BCD.",
+  "support.submit": "\u0B9F\u0BBF\u0B95\u0BCD\u0B95\u0BC6\u0B9F\u0BCD \u0B9A\u0BAE\u0BB0\u0BCD\u0BAA\u0BCD\u0BAA\u0BBF\u0B95\u0BCD\u0B95",
+  "support.submitError": "\u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0B9F\u0BBF\u0B95\u0BCD\u0B95\u0BC6\u0B9F\u0BCD\u0B9F\u0BC8 \u0B9A\u0BAE\u0BB0\u0BCD\u0BAA\u0BCD\u0BAA\u0BBF\u0B95\u0BCD\u0B95 \u0BAE\u0BC1\u0B9F\u0BBF\u0BAF\u0BB5\u0BBF\u0BB2\u0BCD\u0BB2\u0BC8, \u0BAE\u0BC0\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD \u0BAE\u0BC1\u0BAF\u0BB1\u0BCD\u0B9A\u0BBF\u0B95\u0BCD\u0B95\u0BB5\u0BC1\u0BAE\u0BCD.",
+  "support.sentTitle": "\u0B9F\u0BBF\u0B95\u0BCD\u0B95\u0BC6\u0B9F\u0BCD \u0B9A\u0BAE\u0BB0\u0BCD\u0BAA\u0BCD\u0BAA\u0BBF\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
+  "support.sentMessage": "\u0B92\u0BB0\u0BC1 \u0BA8\u0BBF\u0BB0\u0BCD\u0BB5\u0BBE\u0B95\u0BBF \u0B87\u0BA4\u0BC8 \u0BAA\u0BB0\u0BBF\u0B9A\u0BC0\u0BB2\u0BBF\u0BA4\u0BCD\u0BA4\u0BC1 \u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BC1\u0B95\u0BCD\u0B95\u0BC1 \u0BAA\u0BA4\u0BBF\u0BB2\u0BCD \u0BB5\u0BB4\u0B99\u0BCD\u0B95\u0BC1\u0BB5\u0BBE\u0BB0\u0BCD."
 };
 
 // shared/locales/te.json
@@ -9663,7 +9990,16 @@ var te_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u0C08 \u0C32\u0C3F\u0C02\u0C15\u0C4D \u0C1A\u0C46\u0C32\u0C4D\u0C32\u0C26\u0C41 \u0C32\u0C47\u0C26\u0C3E \u0C17\u0C21\u0C41\u0C35\u0C41 \u0C2E\u0C41\u0C17\u0C3F\u0C38\u0C3F\u0C02\u0C26\u0C3F",
+  "support.invalidMessage": "\u0C38\u0C2A\u0C4B\u0C30\u0C4D\u0C1F\u0C4D \u0C1F\u0C3F\u0C15\u0C46\u0C1F\u0C4D \u0C32\u0C3F\u0C02\u0C15\u0C4D\u200C\u0C32\u0C41 30 \u0C30\u0C4B\u0C1C\u0C41\u0C32\u0C15\u0C41 \u0C24\u0C30\u0C4D\u0C35\u0C3E\u0C24 \u0C2A\u0C28\u0C3F\u0C1A\u0C47\u0C2F\u0C35\u0C41. \u0C07\u0C02\u0C15\u0C3E \u0C38\u0C39\u0C3E\u0C2F\u0C02 \u0C15\u0C3E\u0C35\u0C3E\u0C32\u0C02\u0C1F\u0C47 \u0C2A\u0C4D\u0C32\u0C3E\u0C1F\u0C4D\u200C\u0C2B\u0C3E\u0C30\u0C4D\u0C2E\u0C4D \u0C05\u0C21\u0C4D\u0C2E\u0C3F\u0C28\u0C4D\u200C\u0C28\u0C41 \u0C38\u0C02\u0C2A\u0C4D\u0C30\u0C26\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F.",
+  "support.permanentNote": "\u0C08 \u0C24\u0C4A\u0C32\u0C17\u0C3F\u0C02\u0C2A\u0C41 \u0C36\u0C3E\u0C36\u0C4D\u0C35\u0C24\u0C02, \u0C32\u0C3F\u0C38\u0C4D\u0C1F\u0C3F\u0C02\u0C17\u0C4D\u200C\u0C28\u0C41 \u0C24\u0C3F\u0C30\u0C3F\u0C17\u0C3F \u0C2A\u0C4A\u0C02\u0C26\u0C32\u0C47\u0C30\u0C41. \u0C1F\u0C3F\u0C15\u0C46\u0C1F\u0C4D\u200C\u0C32\u0C41 \u0C26\u0C40\u0C28\u0C3F\u0C2A\u0C48 \u0C2A\u0C4D\u0C30\u0C36\u0C4D\u0C28\u0C32 \u0C15\u0C4B\u0C38\u0C02, \u0C24\u0C3F\u0C30\u0C3F\u0C17\u0C3F \u0C2A\u0C4A\u0C02\u0C26\u0C21\u0C3E\u0C28\u0C3F\u0C15\u0C3F \u0C15\u0C3E\u0C26\u0C41.",
+  "support.messagePlaceholder": "\u0C0F\u0C2E\u0C48\u0C02\u0C26\u0C3F, \u0C0E\u0C02\u0C26\u0C41\u0C15\u0C41 \u0C38\u0C2E\u0C40\u0C15\u0C4D\u0C37\u0C3F\u0C02\u0C1A\u0C3E\u0C32\u0C3F \u0C05\u0C28\u0C41\u0C15\u0C41\u0C02\u0C1F\u0C41\u0C28\u0C4D\u0C28\u0C3E\u0C30\u0C41 \u0C1A\u0C46\u0C2A\u0C4D\u0C2A\u0C02\u0C21\u0C3F",
+  "support.messageRequired": "\u0C38\u0C2C\u0C4D\u0C2E\u0C3F\u0C1F\u0C4D \u0C1A\u0C47\u0C2F\u0C21\u0C3E\u0C28\u0C3F\u0C15\u0C3F \u0C2E\u0C41\u0C02\u0C26\u0C41 \u0C38\u0C02\u0C26\u0C47\u0C36\u0C3E\u0C28\u0C4D\u0C28\u0C3F \u0C30\u0C3E\u0C2F\u0C02\u0C21\u0C3F",
+  "support.submit": "\u0C1F\u0C3F\u0C15\u0C46\u0C1F\u0C4D \u0C2A\u0C02\u0C2A\u0C02\u0C21\u0C3F",
+  "support.submitError": "\u0C1F\u0C3F\u0C15\u0C46\u0C1F\u0C4D \u0C2A\u0C02\u0C2A\u0C21\u0C02\u0C32\u0C4B \u0C35\u0C3F\u0C2B\u0C32\u0C2E\u0C48\u0C02\u0C26\u0C3F, \u0C2E\u0C33\u0C4D\u0C32\u0C40 \u0C2A\u0C4D\u0C30\u0C2F\u0C24\u0C4D\u0C28\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F",
+  "support.sentTitle": "\u0C1F\u0C3F\u0C15\u0C46\u0C1F\u0C4D \u0C2A\u0C02\u0C2A\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F",
+  "support.sentMessage": "\u0C12\u0C15 \u0C05\u0C21\u0C4D\u0C2E\u0C3F\u0C28\u0C4D \u0C26\u0C40\u0C28\u0C3F\u0C28\u0C3F \u0C38\u0C2E\u0C40\u0C15\u0C4D\u0C37\u0C3F\u0C02\u0C1A\u0C3F, \u0C2E\u0C40\u0C15\u0C41 \u0C24\u0C3F\u0C30\u0C3F\u0C17\u0C3F \u0C38\u0C4D\u0C2A\u0C02\u0C26\u0C3F\u0C38\u0C4D\u0C24\u0C3E\u0C30\u0C41."
 };
 
 // shared/locales/ur.json
@@ -10012,7 +10348,16 @@ var ur_default = {
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "\u06CC\u06C1 \u0644\u0646\u06A9 \u063A\u0644\u0637 \u06C1\u06D2 \u06CC\u0627 \u0627\u0633 \u06A9\u06CC \u0645\u06CC\u0639\u0627\u062F \u062E\u062A\u0645 \u06C1\u0648 \u06AF\u0626\u06CC \u06C1\u06D2",
+  "support.invalidMessage": "\u0633\u067E\u0648\u0631\u0679 \u0679\u06A9\u0679 \u06A9\u06D2 \u0644\u0646\u06A9\u0633 30 \u062F\u0646 \u06A9\u06D2 \u0628\u0639\u062F \u06A9\u0627\u0645 \u06A9\u0631\u0646\u0627 \u0628\u0646\u062F \u06A9\u0631 \u062F\u06CC\u062A\u06D2 \u06C1\u06CC\u06BA\u06D4 \u0627\u06AF\u0631 \u0622\u067E \u06A9\u0648 \u0627\u0628\u06BE\u06CC \u0628\u06BE\u06CC \u0645\u062F\u062F \u06A9\u06CC \u0636\u0631\u0648\u0631\u062A \u06C1\u06D2 \u062A\u0648 \u067E\u0644\u06CC\u0679 \u0641\u0627\u0631\u0645 \u0627\u06CC\u0688\u0645\u0646 \u0633\u06D2 \u0631\u0627\u0628\u0637\u06C1 \u06A9\u0631\u06CC\u06BA\u06D4",
+  "support.permanentNote": "\u06CC\u06C1 \u062D\u0630\u0641 \u0645\u0633\u062A\u0642\u0644 \u06C1\u06D2 \u0627\u0648\u0631 \u0644\u0633\u0679\u0646\u06AF \u0628\u062D\u0627\u0644 \u0646\u06C1\u06CC\u06BA \u06A9\u06CC \u062C\u0627 \u0633\u06A9\u062A\u06CC\u06D4 \u0679\u06A9\u0679 \u0635\u0631\u0641 \u0627\u0633 \u06A9\u06D2 \u0628\u0627\u0631\u06D2 \u0645\u06CC\u06BA \u0633\u0648\u0627\u0644\u0627\u062A \u06A9\u06D2 \u0644\u06CC\u06D2 \u06C1\u06D2\u060C \u0648\u0627\u067E\u0633 \u0644\u0627\u0646\u06D2 \u06A9\u06D2 \u0644\u06CC\u06D2 \u0646\u06C1\u06CC\u06BA\u06D4",
+  "support.messagePlaceholder": "\u06C1\u0645\u06CC\u06BA \u0628\u062A\u0627\u0626\u06CC\u06BA \u06A9\u06CC\u0627 \u06C1\u0648\u0627 \u0627\u0648\u0631 \u0622\u067E \u06A9\u06CC\u0648\u06BA \u0633\u0645\u062C\u06BE\u062A\u06D2 \u06C1\u06CC\u06BA \u06A9\u06C1 \u0627\u0633 \u06A9\u0627 \u062C\u0627\u0626\u0632\u06C1 \u0644\u06CC\u0627 \u062C\u0627\u0646\u0627 \u0686\u0627\u06C1\u06CC\u06D2",
+  "support.messageRequired": "\u062C\u0645\u0639 \u06A9\u0631\u0627\u0646\u06D2 \u0633\u06D2 \u067E\u06C1\u0644\u06D2 \u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u06CC\u06BA",
+  "support.submit": "\u0679\u06A9\u0679 \u062C\u0645\u0639 \u06A9\u0631\u06CC\u06BA",
+  "support.submitError": "\u0622\u067E \u06A9\u0627 \u0679\u06A9\u0679 \u062C\u0645\u0639 \u0646\u06C1\u06CC\u06BA \u06C1\u0648 \u0633\u06A9\u0627\u060C \u0628\u0631\u0627\u06C1 \u06A9\u0631\u0645 \u062F\u0648\u0628\u0627\u0631\u06C1 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u06CC\u06BA",
+  "support.sentTitle": "\u0679\u06A9\u0679 \u062C\u0645\u0639 \u06C1\u0648 \u06AF\u06CC\u0627",
+  "support.sentMessage": "\u0627\u06CC\u0688\u0645\u0646 \u0627\u0633 \u06A9\u0627 \u062C\u0627\u0626\u0632\u06C1 \u0644\u06D2 \u06AF\u0627 \u0627\u0648\u0631 \u0622\u067E \u0633\u06D2 \u0631\u0627\u0628\u0637\u06C1 \u06A9\u0631\u06D2 \u06AF\u0627\u06D4"
 };
 
 // shared/locales/index.ts
@@ -11580,7 +11925,7 @@ router10.patch(
     }
     const supabase = getSupabase();
     const artisanId = req.params.id;
-    const { data, error } = await supabase.from("users").update({ is_active: parsed.data.isActive }).eq("id", artisanId).eq("role", "artisan").select("id").maybeSingle();
+    const { data, error } = await supabase.from("users").update({ is_active: parsed.data.isActive }).eq("id", artisanId).eq("role", "artisan").select("id, email").maybeSingle();
     if (error) throw new Error(`Could not update the artisan: ${error.message}`);
     if (!data) {
       res.status(404).json({ error: "Artisan not found" });
@@ -11589,6 +11934,12 @@ router10.patch(
     await recordAudit(req.uid, parsed.data.isActive ? "artisan.reactivate" : "artisan.deactivate", "users", artisanId, {
       reason: parsed.data.reason
     });
+    if (!parsed.data.isActive) {
+      const reason = parsed.data.reason ?? "No reason was given.";
+      const ticketToken = signTicketToken({ sub: artisanId, ticketType: "deactivation", context: reason });
+      const ticketUrl = `${loadEnv().PUBLIC_APP_URL}/support/ticket?token=${ticketToken}`;
+      await sendDeactivationEmail({ artisanEmail: data.email, reason, ticketUrl });
+    }
     res.json({ success: true });
   })
 );
@@ -11702,6 +12053,7 @@ router10.delete(
     const product = await loadProductOr404(productId, res);
     if (!product) return;
     const supabase = getSupabase();
+    const { data: artisan } = await supabase.from("users").select("email").eq("id", product.user_id).maybeSingle();
     const { error } = await supabase.from("products").delete().eq("id", productId);
     if (error) throw new Error(`Could not delete the product: ${error.message}`);
     await supabase.rpc("increment_total_products", { target_user: product.user_id, delta: -1 });
@@ -11709,6 +12061,24 @@ router10.delete(
       reason: parsed.data.reason,
       metadata: { artisanId: product.user_id, titleEn: product.title_en }
     });
+    if (artisan?.email) {
+      const ticketToken = signTicketToken({
+        sub: product.user_id,
+        ticketType: "product_removal",
+        context: `${product.title_en} | ${parsed.data.reason}`
+      });
+      const ticketUrl = `${loadEnv().PUBLIC_APP_URL}/support/ticket?token=${ticketToken}`;
+      await sendProductRemovedEmail({
+        artisanEmail: artisan.email,
+        productTitle: product.title_en,
+        reason: parsed.data.reason,
+        ticketUrl
+      });
+    } else {
+      console.warn("[moderation] could not resolve an email for the artisan, skipping product removal notification", {
+        productId
+      });
+    }
     res.json({ success: true });
   })
 );
@@ -11758,6 +12128,74 @@ router10.get(
       createdAt: row.created_at
     }));
     res.json(entries);
+  })
+);
+router10.get(
+  "/tickets",
+  asyncRoute(async (req, res) => {
+    const status = req.query.status === "resolved" ? "resolved" : req.query.status === "all" ? void 0 : "open";
+    const supabase = getSupabase();
+    let query = supabase.from("support_tickets").select("id, artisan_id, ticket_type, context, message, status, admin_response, resolved_at, created_at").order("created_at", { ascending: false });
+    if (status) query = query.eq("status", status);
+    const { data, error } = await query;
+    if (error) throw new Error(`Could not load tickets: ${error.message}`);
+    const rows = data;
+    const artisanIds = [...new Set(rows.map((row) => row.artisan_id))];
+    let artisanById = /* @__PURE__ */ new Map();
+    if (artisanIds.length > 0) {
+      const { data: artisans, error: artisansError } = await supabase.from("users").select("id, email, display_name, is_active").in("id", artisanIds);
+      if (artisansError) throw new Error(`Could not load ticket artisans: ${artisansError.message}`);
+      artisanById = new Map(
+        (artisans ?? []).map((artisan) => [
+          artisan.id,
+          { email: artisan.email, display_name: artisan.display_name, is_active: artisan.is_active }
+        ])
+      );
+    }
+    const tickets = rows.map((row) => {
+      const artisan = artisanById.get(row.artisan_id);
+      return {
+        ticketId: row.id,
+        artisanId: row.artisan_id,
+        artisanEmail: artisan?.email ?? "",
+        artisanDisplayName: artisan?.display_name ?? null,
+        ticketType: row.ticket_type,
+        context: row.context,
+        message: row.message,
+        status: row.status,
+        adminResponse: row.admin_response,
+        artisanIsActive: artisan?.is_active ?? true,
+        createdAt: row.created_at,
+        resolvedAt: row.resolved_at
+      };
+    });
+    res.json(tickets);
+  })
+);
+var ResolveTicketSchema = z11.object({
+  response: z11.string().trim().max(2e3).optional()
+});
+router10.patch(
+  "/tickets/:id/resolve",
+  asyncRoute(async (req, res) => {
+    const parsed = ResolveTicketSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const { data, error } = await getSupabase().from("support_tickets").update({
+      status: "resolved",
+      admin_response: parsed.data.response ?? null,
+      resolved_at: (/* @__PURE__ */ new Date()).toISOString(),
+      resolved_by: req.uid
+    }).eq("id", req.params.id).select("id").maybeSingle();
+    if (error) throw new Error(`Could not resolve the ticket: ${error.message}`);
+    if (!data) {
+      res.status(404).json({ error: "Ticket not found" });
+      return;
+    }
+    await recordAudit(req.uid, "ticket.resolve", "support_tickets", req.params.id);
+    res.json({ success: true });
   })
 );
 var internalConsole_default = router10;
@@ -11919,6 +12357,63 @@ function buildDailySeries(timestamps) {
 }
 var analytics_default = router12;
 
+// server/routes/tickets.ts
+import { Router as Router13 } from "express";
+import { z as z13 } from "zod";
+var router13 = Router13();
+var TICKET_TYPE_LABEL = {
+  deactivation: "Your account was deactivated",
+  product_removal: "One of your listings was removed"
+};
+var RaiseTicketSchema = z13.object({
+  token: z13.string().min(1),
+  message: z13.string().trim().min(1).max(2e3)
+});
+router13.post(
+  "/",
+  asyncRoute(async (req, res) => {
+    const parsed = RaiseTicketSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    let claims;
+    try {
+      claims = verifyTicketToken(parsed.data.token);
+    } catch {
+      res.status(400).json({ error: "invalid_or_expired_link" });
+      return;
+    }
+    const { data, error } = await getSupabase().from("support_tickets").insert({
+      artisan_id: claims.sub,
+      ticket_type: claims.ticketType,
+      context: claims.context ?? null,
+      message: parsed.data.message
+    }).select("id").single();
+    if (error) throw new Error(`Could not save the ticket: ${error.message}`);
+    res.status(201).json({ ticketId: data.id });
+  })
+);
+router13.get(
+  "/preview",
+  asyncRoute(async (req, res) => {
+    const token = req.query.token ?? "";
+    let claims;
+    try {
+      claims = verifyTicketToken(token);
+    } catch {
+      res.status(400).json({ error: "invalid_or_expired_link" });
+      return;
+    }
+    res.json({
+      ticketType: claims.ticketType,
+      title: TICKET_TYPE_LABEL[claims.ticketType] ?? "Contact support",
+      context: claims.context ?? null
+    });
+  })
+);
+var tickets_default = router13;
+
 // server/app.ts
 var app = express();
 app.use(cors({ origin: true }));
@@ -11935,6 +12430,7 @@ app.use("/api/inquiries", inquiries_default);
 app.use("/api/internal/console", internalConsole_default);
 app.use("/api/passport", passport_default);
 app.use("/api/analytics", analytics_default);
+app.use("/api/tickets", tickets_default);
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });
 });

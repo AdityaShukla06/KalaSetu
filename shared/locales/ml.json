@@ -343,5 +343,14 @@
   "passport.scanHint": "Scan to view this passport online",
   "passport.notFoundTitle": "Passport not found",
   "passport.notFoundMessage": "This heritage passport doesn't exist, or the listing is no longer public.",
-  "passport.loadError": "Could not load this passport"
+  "passport.loadError": "Could not load this passport",
+  "support.invalidTitle": "ഈ ലിങ്ക് അസാധുവാണ് അല്ലെങ്കിൽ കാലഹരണപ്പെട്ടു",
+  "support.invalidMessage": "സപ്പോർട്ട് ടിക്കറ്റ് ലിങ്കുകൾ 30 ദിവസത്തിന് ശേഷം പ്രവർത്തിക്കില്ല. നിങ്ങൾക്ക് സഹായം ആവശ്യമുണ്ടെങ്കിൽ പ്ലാറ്റ്ഫോം അഡ്മിനുമായി ബന്ധപ്പെടുക.",
+  "support.permanentNote": "ഈ നീക്കം സ്ഥിരമാണ്, ലിസ്റ്റിംഗ് തിരികെ കൊണ്ടുവരാൻ കഴിയില്ല. ടിക്കറ്റ് ചോദ്യം ചെയ്യാൻ ആണ്, തിരികെ ലഭിക്കാൻ അല്ല.",
+  "support.messagePlaceholder": "എന്താണ് സംഭവിച്ചത്, എന്തുകൊണ്ട് ഇത് പരിശോധിക്കണം എന്ന് ഞങ്ങളോട് പറയൂ.",
+  "support.messageRequired": "സമർപ്പിക്കുന്നതിന് മുമ്പ് ഒരു സന്ദേശം എഴുതുക.",
+  "support.submit": "ടിക്കറ്റ് സമർപ്പിക്കുക",
+  "support.submitError": "ടിക്കറ്റ് സമർപ്പിക്കാൻ കഴിഞ്ഞില്ല, ദയവായി വീണ്ടും ശ്രമിക്കുക.",
+  "support.sentTitle": "ടിക്കറ്റ് സമർപ്പിച്ചു",
+  "support.sentMessage": "ഒരു അഡ്മിൻ ഇത് പരിശോധിച്ച് നിങ്ങളെ ബന്ധപ്പെടും."
 }

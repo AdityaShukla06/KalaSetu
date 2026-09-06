@@ -4,6 +4,9 @@ import { requireAdminOr404 } from "../middleware/requireAdminOr404";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
 import { recordAudit } from "../lib/auditLog";
+import { sendDeactivationEmail, sendProductRemovedEmail } from "../lib/mailer";
+import { signTicketToken } from "../lib/jwt";
+import { loadEnv } from "../lib/env";
 import { toProduct, PRODUCT_COLUMNS, ProductRow } from "./products";
 import {
   ConsoleArtisan,
@@ -13,6 +16,7 @@ import {
   AuditLogEntry,
   FlaggedListing,
   FlaggedListingsResult,
+  SupportTicket,
 } from "../types";
 
 const router = Router();
@@ -195,7 +199,7 @@ router.patch(
       .update({ is_active: parsed.data.isActive })
       .eq("id", artisanId)
       .eq("role", "artisan")
-      .select("id")
+      .select("id, email")
       .maybeSingle();
 
     if (error) throw new Error(`Could not update the artisan: ${error.message}`);
@@ -207,6 +211,13 @@ router.patch(
     await recordAudit(req.uid, parsed.data.isActive ? "artisan.reactivate" : "artisan.deactivate", "users", artisanId, {
       reason: parsed.data.reason,
     });
+
+    if (!parsed.data.isActive) {
+      const reason = parsed.data.reason ?? "No reason was given.";
+      const ticketToken = signTicketToken({ sub: artisanId, ticketType: "deactivation", context: reason });
+      const ticketUrl = `${loadEnv().PUBLIC_APP_URL}/support/ticket?token=${ticketToken}`;
+      await sendDeactivationEmail({ artisanEmail: data.email, reason, ticketUrl });
+    }
 
     res.json({ success: true });
   }),
@@ -368,6 +379,8 @@ router.delete(
     if (!product) return;
 
     const supabase = getSupabase();
+    const { data: artisan } = await supabase.from("users").select("email").eq("id", product.user_id).maybeSingle();
+
     const { error } = await supabase.from("products").delete().eq("id", productId);
     if (error) throw new Error(`Could not delete the product: ${error.message}`);
 
@@ -376,6 +389,25 @@ router.delete(
       reason: parsed.data.reason,
       metadata: { artisanId: product.user_id, titleEn: product.title_en },
     });
+
+    if (artisan?.email) {
+      const ticketToken = signTicketToken({
+        sub: product.user_id,
+        ticketType: "product_removal",
+        context: `${product.title_en} | ${parsed.data.reason}`,
+      });
+      const ticketUrl = `${loadEnv().PUBLIC_APP_URL}/support/ticket?token=${ticketToken}`;
+      await sendProductRemovedEmail({
+        artisanEmail: artisan.email,
+        productTitle: product.title_en,
+        reason: parsed.data.reason,
+        ticketUrl,
+      });
+    } else {
+      console.warn("[moderation] could not resolve an email for the artisan, skipping product removal notification", {
+        productId,
+      });
+    }
 
     res.json({ success: true });
   }),
@@ -448,6 +480,110 @@ router.get(
     }));
 
     res.json(entries);
+  }),
+);
+
+interface TicketRow {
+  id: string;
+  artisan_id: string;
+  ticket_type: "deactivation" | "product_removal";
+  context: string | null;
+  message: string;
+  status: "open" | "resolved";
+  admin_response: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+router.get(
+  "/tickets",
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const status = req.query.status === "resolved" ? "resolved" : req.query.status === "all" ? undefined : "open";
+    const supabase = getSupabase();
+
+    let query = supabase
+      .from("support_tickets")
+      .select("id, artisan_id, ticket_type, context, message, status, admin_response, resolved_at, created_at")
+      .order("created_at", { ascending: false });
+    if (status) query = query.eq("status", status);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`Could not load tickets: ${error.message}`);
+
+    const rows = data as TicketRow[];
+    const artisanIds = [...new Set(rows.map((row) => row.artisan_id))];
+
+    let artisanById = new Map<string, { email: string; display_name: string | null; is_active: boolean }>();
+    if (artisanIds.length > 0) {
+      const { data: artisans, error: artisansError } = await supabase
+        .from("users")
+        .select("id, email, display_name, is_active")
+        .in("id", artisanIds);
+      if (artisansError) throw new Error(`Could not load ticket artisans: ${artisansError.message}`);
+      artisanById = new Map(
+        (artisans ?? []).map((artisan) => [
+          artisan.id as string,
+          { email: artisan.email as string, display_name: artisan.display_name, is_active: artisan.is_active },
+        ]),
+      );
+    }
+
+    const tickets: SupportTicket[] = rows.map((row) => {
+      const artisan = artisanById.get(row.artisan_id);
+      return {
+        ticketId: row.id,
+        artisanId: row.artisan_id,
+        artisanEmail: artisan?.email ?? "",
+        artisanDisplayName: artisan?.display_name ?? null,
+        ticketType: row.ticket_type,
+        context: row.context,
+        message: row.message,
+        status: row.status,
+        adminResponse: row.admin_response,
+        artisanIsActive: artisan?.is_active ?? true,
+        createdAt: row.created_at,
+        resolvedAt: row.resolved_at,
+      };
+    });
+
+    res.json(tickets);
+  }),
+);
+
+const ResolveTicketSchema = z.object({
+  response: z.string().trim().max(2000).optional(),
+});
+
+router.patch(
+  "/tickets/:id/resolve",
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const parsed = ResolveTicketSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("support_tickets")
+      .update({
+        status: "resolved",
+        admin_response: parsed.data.response ?? null,
+        resolved_at: new Date().toISOString(),
+        resolved_by: req.uid,
+      })
+      .eq("id", req.params.id as string)
+      .select("id")
+      .maybeSingle();
+
+    if (error) throw new Error(`Could not resolve the ticket: ${error.message}`);
+    if (!data) {
+      res.status(404).json({ error: "Ticket not found" });
+      return;
+    }
+
+    await recordAudit(req.uid, "ticket.resolve", "support_tickets", req.params.id as string);
+
+    res.json({ success: true });
   }),
 );
 
