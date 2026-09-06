@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "You haven't sent any inquiries yet. Browse the marketplace to find products.",
   "marketplace.inquiryProductRemoved": "This product is no longer available",
   "marketplace.inquiryStatusOpen": "Awaiting reply",
+  "marketplace.inquiryStatusOpenResponded": "Open",
   "marketplace.inquiryStatusClosed": "Closed",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "The artisan marked this as responded.",

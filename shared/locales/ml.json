@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "നിങ്ങൾ ഇതുവരെ ചോദനകൾ അയച്ചിട്ടില്ല. ഉൽപ്പന്നങ്ങൾ കണ്ടെത്താൻ മാർക്കറ്റ്‌പ്ലേസ് ബ്രൗസ് ചെയ്യൂ.",
   "marketplace.inquiryProductRemoved": "ഈ ഉൽപ്പന്നം ഇനി ലഭ്യമല്ല",
   "marketplace.inquiryStatusOpen": "മറുപടി കാത്തിരിക്കുന്നു",
+  "marketplace.inquiryStatusOpenResponded": "തുറന്ന",
   "marketplace.inquiryStatusClosed": "അടഞ്ഞു",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "കലാകാരന്‍ ഇതിനെ മറുപടി നല്‍കിയതായി അടയാളപ്പെടുത്തി",

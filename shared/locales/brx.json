@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "आँइनि सोंथाय थांनाय नाय दिहाय। बजारनि बिसराय बिसाबाय।",
   "marketplace.inquiryProductRemoved": "हाबा बिसर अबा नाय थां",
   "marketplace.inquiryStatusOpen": "जवाबनि थां",
+  "marketplace.inquiryStatusOpenResponded": "खोलो",
   "marketplace.inquiryStatusClosed": "बंद",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "कारीगर एहा बिसराय बिथाय",

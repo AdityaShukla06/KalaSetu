@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "మీరు ఇంకా విచారణలు పంపలేదు. ఉత్పత్తులను కనుగొనడానికి మార్కెట్‌ప్లేస్‌ను బ్రౌజ్ చేయండి.",
   "marketplace.inquiryProductRemoved": "ఈ ఉత్పత్తి ఇక అందుబాటులో లేదు",
   "marketplace.inquiryStatusOpen": "ప్రతిస్పందన కోసం వేచివుంది",
+  "marketplace.inquiryStatusOpenResponded": "తెరిచింది",
   "marketplace.inquiryStatusClosed": "మూసివేయబడింది",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "కారిగరుడు దీనిని ప్రతిస్పందించబడిందిగా గుర్తించారు",

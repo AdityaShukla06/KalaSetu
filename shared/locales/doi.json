@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "तुस्सी अभी तक कोई पूछताछ नहीं भेजी। मार्केट विच प्रोडक्ट लबो।",
   "marketplace.inquiryProductRemoved": "ए प्रोडक्ट अब नहीं मिलदा",
   "marketplace.inquiryStatusOpen": "जवाब दा इंतजार",
+  "marketplace.inquiryStatusOpenResponded": "खुल्ला",
   "marketplace.inquiryStatusClosed": "बंद",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "कारीगर ने इसनू जवाब दिया चिन्हित किया",

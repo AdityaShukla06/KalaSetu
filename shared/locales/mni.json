@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "ꯅꯤ ꯊꯕꯤ ꍑꯁꯤ ꍑꯁꯤ. ꯃꯔꯀꯦꯠ ꯊꯕꯤ ꍑꯁꯤ ꍑꯁꯤ.",
   "marketplace.inquiryProductRemoved": "ꯊꯕꯤ ꯍꯟꯕꯤ ꍑꯁꯤ",
   "marketplace.inquiryStatusOpen": "ꯍꯟꯕꯤ ꯊꯕꯤ",
+  "marketplace.inquiryStatusOpenResponded": "ꯑꯣꯞ",
   "marketplace.inquiryStatusClosed": "ꯍꯟꯕꯤ ꍑꯁꯤ",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "ꯃꯤꯇꯩꯂꯣꯟ",

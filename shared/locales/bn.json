@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "আপনি এখনো কোনো অনুসন্ধান পাঠাননি। পণ্য খুঁজতে মার্কেটপ্লেস ব্রাউজ করুন।",
   "marketplace.inquiryProductRemoved": "এই পণ্যটি আর উপলব্ধ নয়",
   "marketplace.inquiryStatusOpen": "উত্তরের অপেক্ষায়",
+  "marketplace.inquiryStatusOpenResponded": "খোলা",
   "marketplace.inquiryStatusClosed": "বন্ধ",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "শিল্পী এটি উত্তর দেওয়া হিসেবে চিহ্নিত করেছেন।",

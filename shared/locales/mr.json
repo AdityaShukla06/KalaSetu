@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "तुम्ही अजून कोणतीही चौकशी पाठवली नाही. उत्पादनं शोधण्यासाठी मार्केटप्लेस बघा.",
   "marketplace.inquiryProductRemoved": "हे उत्पादन आता उपलब्ध नाही",
   "marketplace.inquiryStatusOpen": "प्रतिसादाची वाट पाहत आहे",
+  "marketplace.inquiryStatusOpenResponded": "उघडलेले",
   "marketplace.inquiryStatusClosed": "बंद",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "कलाकाराने हे उत्तर दिले म्हणून चिन्हांकित केले आहे.",

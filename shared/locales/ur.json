@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "آپ نے ابھی تک کوئی استفسار نہیں بھیجا۔ مارکیٹ پلیس دیکھیں۔",
   "marketplace.inquiryProductRemoved": "یہ مصنوعات اب دستیاب نہیں ہے",
   "marketplace.inquiryStatusOpen": "جواب کا انتظار",
+  "marketplace.inquiryStatusOpenResponded": "کھلا",
   "marketplace.inquiryStatusClosed": "بند",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "کاریگر نے اسے جواب شدہ نشان لگایا۔",

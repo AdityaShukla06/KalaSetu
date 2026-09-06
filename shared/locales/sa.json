@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "त्वं अद्यापि प्रश्नं न प्रेषितवान्। उत्पादनेषु खोज्यं बाजारम् अन्वेष्टु।",
   "marketplace.inquiryProductRemoved": "उत्पादनम् इदानीं न उपलब्धम्",
   "marketplace.inquiryStatusOpen": "उत्तरस्य प्रतीक्षा",
+  "marketplace.inquiryStatusOpenResponded": "उद्घटित",
   "marketplace.inquiryStatusClosed": "समाप्तम्",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "शिल्पी इदं प्रत्युत्तरितम् इति चिन्हितवान्",

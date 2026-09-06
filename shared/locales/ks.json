@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "توہند ہنوز کُچھ پوچھ گچھ نہ بھیژن۔ مارکیٹ سُند پروڈکٹ براؤز کرن ہند۔",
   "marketplace.inquiryProductRemoved": "یہ پروڈکٹ ہنوز دستیاب نہ چھُ",
   "marketplace.inquiryStatusOpen": "جواب انتظاری",
+  "marketplace.inquiryStatusOpenResponded": "کھُل",
   "marketplace.inquiryStatusClosed": "بند",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "کارگَر ہیہ جواب دِتھ نشان لگاو",

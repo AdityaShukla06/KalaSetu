@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "तुमी अजून प्रश्न पाठवले न्हय. बाजारात उत्पादनां बघा.",
   "marketplace.inquiryProductRemoved": "हें उत्पादन आता उपलब्ध न्हय",
   "marketplace.inquiryStatusOpen": "उत्तरा वाटता",
+  "marketplace.inquiryStatusOpenResponded": "उघडले",
   "marketplace.inquiryStatusClosed": "बंद",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "कलाकार ह्याचें उत्तर दिले म्हणून चिन्हांकित केलं",

@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "আপুনি এতিয়ালৈকে কোনো অনুসন্ধান পঠাইনি। বজাৰত ঘুৰি সামগ্ৰী বিচাৰক।",
   "marketplace.inquiryProductRemoved": "এই সামগ্ৰীটো এতিয়া উপলব্ধ নহয়",
   "marketplace.inquiryStatusOpen": "উত্তৰৰ অপেক্ষা",
+  "marketplace.inquiryStatusOpenResponded": "খোলা",
   "marketplace.inquiryStatusClosed": "বন্ধ",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "শিল্পীই উত্তৰ দিয়া বুলি চিহ্নিত কৰিছে।",

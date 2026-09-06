@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "நீங்கள் இதுவரை விசாரணை அனுப்பவில்லை. தயாரிப்புகளை கண்டறிய சந்தையைப் பாருங்கள்.",
   "marketplace.inquiryProductRemoved": "இந்த தயாரிப்பு இனி கிடைக்காது",
   "marketplace.inquiryStatusOpen": "பதில் காத்திருக்கிறது",
+  "marketplace.inquiryStatusOpenResponded": "திறந்தது",
   "marketplace.inquiryStatusClosed": "மூடப்பட்டது",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "கைவினையாளர் இதை பதிலளிக்கப்பட்டதாக குறித்தார்",

@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "તમે હજી સુધી કોઈ પૂછપરછ મોકલી નથી. ઉત્પાદનો શોધવા માટે માર્કેટપ્લેસ બ્રાઉઝ કરો.",
   "marketplace.inquiryProductRemoved": "આ ઉત્પાદન હવે ઉપલબ્ધ નથી",
   "marketplace.inquiryStatusOpen": "જવાબની રાહમાં",
+  "marketplace.inquiryStatusOpenResponded": "ખુલ્લું",
   "marketplace.inquiryStatusClosed": "બંધ",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "કારિગરએ આને પ્રતિસાદિત તરીકે ચિહ્નિત કર્યું",

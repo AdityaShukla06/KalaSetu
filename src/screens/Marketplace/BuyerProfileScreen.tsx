@@ -27,10 +27,10 @@ function RetryIcon() {
   );
 }
 
-const STATUS_LABEL_KEY: Record<Inquiry["status"], string> = {
-  open: "marketplace.inquiryStatusOpen",
-  closed: "marketplace.inquiryStatusClosed",
-};
+function statusLabelKey(inquiry: Inquiry): string {
+  if (inquiry.status === "closed") return "marketplace.inquiryStatusClosed";
+  return inquiry.respondedAt ? "marketplace.inquiryStatusOpenResponded" : "marketplace.inquiryStatusOpen";
+}
 
 export function BuyerProfileScreen() {
   const { language, t } = useLanguage();
@@ -205,7 +205,7 @@ export function BuyerProfileScreen() {
                     )}
                     <div className="inquiry-list-badges">
                       <span className={`inquiry-status inquiry-status-${inquiry.status}`}>
-                        {t(STATUS_LABEL_KEY[inquiry.status])}
+                        {t(statusLabelKey(inquiry))}
                       </span>
                       {inquiry.respondedAt && (
                         <span className="inquiry-status inquiry-status-responded">

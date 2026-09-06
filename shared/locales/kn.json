@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "ನೀವು ಇನ್ನೂ ಯಾವುದೇ ವಿಚಾರಣೆ ಕಳುಹಿಸಿಲ್ಲ. ಉತ್ಪನ್ನಗಳನ್ನು ಹುಡುಕಲು ಮಾರುಕಟ್ಟೆಗೆ ಹೋಗಿ.",
   "marketplace.inquiryProductRemoved": "ಈ ಉತ್ಪನ್ನ ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ",
   "marketplace.inquiryStatusOpen": "ಉತ್ತರಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ",
+  "marketplace.inquiryStatusOpenResponded": "ತೆರೆದ",
   "marketplace.inquiryStatusClosed": "ಮುಚ್ಚಲಾಗಿದೆ",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "ಕಲಾಕಾರ ಇದನ್ನು ಉತ್ತರಿಸಿದಂತೆ ಗುರುತಿಸಿದ್ದಾರೆ",

@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "ਤੁਸੀਂ ਹਾਲੇ ਕੋਈ ਪੁੱਛਗਿੱਛ ਨਹੀਂ ਭੇਜੀ। ਉਤਪਾਦ ਲੱਭਣ ਲਈ ਮਾਰਕੀਟਪਲੇਸ ਵੇਖੋ।",
   "marketplace.inquiryProductRemoved": "ਇਹ ਉਤਪਾਦ ਹੁਣ ਉਪਲਬਧ ਨਹੀਂ",
   "marketplace.inquiryStatusOpen": "ਜਵਾਬ ਦੀ ਉਡੀਕ",
+  "marketplace.inquiryStatusOpenResponded": "ਖੁੱਲ੍ਹਾ",
   "marketplace.inquiryStatusClosed": "ਬੰਦ",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "ਕਾਰੀਗਰ ਨੇ ਇਸ ਨੂੰ ਜਵਾਬ ਦਿੱਤਾ ਹੋਇਆ ਚਿੰਨ੍ਹਿਆ ਹੈ।",

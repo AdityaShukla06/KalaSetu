@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "आपने अभी तक कोई पूछताछ नहीं भेजी है। उत्पाद खोजने के लिए मार्केटप्लेस देखें।",
   "marketplace.inquiryProductRemoved": "यह उत्पाद अब उपलब्ध नहीं है",
   "marketplace.inquiryStatusOpen": "जवाब का इंतजार",
+  "marketplace.inquiryStatusOpenResponded": "खुला",
   "marketplace.inquiryStatusClosed": "बंद",
   "marketplace.inquiryResponded": "कारीगर ने जवाब दिया",
   "marketplace.inquiryRespondedNoText": "कारीगर ने इसे उत्तर दिया हुआ चिह्नित किया",

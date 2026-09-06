@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "ଆପଣ ଏପର୍ଯ୍ୟନ୍ତ ପ୍ରଶ୍ନ ପଠାଇନାହାନ୍ତି। ପ୍ରୋଡକ୍ଟ ଖୋଜିବା ପାଇଁ ବଜାର ଦେଖନ୍ତୁ।",
   "marketplace.inquiryProductRemoved": "ଏହି ପ୍ରୋଡକ୍ଟ ଆଉ ଉପଲବ୍ଧ ନାହିଁ",
   "marketplace.inquiryStatusOpen": "ଉତ୍ତର ଅପେକ୍ଷାରତ",
+  "marketplace.inquiryStatusOpenResponded": "ଖୋଲା",
   "marketplace.inquiryStatusClosed": "ବନ୍ଦ",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "କାରିଗର ଏହାକୁ ଉତ୍ତରିତ ଭାବେ ଚିହ୍ନିତ କଲେ",

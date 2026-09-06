@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "توھان اڃا ڪو به استفسار نه موڪليو آھي. مارڪيٽ ۾ گھميو ۽ شيون ڳوليو.",
   "marketplace.inquiryProductRemoved": "ھي پراڊڪٽ ھاڻي دستياب ناھي",
   "marketplace.inquiryStatusOpen": "جواب جي انتظار",
+  "marketplace.inquiryStatusOpenResponded": "کُلهُ",
   "marketplace.inquiryStatusClosed": "بند",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "ڪاريگر ان کي جواب ٿيل نشان لڳايو.",

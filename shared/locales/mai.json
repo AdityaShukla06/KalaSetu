@@ -297,6 +297,7 @@
   "marketplace.noInquiries": "अहां एखन धरि कोनो पूछताछ नहि पठेलहुँ। उत्पाद खोजय लेल मार्केटप्लेस देखू।",
   "marketplace.inquiryProductRemoved": "ई उत्पाद अब उपलब्ध नहि अछि",
   "marketplace.inquiryStatusOpen": "जवाबक प्रतीक्षा",
+  "marketplace.inquiryStatusOpenResponded": "खुलल",
   "marketplace.inquiryStatusClosed": "बंद",
   "marketplace.inquiryResponded": "Artisan responded",
   "marketplace.inquiryRespondedNoText": "कारीगर एही केँ उत्तर देल गेल चिन्हित कएलन्हि।",
