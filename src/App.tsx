@@ -8,6 +8,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppBanners } from "./components/AppBanners";
 import { LoginScreen } from "./screens/Onboarding/LoginScreen";
 import { HomeScreen } from "./screens/Home/HomeScreen";
+import { AddProductLayout } from "./screens/AddProduct/AddProductLayout";
 import { AddProductScreen } from "./screens/AddProduct/AddProductScreen";
 import { VoiceDescribeScreen } from "./screens/AddProduct/VoiceDescribeScreen";
 import { HeritageDetailsScreen } from "./screens/AddProduct/HeritageDetailsScreen";
@@ -104,10 +105,12 @@ function App() {
               </Route>
 
               <Route element={<RequireRole role="artisan" />}>
-                <Route path="/add-product/photo" element={<AddProductScreen />} />
-                <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
-                <Route path="/add-product/heritage" element={<HeritageDetailsScreen />} />
-                <Route path="/add-product/price" element={<PricingScreen />} />
+                <Route element={<AddProductLayout />}>
+                  <Route path="/add-product/photo" element={<AddProductScreen />} />
+                  <Route path="/add-product/describe" element={<VoiceDescribeScreen />} />
+                  <Route path="/add-product/heritage" element={<HeritageDetailsScreen />} />
+                  <Route path="/add-product/price" element={<PricingScreen />} />
+                </Route>
 
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<HomeScreen />} />

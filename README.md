@@ -184,7 +184,7 @@ The artisan side was built mobile-first and stayed that way, so on a laptop it w
 
 **Using the space, rather than just stretching into it.** My Shop's product grid goes from a fixed 2 columns to `auto-fill` at a 220px minimum (4 to 5 across on a laptop), the product detail bottom sheet becomes a centred modal, Analytics' stat cards go 2 across to 4 across, and the inquiry inbox becomes a 2-column card grid. Text-and-form screens deliberately do **not** stretch: Profile is capped at a readable 560px column (`.artisan-form-column`), because a full-width text input at 1180px is worse, not better.
 
-**The add-product flow is deliberately left at mobile width.** It is a camera-first, one-decision-per-screen capture wizard; widening it would mean redesigning every step for a shape it was never meant to have, and a centred narrow column is the normal, correct treatment for that kind of flow on desktop. That is a scope decision, not an oversight.
+**The add-product flow is responsive too**, via its own `AddProductLayout` wrapper (the same `--shell-max-width: none` pattern as every other layout) so it isn't accidentally stuck at the 390px mobile default the way an unwrapped route otherwise would be. It stays a centred column on desktop rather than stretching edge to edge: the camera preview and before/after compare cap at a natural photo width, the enhancement studio's two tiles get more breathing room, and every text/form step (category, description, heritage details, pricing) caps at the same 560px reading width used elsewhere. On a phone none of this changes anything, same as every other responsive pass in this app.
 
 ## Buyer-to-artisan inquiries
 
@@ -275,6 +275,8 @@ Fix any of them by editing the JSON directly. The generator will not overwrite a
 The six `category.*` labels get the most scrutiny, because they are also used as product titles. Several were wrong on inspection and have been corrected by hand: Tamil rendered pottery as limestone, Gujarati rendered jewellery as "deep", Telugu rendered woodwork as banyan, and Bengali, Marathi, Urdu and Malayalam all mistranslated cane. Others may still be wrong in languages nobody on the team reads.
 
 A product stores English plus the artisan's own language, with the language recorded alongside it, so a listing can always be shown in both. Speech is not restricted to the app's list: the artisan can speak anything the model can hear, and the detected language never gates the request. Urdu, Sindhi and Kashmiri render right to left.
+
+**The English/local language tab pair only shows up when there's actually a choice.** [`src/components/LanguageTabs.tsx`](src/components/LanguageTabs.tsx) returns nothing at all when the artisan's chosen language is English, rather than rendering two tabs both labelled "English" side by side: `titleLocal`/`descriptionLocal` are identical to their English counterparts for an English-speaking artisan, so a switcher between two copies of the same text has nothing to switch between. Every screen using it (description review, My Shop's edit sheet, the buyer's product detail) already defaults its own tab state to `"en"` for exactly this case, so hiding the switcher needs no other change.
 
 ## Swapping the AI provider
 
@@ -374,7 +376,7 @@ Background removal defaults to `BACKGROUND_REMOVAL_PROVIDER=none`, which means t
 
 **Catalog.** Products load from Postgres newest first. The detail sheet edits price and description in place, and delete asks for confirmation first.
 
-**Offline and install.** A custom install prompt on `beforeinstallprompt`, an offline banner, and a cache-first app shell so cached screens and a hard refresh keep working with no network.
+**Offline and install.** A custom install prompt on `beforeinstallprompt`, an offline banner, and a cache-first app shell so cached screens and a hard refresh keep working with no network. The manifest's `orientation` is `"any"`, not `"portrait"`: an installed PWA that locks orientation can't rotate to landscape anywhere, including the camera capture screen, where that's actively unhelpful for photographing a larger product.
 
 ## Contributing
 

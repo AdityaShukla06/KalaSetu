@@ -232,6 +232,7 @@
 }
 
 .heritage-subtitle {
+  margin-top: var(--space-2);
   margin-bottom: var(--space-5);
 }
 
@@ -300,4 +301,15 @@
 .description-sync-failed {
   color: var(--color-error, #b3261e);
   font-weight: 600;
+}
+
+@media (min-width: 900px) {
+  .describe-screen {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .category-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
 }

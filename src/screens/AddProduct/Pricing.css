@@ -190,3 +190,11 @@
   font-size: var(--text-body-s-size);
   line-height: 20px;
 }
+
+@media (min-width: 900px) {
+  .pricing-screen,
+  .pricing-success {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+}

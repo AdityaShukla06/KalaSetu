@@ -251,3 +251,29 @@
   color: var(--color-text-muted);
 }
 
+@media (min-width: 900px) {
+  .camera-screen,
+  .camera-fallback,
+  .camera-loading {
+    height: 100vh;
+  }
+
+  .camera-video {
+    max-width: 480px;
+    margin: 0 auto;
+    object-fit: contain;
+    background: #000;
+  }
+
+  .camera-fallback-label,
+  .camera-loading .btn {
+    max-width: 320px;
+  }
+
+  .compare-screen {
+    height: 100vh;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+}
+

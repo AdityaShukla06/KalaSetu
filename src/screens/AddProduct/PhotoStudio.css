@@ -304,3 +304,14 @@
   flex: 1;
   width: auto;
 }
+
+@media (min-width: 900px) {
+  .studio-screen {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .studio-tiles {
+    gap: var(--space-5);
+  }
+}

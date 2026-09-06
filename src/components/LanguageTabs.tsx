@@ -10,7 +10,8 @@ interface LanguageTabsProps {
 
 export function LanguageTabs({ value, onChange }: LanguageTabsProps) {
   const { language, t } = useLanguage();
-  const localLabel = language === "en" ? t("language.en") : t("describe.localTab");
+
+  if (language === "en") return null;
 
   return (
     <div className="lang-tabs" role="tablist">
@@ -30,7 +31,7 @@ export function LanguageTabs({ value, onChange }: LanguageTabsProps) {
         className={`lang-tab${value === "local" ? " lang-tab-active" : ""}`}
         onClick={() => onChange("local")}
       >
-        {localLabel}
+        {t("describe.localTab")}
       </button>
     </div>
   );
