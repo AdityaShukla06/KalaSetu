@@ -313,7 +313,7 @@
   "heritage.carePlaceholder": "जैसे केवल हाथ से धोएँ, सीधी धूप से दूर रखें",
   "heritage.weightLabel": "लगभग वजन, शिपिंग के लिए पैक किया हुआ",
   "heritage.weightHelper": "तराजू नहीं है? सबसे नज़दीकी आकार चुनें। यह केवल खरीदारों के शिपिंग खर्च का अनुमान लगाने के लिए है।",
-  "heritage.weightExactLabel": "या किलोग्राम में सटीक वजन दर्ज करें",
+  "heritage.weightExactLabel": "या अनुमानित वजन (किग्रा) दर्ज करें",
   "heritage.weightExactPlaceholder": "उदा. 1.2",
   "shipping.weightCategory.light": "हल्का (0.5 किग्रा तक)",
   "shipping.weightCategory.medium": "मध्यम (लगभग 1 किग्रा)",

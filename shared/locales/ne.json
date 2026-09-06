@@ -313,7 +313,7 @@
   "heritage.carePlaceholder": "e.g. Hand wash only, keep away from direct sunlight",
   "heritage.weightLabel": "Approximate weight, packed for shipping",
   "heritage.weightHelper": "No scale handy? Pick the closest size. This is only used to estimate shipping cost for buyers.",
-  "heritage.weightExactLabel": "Or enter exact weight in kg",
+  "heritage.weightExactLabel": "वा अनुमानित वजन किलोग्राममा प्रविष्ट गर्नुहोस्",
   "heritage.weightExactPlaceholder": "e.g. 1.2",
   "shipping.weightCategory.light": "Light (up to 0.5 kg)",
   "shipping.weightCategory.medium": "Medium (around 1 kg)",

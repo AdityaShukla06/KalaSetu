@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "../../components/Button";
-import { PRODUCT_MATERIALS } from "../../../shared/materials";
+import { materialsForCategory } from "../../../shared/materials";
 import { useLanguage } from "../../context/LanguageContext";
 import "./VoiceDescribe.css";
 
@@ -92,6 +92,14 @@ export function CategoryStep({ initialCategory, initialMaterial, onContinue }: C
   const { t } = useLanguage();
   const [selected, setSelected] = useState<string | null>(initialCategory);
   const [material, setMaterial] = useState<string | null>(initialMaterial ?? null);
+  const availableMaterials = selected ? materialsForCategory(selected) : [];
+
+  function handleSelectCategory(id: string) {
+    setSelected(id);
+    if (material && !materialsForCategory(id).includes(material)) {
+      setMaterial(null);
+    }
+  }
 
   return (
     <div className="describe-screen">
@@ -103,7 +111,7 @@ export function CategoryStep({ initialCategory, initialMaterial, onContinue }: C
             key={id}
             type="button"
             className={`category-tile${selected === id ? " category-tile-active" : ""}`}
-            onClick={() => setSelected(id)}
+            onClick={() => handleSelectCategory(id)}
             aria-pressed={selected === id}
           >
             <span className="category-tile-icon">
@@ -118,7 +126,7 @@ export function CategoryStep({ initialCategory, initialMaterial, onContinue }: C
         <div className="material-section">
           <span className="body-s material-question">{t("category.materialQuestion")}</span>
           <div className="material-chip-row">
-            {PRODUCT_MATERIALS.map((entry) => (
+            {availableMaterials.map((entry) => (
               <button
                 key={entry}
                 type="button"
