@@ -3,8 +3,9 @@ import { Input } from "../../components/Input";
 import { Button } from "../../components/Button";
 import { LanguageSelect } from "../../components/LanguageSelect";
 import { RegionSelect } from "../../components/RegionSelect";
+import { InquiryThread } from "../../components/InquiryThread";
 import { getMyProfile, updateMyProfile, listMyInquiries } from "../../services/api";
-import type { UserProfile, Inquiry } from "../../services/api";
+import type { UserProfile, Inquiry, InquiryMessage } from "../../services/api";
 import { useLanguage } from "../../context/LanguageContext";
 import "./BuyerProfile.css";
 
@@ -29,7 +30,8 @@ function RetryIcon() {
 
 function statusLabelKey(inquiry: Inquiry): string {
   if (inquiry.status === "closed") return "marketplace.inquiryStatusClosed";
-  return inquiry.respondedAt ? "marketplace.inquiryStatusOpenResponded" : "marketplace.inquiryStatusOpen";
+  const artisanHasReplied = inquiry.messages.some((message) => message.senderRole === "artisan");
+  return artisanHasReplied ? "marketplace.inquiryStatusOpenResponded" : "marketplace.inquiryStatusOpen";
 }
 
 export function BuyerProfileScreen() {
@@ -74,6 +76,14 @@ export function BuyerProfileScreen() {
     loadProfile();
     loadInquiries();
   }, [loadProfile, loadInquiries]);
+
+  function handleMessageSent(inquiryId: string, message: InquiryMessage) {
+    setInquiries((prev) =>
+      prev.map((item) =>
+        item.inquiryId === inquiryId ? { ...item, messages: [...item.messages, message] } : item,
+      ),
+    );
+  }
 
   const dirty =
     profile !== null &&
@@ -192,27 +202,19 @@ export function BuyerProfileScreen() {
                   )}
                   <div className="inquiry-list-body">
                     <p className="inquiry-list-title">{title}</p>
-                    <p className="caption inquiry-list-message">{inquiry.message}</p>
-                    {inquiry.replyMessage ? (
-                      <div className="inquiry-list-reply">
-                        <p className="caption inquiry-list-reply-label">{t("marketplace.artisanReplyLabel")}</p>
-                        <p className="body-s">{inquiry.replyMessage}</p>
-                      </div>
-                    ) : (
-                      inquiry.respondedAt && (
-                        <p className="caption inquiry-list-reply-note">{t("marketplace.inquiryRespondedNoText")}</p>
-                      )
-                    )}
                     <div className="inquiry-list-badges">
                       <span className={`inquiry-status inquiry-status-${inquiry.status}`}>
                         {t(statusLabelKey(inquiry))}
                       </span>
-                      {inquiry.respondedAt && (
-                        <span className="inquiry-status inquiry-status-responded">
-                          {t("marketplace.inquiryResponded")}
-                        </span>
+                      {inquiry.isUnread && (
+                        <span className="inquiry-status inquiry-status-unread">{t("inquiries.badgeNew")}</span>
                       )}
                     </div>
+                    <InquiryThread
+                      inquiry={inquiry}
+                      viewerRole="buyer"
+                      onSent={(message) => handleMessageSent(inquiry.inquiryId, message)}
+                    />
                   </div>
                 </li>
               );

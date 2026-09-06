@@ -2,6 +2,7 @@ import { apiFetch } from "./_helpers";
 
 export type InquiryStatus = "open" | "closed";
 export type InquiryContactPreference = "email" | "phone" | "whatsapp";
+export type InquirySenderRole = "buyer" | "artisan";
 
 export interface InquiryProductSummary {
   titleEn: string;
@@ -12,23 +13,27 @@ export interface InquiryProductSummary {
   passportId: string;
 }
 
+export interface InquiryMessage {
+  messageId: string;
+  senderRole: InquirySenderRole;
+  body: string;
+  createdAt: string;
+}
+
 export interface Inquiry {
   inquiryId: string;
   productId: string;
   buyerId: string;
   buyerEmail: string | null;
   artisanId: string;
-  message: string;
   quantity: number | null;
   contactPreference: InquiryContactPreference;
   contactValue: string | null;
   status: InquiryStatus;
-  readAt: string | null;
-  respondedAt: string | null;
-  notifiedAt: string | null;
-  replyMessage: string | null;
   createdAt: string;
   product: InquiryProductSummary | null;
+  messages: InquiryMessage[];
+  isUnread: boolean;
 }
 
 export interface CreateInquiryInput {
@@ -61,18 +66,12 @@ export function closeInquiry(inquiryId: string): Promise<{ success: boolean }> {
   });
 }
 
-export function markInquiryResponded(inquiryId: string): Promise<{ success: boolean }> {
-  return apiFetch(`/inquiries/${encodeURIComponent(inquiryId)}/responded`, {
-    method: "PATCH",
-  });
-}
-
-export function replyToInquiry(
+export function sendInquiryMessage(
   inquiryId: string,
-  message: string,
-): Promise<{ success: boolean; emailDelivered: boolean }> {
-  return apiFetch(`/inquiries/${encodeURIComponent(inquiryId)}/reply`, {
-    method: "PATCH",
-    body: JSON.stringify({ message }),
+  body: string,
+): Promise<{ messageId: string; createdAt: string; emailDelivered: boolean }> {
+  return apiFetch(`/inquiries/${encodeURIComponent(inquiryId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
   });
 }

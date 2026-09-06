@@ -4,67 +4,74 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
-import { sendInquiryEmail, sendInquiryReplyEmail } from "../lib/mailer";
+import { sendInquiryMessageEmail } from "../lib/mailer";
 import { loadEnv } from "../lib/env";
-import { Inquiry, InquiryStatus, InquiryProductSummary, InquiryContactPreference } from "../types";
+import {
+  Inquiry,
+  InquiryMessage,
+  InquirySenderRole,
+  InquiryStatus,
+  InquiryProductSummary,
+  InquiryContactPreference,
+} from "../types";
 
 const router = Router();
 
 const INQUIRY_COLUMNS =
-  "id, product_id, buyer_id, artisan_id, message, quantity, contact_preference, contact_value, status, read_at, responded_at, notified_at, reply_message, created_at";
+  "id, product_id, buyer_id, artisan_id, quantity, contact_preference, contact_value, status, artisan_last_read_at, buyer_last_read_at, created_at";
 
 interface InquiryRow {
   id: string;
   product_id: string;
   buyer_id: string;
   artisan_id: string;
-  message: string;
   quantity: number | null;
   contact_preference: string | null;
   contact_value: string | null;
   status: string;
-  read_at: string | null;
-  responded_at: string | null;
-  notified_at: string | null;
-  reply_message: string | null;
+  artisan_last_read_at: string | null;
+  buyer_last_read_at: string | null;
   created_at: string;
 }
 
-function toInquiry(row: InquiryRow, product: InquiryProductSummary | null, buyerEmail: string | null): Inquiry {
+interface MessageRow {
+  id: string;
+  inquiry_id: string;
+  sender_role: string;
+  body: string;
+  created_at: string;
+}
+
+function toMessage(row: MessageRow): InquiryMessage {
   return {
-    inquiryId: row.id,
-    productId: row.product_id,
-    buyerId: row.buyer_id,
-    buyerEmail,
-    artisanId: row.artisan_id,
-    message: row.message,
-    quantity: row.quantity,
-    contactPreference: (row.contact_preference as InquiryContactPreference) ?? "email",
-    contactValue: row.contact_value,
-    status: row.status as InquiryStatus,
-    readAt: row.read_at,
-    respondedAt: row.responded_at,
-    notifiedAt: row.notified_at,
-    replyMessage: row.reply_message,
+    messageId: row.id,
+    senderRole: row.sender_role as InquirySenderRole,
+    body: row.body,
     createdAt: row.created_at,
-    product,
   };
 }
 
-async function enrichInquiries(rows: InquiryRow[]): Promise<Inquiry[]> {
+async function enrichInquiries(rows: InquiryRow[], viewerRole: "buyer" | "artisan"): Promise<Inquiry[]> {
   if (rows.length === 0) return [];
 
+  const inquiryIds = rows.map((row) => row.id);
   const productIds = [...new Set(rows.map((row) => row.product_id))];
   const buyerIds = [...new Set(rows.map((row) => row.buyer_id))];
   const supabase = getSupabase();
 
-  const [productsResult, buyersResult] = await Promise.all([
+  const [productsResult, buyersResult, messagesResult] = await Promise.all([
     supabase.from("products").select("id, title_en, title_local, local_language, image_url, price, passport_id").in("id", productIds),
     supabase.from("users").select("id, email").in("id", buyerIds),
+    supabase
+      .from("inquiry_messages")
+      .select("id, inquiry_id, sender_role, body, created_at")
+      .in("inquiry_id", inquiryIds)
+      .order("created_at", { ascending: true }),
   ]);
 
   if (productsResult.error) throw new Error(`Could not load inquiry products: ${productsResult.error.message}`);
   if (buyersResult.error) throw new Error(`Could not load inquiry buyers: ${buyersResult.error.message}`);
+  if (messagesResult.error) throw new Error(`Could not load inquiry messages: ${messagesResult.error.message}`);
 
   const productById = new Map(
     (productsResult.data ?? []).map((product) => [
@@ -82,15 +89,96 @@ async function enrichInquiries(rows: InquiryRow[]): Promise<Inquiry[]> {
 
   const emailByBuyerId = new Map((buyersResult.data ?? []).map((buyer) => [buyer.id as string, buyer.email as string]));
 
-  return rows.map((row) =>
-    toInquiry(row, productById.get(row.product_id) ?? null, emailByBuyerId.get(row.buyer_id) ?? null),
-  );
+  const messagesByInquiryId = new Map<string, MessageRow[]>();
+  for (const row of (messagesResult.data ?? []) as MessageRow[]) {
+    const list = messagesByInquiryId.get(row.inquiry_id) ?? [];
+    list.push(row);
+    messagesByInquiryId.set(row.inquiry_id, list);
+  }
+
+  const otherRole: InquirySenderRole = viewerRole === "buyer" ? "artisan" : "buyer";
+
+  return rows.map((row) => {
+    const messages = (messagesByInquiryId.get(row.id) ?? []).map(toMessage);
+    const lastReadAt = viewerRole === "buyer" ? row.buyer_last_read_at : row.artisan_last_read_at;
+    const lastFromOther = [...messages].reverse().find((message) => message.senderRole === otherRole);
+    const isUnread = Boolean(
+      lastFromOther && (!lastReadAt || new Date(lastFromOther.createdAt) > new Date(lastReadAt)),
+    );
+
+    return {
+      inquiryId: row.id,
+      productId: row.product_id,
+      buyerId: row.buyer_id,
+      buyerEmail: emailByBuyerId.get(row.buyer_id) ?? null,
+      artisanId: row.artisan_id,
+      quantity: row.quantity,
+      contactPreference: (row.contact_preference as InquiryContactPreference) ?? "email",
+      contactValue: row.contact_value,
+      status: row.status as InquiryStatus,
+      createdAt: row.created_at,
+      product: productById.get(row.product_id) ?? null,
+      messages,
+      isUnread,
+    };
+  });
+}
+
+async function notifyNewMessage(params: {
+  inquiryId: string;
+  productId: string;
+  senderRole: InquirySenderRole;
+  senderId: string;
+  recipientId: string;
+  body: string;
+  firstMessageContext?: {
+    quantity: number | null;
+    contactPreference: InquiryContactPreference;
+    contactValue: string | null;
+    buyerEmail: string;
+  };
+}): Promise<boolean> {
+  const supabase = getSupabase();
+  const [recipientResult, productResult, senderResult] = await Promise.all([
+    supabase.from("users").select("email").eq("id", params.recipientId).maybeSingle(),
+    supabase.from("products").select("title_en, image_url, passport_id").eq("id", params.productId).maybeSingle(),
+    supabase.from("users").select("display_name, shop_name").eq("id", params.senderId).maybeSingle(),
+  ]);
+
+  if (!recipientResult.data?.email || !productResult.data) {
+    console.warn("[inquiries] could not resolve a recipient email or the product, skipping notification", {
+      inquiryId: params.inquiryId,
+    });
+    return false;
+  }
+
+  const senderName =
+    params.senderRole === "artisan"
+      ? senderResult.data?.shop_name ?? senderResult.data?.display_name ?? "The artisan"
+      : senderResult.data?.display_name ?? "A buyer";
+
+  const env = loadEnv();
+  const inboxUrl =
+    params.senderRole === "artisan" ? `${env.PUBLIC_APP_URL}/marketplace/profile` : `${env.PUBLIC_APP_URL}/inquiries`;
+
+  const mailResult = await sendInquiryMessageEmail({
+    recipientEmail: recipientResult.data.email,
+    senderName,
+    productTitle: productResult.data.title_en,
+    productImageUrl: productResult.data.image_url,
+    passportId: productResult.data.passport_id,
+    messageBody: params.body,
+    inboxUrl,
+    firstMessageContext: params.firstMessageContext,
+  });
+
+  return mailResult.delivered;
 }
 
 const CreateInquirySchema = z
   .object({
     productId: z.string().uuid(),
-    message: z.string().min(1).max(2000),
+    message: z.string().trim().min(1).max(2000),
     quantity: z.number().int().positive().optional(),
     contactPreference: z.enum(["email", "phone", "whatsapp"]),
     contactValue: z.string().trim().min(1).max(40).optional(),
@@ -114,7 +202,7 @@ router.post(
     const supabase = getSupabase();
     const { data: product, error: productError } = await supabase
       .from("products")
-      .select("id, user_id, status, flagged, title_en, image_url, passport_id")
+      .select("id, user_id, status, flagged")
       .eq("id", parsed.data.productId)
       .maybeSingle();
 
@@ -124,13 +212,12 @@ router.post(
       return;
     }
 
-    const { data: inserted, error } = await supabase
+    const { data: inquiry, error: insertError } = await supabase
       .from("inquiries")
       .insert({
         product_id: product.id,
         buyer_id: req.uid,
         artisan_id: product.user_id,
-        message: parsed.data.message,
         quantity: parsed.data.quantity ?? null,
         contact_preference: parsed.data.contactPreference,
         contact_value: parsed.data.contactValue ?? null,
@@ -138,39 +225,31 @@ router.post(
       .select("id")
       .single();
 
-    if (error) throw new Error(`Could not create the inquiry: ${error.message}`);
+    if (insertError) throw new Error(`Could not create the inquiry: ${insertError.message}`);
 
-    const [artisanResult, buyerResult] = await Promise.all([
-      supabase.from("users").select("email").eq("id", product.user_id).maybeSingle(),
-      supabase.from("users").select("email").eq("id", req.uid).maybeSingle(),
-    ]);
+    const { error: messageError } = await supabase.from("inquiry_messages").insert({
+      inquiry_id: inquiry.id,
+      sender_role: "buyer",
+      body: parsed.data.message,
+    });
+    if (messageError) throw new Error(`Could not save the inquiry message: ${messageError.message}`);
 
-    let emailDelivered = false;
-    if (artisanResult.data?.email && buyerResult.data?.email) {
-      const env = loadEnv();
-      const mailResult = await sendInquiryEmail({
-        artisanEmail: artisanResult.data.email,
-        productTitle: product.title_en,
-        productImageUrl: product.image_url,
-        passportId: product.passport_id,
-        buyerMessage: parsed.data.message,
+    const emailDelivered = await notifyNewMessage({
+      inquiryId: inquiry.id,
+      productId: product.id,
+      senderRole: "buyer",
+      senderId: req.uid,
+      recipientId: product.user_id,
+      body: parsed.data.message,
+      firstMessageContext: {
         quantity: parsed.data.quantity ?? null,
         contactPreference: parsed.data.contactPreference,
         contactValue: parsed.data.contactValue ?? null,
-        buyerEmail: buyerResult.data.email,
-        inboxUrl: `${env.PUBLIC_APP_URL}/inquiries`,
-      });
-      emailDelivered = mailResult.delivered;
-      if (emailDelivered) {
-        await supabase.from("inquiries").update({ notified_at: new Date().toISOString() }).eq("id", inserted.id);
-      }
-    } else {
-      console.warn("[inquiries] could not resolve an email address for the artisan or buyer, skipping notification", {
-        inquiryId: inserted.id,
-      });
-    }
+        buyerEmail: req.email,
+      },
+    });
 
-    res.status(201).json({ inquiryId: inserted.id, emailDelivered });
+    res.status(201).json({ inquiryId: inquiry.id, emailDelivered });
   }),
 );
 
@@ -179,7 +258,8 @@ router.get(
   requireAuth,
   requireRole("buyer"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
-    const { data, error } = await getSupabase()
+    const supabase = getSupabase();
+    const { data, error } = await supabase
       .from("inquiries")
       .select(INQUIRY_COLUMNS)
       .eq("buyer_id", req.uid)
@@ -187,7 +267,19 @@ router.get(
 
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
 
-    res.json(await enrichInquiries(data as InquiryRow[]));
+    const rows = data as InquiryRow[];
+    const result = await enrichInquiries(rows, "buyer");
+
+    const unreadIds = result.filter((inquiry) => inquiry.isUnread).map((inquiry) => inquiry.inquiryId);
+    if (unreadIds.length > 0) {
+      const { error: readError } = await supabase
+        .from("inquiries")
+        .update({ buyer_last_read_at: new Date().toISOString() })
+        .in("id", unreadIds);
+      if (readError) console.warn("[inquiries] could not mark inquiries as read", { message: readError.message });
+    }
+
+    res.json(result);
   }),
 );
 
@@ -206,18 +298,18 @@ router.get(
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
 
     const rows = data as InquiryRow[];
-    const unreadIds = rows.filter((row) => !row.read_at).map((row) => row.id);
+    const result = await enrichInquiries(rows, "artisan");
+
+    const unreadIds = result.filter((inquiry) => inquiry.isUnread).map((inquiry) => inquiry.inquiryId);
     if (unreadIds.length > 0) {
       const { error: readError } = await supabase
         .from("inquiries")
-        .update({ read_at: new Date().toISOString() })
+        .update({ artisan_last_read_at: new Date().toISOString() })
         .in("id", unreadIds);
-      if (readError) {
-        console.warn("[inquiries] could not mark inquiries as read", { message: readError.message });
-      }
+      if (readError) console.warn("[inquiries] could not mark inquiries as read", { message: readError.message });
     }
 
-    res.json(await enrichInquiries(rows));
+    res.json(result);
   }),
 );
 
@@ -252,87 +344,57 @@ router.patch(
   }),
 );
 
-router.patch(
-  "/:id/responded",
-  requireAuth,
-  requireRole("artisan"),
-  asyncRoute(async (req: Request, res: Response): Promise<void> => {
-    const { data, error } = await getSupabase()
-      .from("inquiries")
-      .update({ responded_at: new Date().toISOString() })
-      .eq("id", req.params.id as string)
-      .eq("artisan_id", req.uid)
-      .select("id");
-
-    if (error) throw new Error(`Could not update the inquiry: ${error.message}`);
-    if (!data || data.length === 0) {
-      res.status(404).json({ error: "Inquiry not found" });
-      return;
-    }
-
-    res.json({ success: true });
-  }),
-);
-
-const ReplyInquirySchema = z.object({
-  message: z.string().trim().min(1).max(2000),
+const SendMessageSchema = z.object({
+  body: z.string().trim().min(1).max(2000),
 });
 
-router.patch(
-  "/:id/reply",
+router.post(
+  "/:id/messages",
   requireAuth,
-  requireRole("artisan"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
-    const parsed = ReplyInquirySchema.safeParse(req.body);
+    const parsed = SendMessageSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
 
     const supabase = getSupabase();
-    const respondedAt = new Date().toISOString();
-
-    const { data, error } = await supabase
+    const { data: inquiry, error } = await supabase
       .from("inquiries")
-      .update({ reply_message: parsed.data.message, responded_at: respondedAt })
+      .select("id, buyer_id, artisan_id, product_id")
       .eq("id", req.params.id as string)
-      .eq("artisan_id", req.uid)
-      .select("id, buyer_id, product_id, message")
       .maybeSingle();
 
-    if (error) throw new Error(`Could not save the reply: ${error.message}`);
-    if (!data) {
+    if (error) throw new Error(`Could not load the inquiry: ${error.message}`);
+
+    let senderRole: InquirySenderRole | null = null;
+    if (inquiry?.buyer_id === req.uid) senderRole = "buyer";
+    else if (inquiry?.artisan_id === req.uid) senderRole = "artisan";
+
+    if (!inquiry || !senderRole) {
       res.status(404).json({ error: "Inquiry not found" });
       return;
     }
 
-    const [buyerResult, productResult, artisanResult] = await Promise.all([
-      supabase.from("users").select("email").eq("id", data.buyer_id).maybeSingle(),
-      supabase.from("products").select("title_en, image_url, passport_id").eq("id", data.product_id).maybeSingle(),
-      supabase.from("users").select("shop_name, display_name").eq("id", req.uid).maybeSingle(),
-    ]);
+    const { data: message, error: insertError } = await supabase
+      .from("inquiry_messages")
+      .insert({ inquiry_id: inquiry.id, sender_role: senderRole, body: parsed.data.body })
+      .select("id, created_at")
+      .single();
 
-    let emailDelivered = false;
-    if (buyerResult.data?.email && productResult.data) {
-      const env = loadEnv();
-      const mailResult = await sendInquiryReplyEmail({
-        buyerEmail: buyerResult.data.email,
-        artisanName: artisanResult.data?.shop_name ?? artisanResult.data?.display_name ?? "The artisan",
-        productTitle: productResult.data.title_en,
-        productImageUrl: productResult.data.image_url,
-        passportId: productResult.data.passport_id,
-        originalMessage: data.message,
-        replyMessage: parsed.data.message,
-        inboxUrl: `${env.PUBLIC_APP_URL}/marketplace/profile`,
-      });
-      emailDelivered = mailResult.delivered;
-    } else {
-      console.warn("[inquiries] could not resolve a buyer email or product for a reply, skipping notification", {
-        inquiryId: data.id,
-      });
-    }
+    if (insertError) throw new Error(`Could not save the message: ${insertError.message}`);
 
-    res.json({ success: true, emailDelivered });
+    const recipientId = senderRole === "buyer" ? inquiry.artisan_id : inquiry.buyer_id;
+    const emailDelivered = await notifyNewMessage({
+      inquiryId: inquiry.id,
+      productId: inquiry.product_id,
+      senderRole,
+      senderId: req.uid,
+      recipientId,
+      body: parsed.data.body,
+    });
+
+    res.status(201).json({ messageId: message.id, createdAt: message.created_at, emailDelivered });
   }),
 );
 

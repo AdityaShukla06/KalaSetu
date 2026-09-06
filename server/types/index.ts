@@ -101,23 +101,29 @@ export interface InquiryProductSummary {
   passportId: string;
 }
 
+export type InquirySenderRole = "buyer" | "artisan";
+
+export interface InquiryMessage {
+  messageId: string;
+  senderRole: InquirySenderRole;
+  body: string;
+  createdAt: string;
+}
+
 export interface Inquiry {
   inquiryId: string;
   productId: string;
   buyerId: string;
   buyerEmail: string | null;
   artisanId: string;
-  message: string;
   quantity: number | null;
   contactPreference: InquiryContactPreference;
   contactValue: string | null;
   status: InquiryStatus;
-  readAt: string | null;
-  respondedAt: string | null;
-  notifiedAt: string | null;
-  replyMessage: string | null;
   createdAt: string;
   product: InquiryProductSummary | null;
+  messages: InquiryMessage[];
+  isUnread: boolean;
 }
 
 export interface UserProfile {

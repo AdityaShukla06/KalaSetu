@@ -25,7 +25,9 @@ export type { UserRole, SelfServeRole, VerifyOtpResult } from "./api/auth";
 export type {
   InquiryStatus,
   InquiryContactPreference,
+  InquirySenderRole,
   Inquiry,
+  InquiryMessage,
   InquiryProductSummary,
   CreateInquiryInput,
 } from "./api/inquiries";
@@ -72,8 +74,7 @@ export {
   listMyInquiries,
   listReceivedInquiries,
   closeInquiry,
-  markInquiryResponded,
-  replyToInquiry,
+  sendInquiryMessage,
 } from "./api/inquiries";
 export {
   getDashboardStats,

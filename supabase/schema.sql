@@ -99,15 +99,12 @@ create table if not exists inquiries (
   product_id  uuid not null references products(id) on delete cascade,
   buyer_id    uuid not null references users(id) on delete cascade,
   artisan_id  uuid not null references users(id) on delete cascade,
-  message     text not null,
   quantity    integer check (quantity is null or quantity > 0),
   contact_preference text check (contact_preference in ('email', 'phone', 'whatsapp')),
   contact_value text,
   status      text not null default 'open' check (status in ('open', 'closed')),
-  read_at      timestamptz,
-  responded_at timestamptz,
-  notified_at  timestamptz,
-  reply_message text,
+  artisan_last_read_at timestamptz,
+  buyer_last_read_at   timestamptz,
   created_at  timestamptz not null default now()
 );
 
@@ -116,6 +113,17 @@ create index if not exists inquiries_buyer_id_created_at_idx
 
 create index if not exists inquiries_artisan_id_created_at_idx
   on inquiries (artisan_id, created_at desc);
+
+create table if not exists inquiry_messages (
+  id          uuid primary key default gen_random_uuid(),
+  inquiry_id  uuid not null references inquiries(id) on delete cascade,
+  sender_role text not null check (sender_role in ('buyer', 'artisan')),
+  body        text not null,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists inquiry_messages_inquiry_id_created_at_idx
+  on inquiry_messages (inquiry_id, created_at asc);
 
 create table if not exists product_views (
   id          uuid primary key default gen_random_uuid(),
@@ -245,6 +253,7 @@ create trigger products_protect_moderation
 alter table users         enable row level security;
 alter table products      enable row level security;
 alter table inquiries     enable row level security;
+alter table inquiry_messages enable row level security;
 alter table product_views enable row level security;
 alter table audit_log     enable row level security;
 alter table otp_codes     enable row level security;
@@ -342,6 +351,21 @@ create policy inquiries_update_parties on inquiries
   for update to authenticated
   using (buyer_id = auth.uid() or artisan_id = auth.uid())
   with check (buyer_id = auth.uid() or artisan_id = auth.uid());
+
+drop policy if exists inquiry_messages_select_buyer on inquiry_messages;
+create policy inquiry_messages_select_buyer on inquiry_messages
+  for select to authenticated
+  using (exists (select 1 from inquiries i where i.id = inquiry_messages.inquiry_id and i.buyer_id = auth.uid()));
+
+drop policy if exists inquiry_messages_select_artisan on inquiry_messages;
+create policy inquiry_messages_select_artisan on inquiry_messages
+  for select to authenticated
+  using (exists (select 1 from inquiries i where i.id = inquiry_messages.inquiry_id and i.artisan_id = auth.uid()));
+
+drop policy if exists inquiry_messages_select_admin on inquiry_messages;
+create policy inquiry_messages_select_admin on inquiry_messages
+  for select to authenticated
+  using (app_current_role() = 'admin');
 
 drop policy if exists product_views_select_own on product_views;
 create policy product_views_select_own on product_views

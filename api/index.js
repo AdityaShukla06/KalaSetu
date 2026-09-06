@@ -320,16 +320,11 @@ function buildHtmlBody(code) {
   <p style="font-size:13px;line-height:1.5;color:#6b6b6b;margin:0">It expires in ${OTP_TTL_MINUTES} minutes. If you did not ask to sign in, you can ignore this email.</p>
 </div>`;
 }
-var CONTACT_PREFERENCE_LABEL = {
-  email: "Email",
-  phone: "A phone call",
-  whatsapp: "WhatsApp"
-};
-async function sendInquiryEmail(input) {
+async function sendInquiryMessageEmail(input) {
   const env = loadEnv();
   if (!env.RESEND_API_KEY) {
-    console.warn("[inquiries] RESEND_API_KEY is not set, inquiry email was not sent", {
-      artisanEmail: input.artisanEmail
+    console.warn("[inquiries] RESEND_API_KEY is not set, message email was not sent", {
+      recipientEmail: input.recipientEmail
     });
     return { delivered: false, reason: "email_not_configured" };
   }
@@ -342,15 +337,15 @@ async function sendInquiryEmail(input) {
       },
       body: JSON.stringify({
         from: env.OTP_FROM_EMAIL,
-        to: [input.artisanEmail],
-        subject: `New inquiry on KalaSetu: ${input.productTitle}`,
-        text: buildInquiryPlainTextBody(input),
-        html: buildInquiryHtmlBody(input)
+        to: [input.recipientEmail],
+        subject: `${input.senderName} sent a message about ${input.productTitle} - KalaSetu`,
+        text: buildMessagePlainTextBody(input),
+        html: buildMessageHtmlBody(input)
       })
     });
     if (!response.ok) {
       const detail = await response.text();
-      console.error("[inquiries] inquiry email provider rejected the request", {
+      console.error("[inquiries] message email provider rejected the request", {
         status: response.status,
         detail: detail.slice(0, 500)
       });
@@ -358,103 +353,30 @@ async function sendInquiryEmail(input) {
     }
     return { delivered: true };
   } catch (err) {
-    console.error("[inquiries] inquiry email send failed", err);
+    console.error("[inquiries] message email send failed", err);
     return { delivered: false, reason: "send_failed" };
   }
 }
-function contactLine(input) {
-  const label = CONTACT_PREFERENCE_LABEL[input.contactPreference];
-  if (input.contactPreference === "email") return `${label}: ${input.buyerEmail}`;
-  return `${label}: ${input.contactValue ?? input.buyerEmail}`;
-}
-function buildInquiryPlainTextBody(input) {
-  const lines = [
-    `You have a new inquiry on KalaSetu.`,
-    ``,
-    `Product: ${input.productTitle} (${input.passportId})`
-  ];
-  if (input.quantity) lines.push(`Quantity interested in: ${input.quantity}`);
-  lines.push(``, `Message:`, `"${input.buyerMessage}"`, ``, `Preferred contact: ${contactLine(input)}`, ``);
-  lines.push(`View and respond in KalaSetu: ${input.inboxUrl}`);
-  return lines.join("\n");
-}
-function buildInquiryHtmlBody(input) {
-  const quantityRow = input.quantity ? `<p style="font-size:14px;line-height:1.5;margin:0 0 12px"><strong>Quantity interested in:</strong> ${input.quantity}</p>` : "";
-  return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#2b2b2b">
-  <h1 style="font-size:20px;margin:0 0 16px">You have a new inquiry</h1>
-  <img src="${input.productImageUrl}" alt="" style="width:100%;max-width:280px;border-radius:8px;margin:0 0 16px;display:block" />
-  <p style="font-size:15px;line-height:1.5;margin:0 0 4px"><strong>${input.productTitle}</strong></p>
-  <p style="font-size:13px;color:#6b6b6b;margin:0 0 16px">${input.passportId}</p>
-  ${quantityRow}
-  <p style="font-size:14px;line-height:1.5;margin:0 0 4px"><strong>Message</strong></p>
-  <p style="font-size:14px;line-height:1.5;margin:0 0 16px;padding:12px;background:#FBF4EA;border-radius:8px">${input.buyerMessage}</p>
-  <p style="font-size:14px;line-height:1.5;margin:0 0 20px"><strong>Preferred contact:</strong> ${contactLine(input)}</p>
-  <a href="${input.inboxUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">View and respond in KalaSetu</a>
-</div>`;
-}
-async function sendInquiryReplyEmail(input) {
-  const env = loadEnv();
-  if (!env.RESEND_API_KEY) {
-    console.warn("[inquiries] RESEND_API_KEY is not set, reply email was not sent", {
-      buyerEmail: input.buyerEmail
-    });
-    return { delivered: false, reason: "email_not_configured" };
-  }
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: env.OTP_FROM_EMAIL,
-        to: [input.buyerEmail],
-        subject: `${input.artisanName} replied about ${input.productTitle} - KalaSetu`,
-        text: buildReplyPlainTextBody(input),
-        html: buildReplyHtmlBody(input)
-      })
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error("[inquiries] reply email provider rejected the request", {
-        status: response.status,
-        detail: detail.slice(0, 500)
-      });
-      return { delivered: false, reason: `provider_error_${response.status}` };
-    }
-    return { delivered: true };
-  } catch (err) {
-    console.error("[inquiries] reply email send failed", err);
-    return { delivered: false, reason: "send_failed" };
-  }
-}
-function buildReplyPlainTextBody(input) {
+function buildMessagePlainTextBody(input) {
   return [
-    `${input.artisanName} replied to your inquiry on KalaSetu.`,
+    `${input.senderName} sent a message about your inquiry on KalaSetu.`,
     ``,
     `Product: ${input.productTitle} (${input.passportId})`,
     ``,
-    `Your message:`,
-    `"${input.originalMessage}"`,
+    `Message:`,
+    `"${input.messageBody}"`,
     ``,
-    `Reply:`,
-    `"${input.replyMessage}"`,
-    ``,
-    `View this in KalaSetu: ${input.inboxUrl}`
+    `View and reply in KalaSetu: ${input.inboxUrl}`
   ].join("\n");
 }
-function buildReplyHtmlBody(input) {
+function buildMessageHtmlBody(input) {
   return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#2b2b2b">
-  <h1 style="font-size:20px;margin:0 0 16px">${input.artisanName} replied to your inquiry</h1>
+  <h1 style="font-size:20px;margin:0 0 16px">${input.senderName} sent you a message</h1>
   <img src="${input.productImageUrl}" alt="" style="width:100%;max-width:280px;border-radius:8px;margin:0 0 16px;display:block" />
   <p style="font-size:15px;line-height:1.5;margin:0 0 4px"><strong>${input.productTitle}</strong></p>
   <p style="font-size:13px;color:#6b6b6b;margin:0 0 16px">${input.passportId}</p>
-  <p style="font-size:13px;line-height:1.5;margin:0 0 4px;color:#6b6b6b"><strong>Your message</strong></p>
-  <p style="font-size:14px;line-height:1.5;margin:0 0 16px;padding:12px;background:#f4f4f4;border-radius:8px">${input.originalMessage}</p>
-  <p style="font-size:13px;line-height:1.5;margin:0 0 4px;color:#6b6b6b"><strong>Reply</strong></p>
-  <p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#FBF4EA;border-radius:8px">${input.replyMessage}</p>
-  <a href="${input.inboxUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">View in KalaSetu</a>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#FBF4EA;border-radius:8px">${input.messageBody}</p>
+  <a href="${input.inboxUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">View and reply in KalaSetu</a>
 </div>`;
 }
 async function sendDeactivationEmail(input) {
@@ -2328,18 +2250,18 @@ var as_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0989\u09A4\u09CD\u09A4\u09F0",
-  "inquiries.replyPlaceholder": "\u0989\u09A4\u09CD\u09A4\u09F0 \u09B2\u09BF\u0996\u0995, \u098F\u0987\u099F\u09CB \u0995\u09CD\u09F0\u09C7\u09A4\u09BE\u09B2\u09C8 \u0987\u09AE\u09C7\u0987\u09B2 \u0995\u09F0\u09BE \u09B9'\u09AC",
-  "inquiries.replyRequired": "\u09AA\u09A0\u09BF\u09AF\u09BC\u09BE\u09AC\u09B2\u09C8 \u0986\u0997\u09A4\u09C7 \u0989\u09A4\u09CD\u09A4\u09F0 \u09B2\u09BF\u0996\u0995",
-  "inquiries.sendReply": "\u0989\u09A4\u09CD\u09A4\u09F0 \u09AA\u09A0\u09BF\u09AF\u09BC\u09BE\u0993\u0995",
-  "inquiries.yourReply": "\u0986\u09AA\u09CB\u09A8\u09BE\u09F0 \u0989\u09A4\u09CD\u09A4\u09F0",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0986\u09AA\u09C1\u09A8\u09BF",
+  "inquiryThread.artisan": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0",
+  "inquiryThread.buyer": "\u0995\u09CD\u09F0\u09C7\u09A4\u09BE",
+  "inquiryThread.placeholder": "\u09AC\u09BE\u09F0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u0995, \u098F\u0987\u099F\u09CB \u0985\u09A8\u09CD\u09AF\u099C\u09A8\u09B2\u09C8 \u0987\u09AE\u09C7\u0987\u09B2 \u0995\u09F0\u09BE \u09B9'\u09AC",
+  "inquiryThread.messageRequired": "\u09AA\u09A0\u09BF\u09DF\u09BE\u09AC\u09B2\u09C8 \u0986\u0997\u09A4\u09C7 \u09AC\u09BE\u09F0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u0995",
+  "inquiryThread.send": "\u09AA\u09A0\u09BF\u09DF\u09BE\u0993\u0995",
+  "inquiryThread.closedNote": "\u098F\u0987 \u0985\u09A8\u09C1\u09B8\u09A8\u09CD\u09A7\u09BE\u09A8 \u09AC\u09A8\u09CD\u09A7 \u09B9\u09C8\u099B\u09C7\u0964",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -2434,9 +2356,6 @@ var as_default = {
   "marketplace.inquiryStatusOpen": "\u0989\u09A4\u09CD\u09A4\u09F0\u09F0 \u0985\u09AA\u09C7\u0995\u09CD\u09B7\u09BE",
   "marketplace.inquiryStatusOpenResponded": "\u0996\u09CB\u09B2\u09BE",
   "marketplace.inquiryStatusClosed": "\u09AC\u09A8\u09CD\u09A7",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u0987 \u0989\u09A4\u09CD\u09A4\u09F0 \u09A6\u09BF\u09AF\u09BC\u09BE \u09AC\u09C1\u09B2\u09BF \u099A\u09BF\u09B9\u09CD\u09A8\u09BF\u09A4 \u0995\u09F0\u09BF\u099B\u09C7\u0964",
-  "marketplace.artisanReplyLabel": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u09F0 \u0989\u09A4\u09CD\u09A4\u09F0",
   "marketplace.outOfStock": "\u09AE\u099C\u09C1\u09A4 \u09B6\u09C7\u09B7",
   "marketplace.outOfStockInquiryNote": "\u098F\u0987 \u09B8\u09BE\u09AE\u0997\u09CD\u09F0\u09C0 \u09AC\u09F0\u09CD\u09A4\u09AE\u09BE\u09A8 \u09AE\u099C\u09C1\u09A4 \u09B6\u09C7\u09B7\u0964 \u0986\u09AA\u09C1\u09A8\u09BF \u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u0995\u09C7 \u0995\u09C7\u09A4\u09BF\u09AF\u09BC\u09BE \u0989\u09AA\u09B2\u09AC\u09CD\u09A7 \u09B9'\u09AC \u09B8\u09CB\u09A7\u09BF\u09AC \u09AA\u09BE\u09F0\u09C7\u0964",
   "heritage.title": "A few more details (optional)",
@@ -2687,18 +2606,18 @@ var bn_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0989\u09A4\u09CD\u09A4\u09B0",
-  "inquiries.replyPlaceholder": "\u098F\u0995\u099F\u09BF \u0989\u09A4\u09CD\u09A4\u09B0 \u09B2\u09BF\u0996\u09C1\u09A8, \u098F\u099F\u09BF \u0995\u09CD\u09B0\u09C7\u09A4\u09BE\u09B0 \u0995\u09BE\u099B\u09C7 \u0987\u09AE\u09C7\u0987\u09B2 \u09B9\u09AC\u09C7",
-  "inquiries.replyRequired": "\u09AA\u09BE\u09A0\u09BE\u09A8\u09CB\u09B0 \u0986\u0997\u09C7 \u098F\u0995\u099F\u09BF \u0989\u09A4\u09CD\u09A4\u09B0 \u09B2\u09BF\u0996\u09C1\u09A8",
-  "inquiries.sendReply": "\u0989\u09A4\u09CD\u09A4\u09B0 \u09AA\u09BE\u09A0\u09BE\u09A8",
-  "inquiries.yourReply": "\u0986\u09AA\u09A8\u09BE\u09B0 \u0989\u09A4\u09CD\u09A4\u09B0",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0986\u09AA\u09A8\u09BF",
+  "inquiryThread.artisan": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0",
+  "inquiryThread.buyer": "\u0995\u09CD\u09B0\u09C7\u09A4\u09BE",
+  "inquiryThread.placeholder": "\u09AC\u09BE\u09B0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u09C1\u09A8, \u098F\u099F\u09BF \u0985\u09A8\u09CD\u09AF\u0995\u09C7 \u0987\u09AE\u09C7\u0987\u09B2 \u09B9\u09AC\u09C7",
+  "inquiryThread.messageRequired": "\u09AA\u09BE\u09A0\u09BE\u09A8\u09CB\u09B0 \u0986\u0997\u09C7 \u09AC\u09BE\u09B0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u09C1\u09A8",
+  "inquiryThread.send": "\u09AA\u09BE\u09A0\u09BE\u09A8",
+  "inquiryThread.closedNote": "\u098F\u0987 \u0985\u09A8\u09C1\u09B8\u09A8\u09CD\u09A7\u09BE\u09A8\u099F\u09BF \u09AC\u09A8\u09CD\u09A7 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7\u0964",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -2793,9 +2712,6 @@ var bn_default = {
   "marketplace.inquiryStatusOpen": "\u0989\u09A4\u09CD\u09A4\u09B0\u09C7\u09B0 \u0985\u09AA\u09C7\u0995\u09CD\u09B7\u09BE\u09AF\u09BC",
   "marketplace.inquiryStatusOpenResponded": "\u0996\u09CB\u09B2\u09BE",
   "marketplace.inquiryStatusClosed": "\u09AC\u09A8\u09CD\u09A7",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0 \u098F\u099F\u09BF \u0989\u09A4\u09CD\u09A4\u09B0 \u09A6\u09C7\u0993\u09DF\u09BE \u09B9\u09BF\u09B8\u09C7\u09AC\u09C7 \u099A\u09BF\u09B9\u09CD\u09A8\u09BF\u09A4 \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964",
-  "marketplace.artisanReplyLabel": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u09B0 \u0989\u09A4\u09CD\u09A4\u09B0",
   "marketplace.outOfStock": "\u09B8\u09CD\u099F\u0995 \u09B6\u09C7\u09B7",
   "marketplace.outOfStockInquiryNote": "\u098F\u0987 \u09AA\u09A3\u09CD\u09AF\u099F\u09BF \u09AC\u09B0\u09CD\u09A4\u09AE\u09BE\u09A8\u09C7 \u09B8\u09CD\u099F\u0995 \u09B6\u09C7\u09B7\u0964 \u0986\u09AA\u09A8\u09BF \u098F\u0996\u09A8\u0993 \u09B6\u09BF\u09B2\u09CD\u09AA\u09C0\u0995\u09C7 \u099C\u09BF\u099C\u09CD\u099E\u09BE\u09B8\u09BE \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09C7\u09A8 \u0995\u0996\u09A8 \u098F\u099F\u09BF \u0986\u09AC\u09BE\u09B0 \u09AA\u09BE\u0993\u09DF\u09BE \u09AF\u09BE\u09AC\u09C7\u0964",
   "heritage.title": "\u0995\u09BF\u099B\u09C1 \u0985\u09A4\u09BF\u09B0\u09BF\u0995\u09CD\u09A4 \u09A4\u09A5\u09CD\u09AF (\u0990\u099A\u09CD\u099B\u09BF\u0995)",
@@ -3046,18 +2962,18 @@ var brx_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u091C\u0935\u093E\u092C",
-  "inquiries.replyPlaceholder": "\u091C\u0935\u093E\u092C \u0932\u093F\u0916\u093E\u092C, \u090F\u0939\u093E \u092C\u093E\u092F\u0930\u093E\u092F \u0908\u092E\u0947\u0932 \u0925\u093E\u0902\u092C\u093E\u092F",
-  "inquiries.replyRequired": "\u092A\u093E\u0920\u093E\u092C\u0928\u093E\u092F \u092A\u0939\u093F\u0932\u093E \u091C\u0935\u093E\u092C \u0932\u093F\u0916\u093E\u092C",
-  "inquiries.sendReply": "\u091C\u0935\u093E\u092C \u092A\u0920\u093E\u092C",
-  "inquiries.yourReply": "\u0928\u093E\u0902\u0926\u094B\u0902 \u091C\u0935\u093E\u092C",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0928'\u0907",
+  "inquiryThread.artisan": "\u0939\u0938\u094D\u0924\u0915\u0932\u093E",
+  "inquiryThread.buyer": "\u0916\u0930\u093F\u0926\u0917\u094D\u0930\u093E",
+  "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u093E\u092C, \u090F\u0916\u094B\u0928 \u0926\u094B\u092C\u094D\u092C\u0930 \u092B\u093E\u0932\u093E\u092F \u0926\u093F\u0939\u093E\u092F",
+  "inquiryThread.messageRequired": "\u092A\u0920\u093E\u092F\u092C \u0938\u093F\u0917\u093E\u092C \u0928\u093F\u092B\u094D\u0930\u093E\u092F, \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u093E\u092C",
+  "inquiryThread.send": "\u092A\u0920\u093E\u092C",
+  "inquiryThread.closedNote": "\u0939\u093E\u092C\u093E \u092C\u093F\u0938\u0930\u093E\u092F \u092C\u0901\u0926 \u0939\u094B\u092C\u093E\u092F",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -3152,9 +3068,6 @@ var brx_default = {
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C\u0928\u093F \u0925\u093E\u0902",
   "marketplace.inquiryStatusOpenResponded": "\u0916\u094B\u0932\u094B",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0915\u093E\u0930\u0940\u0917\u0930 \u090F\u0939\u093E \u092C\u093F\u0938\u0930\u093E\u092F \u092C\u093F\u0925\u093E\u092F",
-  "marketplace.artisanReplyLabel": "\u0915\u093E\u0930\u0940\u0917\u0930\u0928\u093F \u091C\u0935\u093E\u092C",
   "marketplace.outOfStock": "\u0938\u094D\u091F\u0949\u0915 \u0928\u093E\u092F",
   "marketplace.outOfStockInquiryNote": "\u090F\u0939\u093E \u092C\u093F\u0938\u0930\u093E\u092F \u0925\u093E\u0902\u092C\u093E\u092F \u0928\u093E\u092F\u0964 \u0928\u093E\u0902\u0926\u094B\u0902 \u0915\u093E\u0930\u0940\u0917\u0930\u0928\u093F \u092B\u093F\u0928 \u0925\u093E\u0902\u092C\u093E\u092F \u092C\u093F\u0938\u0930\u093E\u092F \u092C\u093F\u0938\u0930\u093E\u092F\u0964",
   "heritage.title": "A few more details (optional)",
@@ -3405,18 +3318,18 @@ var doi_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u091C\u0935\u093E\u092C",
-  "inquiries.replyPlaceholder": "\u091C\u0935\u093E\u092C \u0932\u093F\u0916\u094B, \u0908\u092E\u0947\u0932 \u0916\u0930\u0940\u0926\u093E\u0930 \u0928\u0941 \u092D\u0947\u091C\u093E \u091C\u093E\u0935\u0947\u0917\u093E",
-  "inquiries.replyRequired": "\u092D\u0947\u091C\u0923 \u0924\u094B \u092A\u0939\u0932\u0947 \u091C\u0935\u093E\u092C \u0932\u093F\u0916\u094B",
-  "inquiries.sendReply": "\u091C\u0935\u093E\u092C \u092D\u0947\u091C\u094B",
-  "inquiries.yourReply": "\u0924\u0941\u0939\u093E\u0921\u093C\u093E \u091C\u0935\u093E\u092C",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0924\u0941\u0939\u093E\u0902",
+  "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
+  "inquiryThread.buyer": "\u0916\u0930\u0940\u0926\u093E\u0930",
+  "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u094B, \u0908\u2011\u092E\u0947\u0932 \u0926\u094B\u0939\u093E\u0902 \u0928\u0942\u0901 \u091C\u093E\u0935\u0947\u0917\u093E",
+  "inquiryThread.messageRequired": "\u092D\u0947\u091C\u0923 \u0924\u094B \u092A\u0939\u0932\u093E\u0902 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u094B",
+  "inquiryThread.send": "\u092D\u0947\u091C\u094B",
+  "inquiryThread.closedNote": "\u0907\u0939 \u092A\u0942\u091B\u0924\u093E\u091B \u092C\u0902\u0926 \u0939\u0948",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -3511,9 +3424,6 @@ var doi_default = {
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C \u0926\u093E \u0907\u0902\u0924\u091C\u093E\u0930",
   "marketplace.inquiryStatusOpenResponded": "\u0916\u0941\u0932\u094D\u0932\u093E",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0928\u0947 \u0907\u0938\u0928\u0942 \u091C\u0935\u093E\u092C \u0926\u093F\u092F\u093E \u091A\u093F\u0928\u094D\u0939\u093F\u0924 \u0915\u093F\u092F\u093E",
-  "marketplace.artisanReplyLabel": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0926\u093E \u091C\u0935\u093E\u092C",
   "marketplace.outOfStock": "\u0938\u094D\u091F\u0949\u0915 \u0916\u093C\u0924\u092E",
   "marketplace.outOfStockInquiryNote": "\u0907\u0939 \u091A\u0940\u091C\u093C \u0907\u0938 \u0935\u0916\u094D\u0924 \u0938\u094D\u091F\u0949\u0915 \u0916\u093C\u0924\u092E \u0939\u0948\u0964 \u0924\u0941\u0938\u0940\u0902 \u092B\u093F\u0930 \u092D\u0940 \u0915\u093E\u0930\u0940\u0917\u0930 \u0928\u093E\u0932 \u092A\u0941\u091B \u0938\u0915\u0926\u0947 \u0939\u094B \u0915\u093F \u0915\u092C \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u0940\u0964",
   "heritage.title": "A few more details (optional)",
@@ -3764,18 +3674,18 @@ var en_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "Reply",
-  "inquiries.replyPlaceholder": "Write a reply, this is emailed to the buyer",
-  "inquiries.replyRequired": "Write a reply before sending",
-  "inquiries.sendReply": "Send reply",
-  "inquiries.yourReply": "Your reply",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "You",
+  "inquiryThread.artisan": "Artisan",
+  "inquiryThread.buyer": "Buyer",
+  "inquiryThread.placeholder": "Write a message, this is emailed to the other side",
+  "inquiryThread.messageRequired": "Write a message before sending",
+  "inquiryThread.send": "Send",
+  "inquiryThread.closedNote": "This inquiry is closed.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -3870,9 +3780,6 @@ var en_default = {
   "marketplace.inquiryStatusOpen": "Awaiting reply",
   "marketplace.inquiryStatusOpenResponded": "Open",
   "marketplace.inquiryStatusClosed": "Closed",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "The artisan marked this as responded.",
-  "marketplace.artisanReplyLabel": "Artisan's reply",
   "marketplace.outOfStock": "Out of stock",
   "marketplace.outOfStockInquiryNote": "This item is currently out of stock. You can still ask the artisan when it will be available.",
   "heritage.title": "A few more details (optional)",
@@ -4123,18 +4030,18 @@ var gu_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0A9C\u0AB5\u0ABE\u0AAC",
-  "inquiries.replyPlaceholder": "\u0A9C\u0AB5\u0ABE\u0AAC \u0AB2\u0A96\u0ACB, \u0A86 \u0A96\u0AB0\u0AC0\u0AA6\u0AA6\u0ABE\u0AB0\u0AC7\u0AA8\u0AC7 \u0A87\u0AAE\u0AC7\u0AB2 \u0AA5\u0AB6\u0AC7",
-  "inquiries.replyRequired": "\u0AAE\u0ACB\u0A95\u0AB2\u0AA4\u0ABE \u0AAA\u0AB9\u0AC7\u0AB2\u0ABE \u0A9C\u0AB5\u0ABE\u0AAC \u0AB2\u0A96\u0ACB",
-  "inquiries.sendReply": "\u0A9C\u0AB5\u0ABE\u0AAC \u0AAE\u0ACB\u0A95\u0AB2\u0ACB",
-  "inquiries.yourReply": "\u0AA4\u0AAE\u0ABE\u0AB0\u0ACB \u0A9C\u0AB5\u0ABE\u0AAC",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0AA4\u0AAE\u0AC7",
+  "inquiryThread.artisan": "\u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0",
+  "inquiryThread.buyer": "\u0A96\u0AB0\u0AC0\u0AA6\u0AA6\u0ABE\u0AB0",
+  "inquiryThread.placeholder": "\u0AB8\u0A82\u0AA6\u0AC7\u0AB6 \u0AB2\u0A96\u0ACB, \u0A86 \u0AAC\u0AC0\u0A9C\u0ABE \u0AAA\u0A95\u0ACD\u0AB7\u0AA8\u0AC7 \u0A87\u0AAE\u0AC7\u0AB2 \u0AA5\u0AB6\u0AC7",
+  "inquiryThread.messageRequired": "\u0AAE\u0ACB\u0A95\u0AB2\u0AA4\u0ABE \u0AAA\u0AB9\u0AC7\u0AB2\u0ABE \u0AB8\u0A82\u0AA6\u0AC7\u0AB6 \u0AB2\u0A96\u0ACB",
+  "inquiryThread.send": "\u0AAE\u0ACB\u0A95\u0AB2\u0ACB",
+  "inquiryThread.closedNote": "\u0A86 \u0AAA\u0AC2\u0A9B\u0AAA\u0AB0\u0A9B \u0AAC\u0A82\u0AA7 \u0A9B\u0AC7.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -4229,9 +4136,6 @@ var gu_default = {
   "marketplace.inquiryStatusOpen": "\u0A9C\u0AB5\u0ABE\u0AAC\u0AA8\u0AC0 \u0AB0\u0ABE\u0AB9\u0AAE\u0ABE\u0A82",
   "marketplace.inquiryStatusOpenResponded": "\u0A96\u0AC1\u0AB2\u0ACD\u0AB2\u0AC1\u0A82",
   "marketplace.inquiryStatusClosed": "\u0AAC\u0A82\u0AA7",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0\u0A8F \u0A86\u0AA8\u0AC7 \u0AAA\u0ACD\u0AB0\u0AA4\u0ABF\u0AB8\u0ABE\u0AA6\u0ABF\u0AA4 \u0AA4\u0AB0\u0AC0\u0A95\u0AC7 \u0A9A\u0ABF\u0AB9\u0ACD\u0AA8\u0ABF\u0AA4 \u0A95\u0AB0\u0ACD\u0AAF\u0AC1\u0A82",
-  "marketplace.artisanReplyLabel": "\u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0\u0AA8\u0ACB \u0A9C\u0AB5\u0ABE\u0AAC",
   "marketplace.outOfStock": "\u0AB8\u0ACD\u0A9F\u0ACB\u0A95\u0AAE\u0ABE\u0A82 \u0AA8\u0AA5\u0AC0",
   "marketplace.outOfStockInquiryNote": "\u0A86 \u0AB5\u0AB8\u0ACD\u0AA4\u0AC1 \u0AB9\u0ABE\u0AB2\u0AAE\u0ABE\u0A82 \u0AB8\u0ACD\u0A9F\u0ACB\u0A95\u0AAE\u0ABE\u0A82 \u0AA8\u0AA5\u0AC0. \u0AA4\u0AAE\u0AC7 \u0AB9\u0A9C\u0AC0 \u0AAA\u0AA3 \u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0\u0AA8\u0AC7 \u0AAA\u0AC1\u0A9B\u0ACB \u0A95\u0AC7 \u0AA4\u0AC7 \u0A95\u0ACD\u0AAF\u0ABE\u0AB0\u0AC7 \u0A89\u0AAA\u0AB2\u0AAC\u0ACD\u0AA7 \u0AA5\u0AB6\u0AC7.",
   "heritage.title": "A few more details (optional)",
@@ -4482,18 +4386,18 @@ var hi_default = {
   "inquiries.loadError": "\u0906\u092A\u0915\u0940 \u092A\u0942\u091B\u0924\u093E\u091B \u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940",
   "inquiries.empty": "\u0905\u092D\u0940 \u0924\u0915 \u0915\u094B\u0908 \u092A\u0942\u091B\u0924\u093E\u091B \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u091C\u092C \u0915\u094B\u0908 \u0916\u0930\u0940\u0926\u093E\u0930 \u0909\u0924\u094D\u092A\u093E\u0926 \u0915\u0947 \u092C\u093E\u0930\u0947 \u092E\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C\u0947\u0917\u093E, \u0924\u094B \u092F\u0939\u093E\u0901 \u0926\u093F\u0916\u0947\u0917\u093E\u0964",
   "inquiries.badgeNew": "\u0928\u092F\u093E",
-  "inquiries.badgeResponded": "\u091C\u0935\u093E\u092C \u0926\u093F\u092F\u093E \u0917\u092F\u093E",
   "inquiries.quantityLine": "\u0930\u0941\u091A\u093F \u0935\u093E\u0932\u0940 \u092E\u093E\u0924\u094D\u0930\u093E: {n}",
   "inquiries.contactLine": "\u092A\u0938\u0902\u0926\u0940\u0926\u093E \u0938\u0902\u092A\u0930\u094D\u0915: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "WhatsApp \u092A\u0930 \u091C\u0935\u093E\u092C \u0926\u0947\u0902",
   "inquiries.whatsappReplyPrefill": "\u0928\u092E\u0938\u094D\u0924\u0947! KalaSetu \u092A\u0930 {product} \u092E\u0947\u0902 \u0906\u092A\u0915\u0940 \u0930\u0941\u091A\u093F \u0915\u0947 \u0932\u093F\u090F \u0927\u0928\u094D\u092F\u0935\u093E\u0926\u0964",
-  "inquiries.markResponded": "\u091C\u0935\u093E\u092C \u0926\u093F\u092F\u093E \u0917\u092F\u093E",
-  "inquiries.reply": "\u091C\u0935\u093E\u092C",
-  "inquiries.replyPlaceholder": "\u091C\u0935\u093E\u092C \u0932\u093F\u0916\u0947\u0902, \u092F\u0939 \u0916\u0930\u0940\u0926\u093E\u0930 \u0915\u094B \u0908\u092E\u0947\u0932 \u0915\u093F\u092F\u093E \u091C\u093E\u090F\u0917\u093E",
-  "inquiries.replyRequired": "\u092D\u0947\u091C\u0928\u0947 \u0938\u0947 \u092A\u0939\u0932\u0947 \u091C\u0935\u093E\u092C \u0932\u093F\u0916\u0947\u0902",
-  "inquiries.sendReply": "\u091C\u0935\u093E\u092C \u092D\u0947\u091C\u0947\u0902",
-  "inquiries.yourReply": "\u0906\u092A\u0915\u093E \u091C\u0935\u093E\u092C",
   "inquiries.close": "\u092A\u0942\u091B\u0924\u093E\u091B \u092C\u0902\u0926 \u0915\u0930\u0947\u0902",
+  "inquiryThread.you": "\u0906\u092A",
+  "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
+  "inquiryThread.buyer": "\u0916\u0930\u0940\u0926\u093E\u0930",
+  "inquiryThread.placeholder": "\u090F\u0915 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0947\u0902, \u092F\u0939 \u0926\u0942\u0938\u0930\u0947 \u092A\u0915\u094D\u0937 \u0915\u094B \u0908\u092E\u0947\u0932 \u0915\u093F\u092F\u093E \u091C\u093E\u090F\u0917\u093E",
+  "inquiryThread.messageRequired": "\u092D\u0947\u091C\u0928\u0947 \u0938\u0947 \u092A\u0939\u0932\u0947 \u090F\u0915 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0947\u0902",
+  "inquiryThread.send": "\u092D\u0947\u091C\u0947\u0902",
+  "inquiryThread.closedNote": "\u092F\u0939 \u092A\u0942\u091B\u0924\u093E\u091B \u092C\u0902\u0926 \u0939\u0948\u0964",
   "shipping.estimateToggle": "\u0917\u0902\u0924\u0935\u094D\u092F \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0905\u0928\u0941\u092E\u093E\u0928\u093F\u0924 \u0936\u093F\u092A\u093F\u0902\u0917 \u0932\u093E\u0917\u0924",
   "shipping.estimateDisclaimer": "\u0938\u093E\u092E\u093E\u0928\u094D\u092F \u092D\u093E\u0930\u0924\u0940\u092F \u0915\u0942\u0930\u093F\u092F\u0930 \u0926\u0930\u094B\u0902 \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u092E\u094B\u091F\u093E \u0905\u0928\u0941\u092E\u093E\u0928, \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0915\u094B\u091F \u092F\u093E \u092C\u0941\u0915\u093F\u0902\u0917 \u0928\u0939\u0940\u0902\u0964 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0932\u093E\u0917\u0924 \u0916\u0930\u0940\u0926\u093E\u0930 \u0915\u0947 \u0911\u0930\u094D\u0921\u0930 \u0915\u0947 \u0915\u0942\u0930\u093F\u092F\u0930 \u092A\u0930 \u0928\u093F\u0930\u094D\u092D\u0930 \u0915\u0930\u0924\u0940 \u0939\u0948\u0964",
   "shipping.weightMissingArtisanNote": "\u092A\u093F\u091B\u0932\u0947 \u091A\u0930\u0923 \u092E\u0947\u0902 \u0905\u0928\u0941\u092E\u093E\u0928\u093F\u0924 \u0935\u091C\u0928 \u091C\u094B\u0921\u093C\u0947\u0902 \u0924\u093E\u0915\u093F \u092F\u0939\u093E\u0901 \u0905\u0928\u0941\u092E\u093E\u0928\u093F\u0924 \u0936\u093F\u092A\u093F\u0902\u0917 \u0932\u093E\u0917\u0924 \u0926\u093F\u0916\u0947 \u0914\u0930 \u0916\u0930\u0940\u0926\u093E\u0930\u094B\u0902 \u0915\u094B \u092D\u0940 \u0926\u093F\u0916\u0947\u0964",
@@ -4588,9 +4492,6 @@ var hi_default = {
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C \u0915\u093E \u0907\u0902\u0924\u091C\u093E\u0930",
   "marketplace.inquiryStatusOpenResponded": "\u0916\u0941\u0932\u093E",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
-  "marketplace.inquiryResponded": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0928\u0947 \u091C\u0935\u093E\u092C \u0926\u093F\u092F\u093E",
-  "marketplace.inquiryRespondedNoText": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0928\u0947 \u0907\u0938\u0947 \u0909\u0924\u094D\u0924\u0930 \u0926\u093F\u092F\u093E \u0939\u0941\u0906 \u091A\u093F\u0939\u094D\u0928\u093F\u0924 \u0915\u093F\u092F\u093E",
-  "marketplace.artisanReplyLabel": "\u0915\u093E\u0930\u0940\u0917\u0930 \u0915\u093E \u091C\u0935\u093E\u092C",
   "marketplace.outOfStock": "\u0938\u094D\u091F\u0949\u0915 \u0916\u093C\u0924\u092E",
   "marketplace.outOfStockInquiryNote": "\u092F\u0939 \u0935\u0938\u094D\u0924\u0941 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0938\u094D\u091F\u0949\u0915 \u0916\u093C\u0924\u092E \u0939\u0948\u0964 \u0906\u092A \u0905\u092D\u0940 \u092D\u0940 \u0915\u093E\u0930\u0940\u0917\u0930 \u0938\u0947 \u092A\u0942\u091B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902 \u0915\u093F \u092F\u0939 \u0915\u092C \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u0940\u0964",
   "heritage.title": "\u0915\u0941\u091B \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0935\u093F\u0935\u0930\u0923 (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
@@ -4841,18 +4742,18 @@ var kn_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0C89\u0CA4\u0CCD\u0CA4\u0CB0",
-  "inquiries.replyPlaceholder": "\u0C89\u0CA4\u0CCD\u0CA4\u0CB0\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAC\u0CB0\u0CC6\u0CAF\u0CBF\u0CB0\u0CBF, \u0C87\u0CA6\u0CC1 \u0C96\u0CB0\u0CC0\u0CA6\u0CBF\u0CA6\u0CBE\u0CB0\u0CB0\u0CBF\u0C97\u0CC6 \u0C87\u0CAE\u0CC7\u0CB2\u0CCD \u0C86\u0C97\u0CC1\u0CA4\u0CCD\u0CA4\u0CA6\u0CC6",
-  "inquiries.replyRequired": "\u0C95\u0CB3\u0CC1\u0CB9\u0CBF\u0CB8\u0CC1\u0CB5 \u0CAE\u0CCA\u0CA6\u0CB2\u0CC1 \u0C89\u0CA4\u0CCD\u0CA4\u0CB0\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAC\u0CB0\u0CC6\u0CAF\u0CBF\u0CB0\u0CBF",
-  "inquiries.sendReply": "\u0C89\u0CA4\u0CCD\u0CA4\u0CB0 \u0C95\u0CB3\u0CC1\u0CB9\u0CBF\u0CB8\u0CBF",
-  "inquiries.yourReply": "\u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0C89\u0CA4\u0CCD\u0CA4\u0CB0",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0CA8\u0CC0\u0CB5\u0CC1",
+  "inquiryThread.artisan": "\u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0",
+  "inquiryThread.buyer": "\u0C96\u0CB0\u0CC0\u0CA6\u0CBF\u0CA6\u0CBE\u0CB0",
+  "inquiryThread.placeholder": "\u0CB8\u0C82\u0CA6\u0CC7\u0CB6\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAC\u0CB0\u0CC6\u0CAF\u0CBF\u0CB0\u0CBF, \u0C87\u0CA6\u0CC1 \u0C87\u0CA8\u0CCD\u0CA8\u0CCA\u0CAC\u0CCD\u0CAC\u0CB0\u0CBF\u0C97\u0CC6 \u0C87\u0CAE\u0CC7\u0CB2\u0CCD \u0C86\u0C97\u0CC1\u0CA4\u0CCD\u0CA4\u0CA6\u0CC6",
+  "inquiryThread.messageRequired": "\u0C95\u0CB3\u0CC1\u0CB9\u0CBF\u0CB8\u0CC1\u0CB5 \u0CAE\u0CCA\u0CA6\u0CB2\u0CC1 \u0CB8\u0C82\u0CA6\u0CC7\u0CB6\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAC\u0CB0\u0CC6\u0CAF\u0CBF\u0CB0\u0CBF",
+  "inquiryThread.send": "\u0C95\u0CB3\u0CC1\u0CB9\u0CBF\u0CB8\u0CBF",
+  "inquiryThread.closedNote": "\u0C88 \u0CB5\u0CBF\u0C9A\u0CBE\u0CB0\u0CA3\u0CC6 \u0CAE\u0CC1\u0C9A\u0CCD\u0C9A\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -4947,9 +4848,6 @@ var kn_default = {
   "marketplace.inquiryStatusOpen": "\u0C89\u0CA4\u0CCD\u0CA4\u0CB0\u0C95\u0CCD\u0C95\u0CBE\u0C97\u0CBF \u0C95\u0CBE\u0CAF\u0CC1\u0CA4\u0CCD\u0CA4\u0CBF\u0CA6\u0CC6",
   "marketplace.inquiryStatusOpenResponded": "\u0CA4\u0CC6\u0CB0\u0CC6\u0CA6",
   "marketplace.inquiryStatusClosed": "\u0CAE\u0CC1\u0C9A\u0CCD\u0C9A\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0 \u0C87\u0CA6\u0CA8\u0CCD\u0CA8\u0CC1 \u0C89\u0CA4\u0CCD\u0CA4\u0CB0\u0CBF\u0CB8\u0CBF\u0CA6\u0C82\u0CA4\u0CC6 \u0C97\u0CC1\u0CB0\u0CC1\u0CA4\u0CBF\u0CB8\u0CBF\u0CA6\u0CCD\u0CA6\u0CBE\u0CB0\u0CC6",
-  "marketplace.artisanReplyLabel": "\u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0\u0CA6 \u0C89\u0CA4\u0CCD\u0CA4\u0CB0",
   "marketplace.outOfStock": "\u0CB8\u0CCD\u0C9F\u0CBE\u0C95\u0CCD \u0CAE\u0CC1\u0C97\u0CBF\u0CA6\u0CBF\u0CA6\u0CC6",
   "marketplace.outOfStockInquiryNote": "\u0C88 \u0CB5\u0CB8\u0CCD\u0CA4\u0CC1 \u0CAA\u0CCD\u0CB0\u0CB8\u0CCD\u0CA4\u0CC1\u0CA4 \u0CB8\u0CCD\u0C9F\u0CBE\u0C95\u0CCD \u0CAE\u0CC1\u0C97\u0CBF\u0CA6\u0CBF\u0CA6\u0CC6. \u0CA8\u0CC0\u0CB5\u0CC1 \u0C87\u0CA8\u0CCD\u0CA8\u0CC2 \u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0\u0CB0\u0CA8\u0CCD\u0CA8\u0CC1 \u0C87\u0CA6\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAF\u0CBE\u0CB5\u0CBE\u0C97 \u0CB2\u0CAD\u0CCD\u0CAF\u0CB5\u0CBE\u0C97\u0CC1\u0CA4\u0CCD\u0CA4\u0CA6\u0CC6 \u0C8E\u0C82\u0CA6\u0CC1 \u0C95\u0CC7\u0CB3\u0CAC\u0CB9\u0CC1\u0CA6\u0CC1.",
   "heritage.title": "A few more details (optional)",
@@ -5200,18 +5098,18 @@ var kok_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u091C\u0935\u093E\u092C",
-  "inquiries.replyPlaceholder": "\u091C\u0935\u093E\u092C \u0932\u093F\u0939\u093E, \u0916\u0930\u0947\u0926\u0940\u0926\u093E\u0930\u093E\u0915\u0921\u0947 \u0908\u092E\u0947\u0932 \u0939\u094B\u0908\u0932",
-  "inquiries.replyRequired": "\u092A\u093E\u0920\u0935\u0923\u094D\u092F\u093E\u092A\u0942\u0930\u094D\u0935\u0940 \u091C\u0935\u093E\u092C \u0932\u093F\u0939\u093E",
-  "inquiries.sendReply": "\u091C\u0935\u093E\u092C \u092A\u093E\u0920\u0935\u093E",
-  "inquiries.yourReply": "\u0924\u0941\u092E\u091A\u094B \u091C\u0935\u093E\u092C",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0924\u0942\u0902",
+  "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
+  "inquiryThread.buyer": "\u0916\u0930\u0947\u0926\u0940\u0926\u093E\u0930",
+  "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0939\u093E, \u0939\u093E\u091A \u0926\u0941\u0938\u0931\u094D\u092F\u093E\u0902\u0915\u093E \u0908\u092E\u0947\u0932 \u0915\u0930\u092A",
+  "inquiryThread.messageRequired": "\u092A\u093E\u0920\u0935\u0942\u0902\u091A\u0947 \u0906\u0927\u0940 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0939\u093E",
+  "inquiryThread.send": "\u092A\u093E\u0920\u0935",
+  "inquiryThread.closedNote": "\u0939\u094D\u092F\u093E \u091A\u094C\u0915\u0936\u0940 \u092C\u0902\u0926 \u0906\u0938\u093E.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -5306,9 +5204,6 @@ var kok_default = {
   "marketplace.inquiryStatusOpen": "\u0909\u0924\u094D\u0924\u0930\u093E \u0935\u093E\u091F\u0924\u093E",
   "marketplace.inquiryStatusOpenResponded": "\u0909\u0918\u0921\u0932\u0947",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0915\u0932\u093E\u0915\u093E\u0930 \u0939\u094D\u092F\u093E\u091A\u0947\u0902 \u0909\u0924\u094D\u0924\u0930 \u0926\u093F\u0932\u0947 \u092E\u094D\u0939\u0923\u0942\u0928 \u091A\u093F\u0928\u094D\u0939\u093E\u0902\u0915\u093F\u0924 \u0915\u0947\u0932\u0902",
-  "marketplace.artisanReplyLabel": "\u0915\u0932\u093E\u0915\u093E\u0930\u093E\u091A\u094B \u091C\u0935\u093E\u092C",
   "marketplace.outOfStock": "\u0938\u093E\u0920\u093E \u0928\u094D\u0939\u092F",
   "marketplace.outOfStockInquiryNote": "\u0939\u094D\u092F\u093E \u0935\u0938\u094D\u0924\u0942 \u0938\u0927\u094D\u092F\u093E\u091A\u094B \u0938\u093E\u0920\u093E \u0928\u094D\u0939\u092F. \u0924\u0930\u0940\u0939\u0940 \u0924\u0941\u092E\u094D\u0939\u0940 \u0915\u0932\u093E\u0915\u093E\u0930\u093E\u0915 \u0935\u093F\u091A\u093E\u0930\u0942 \u0936\u0915\u0924\u093E \u0915\u0926\u093E\u091A \u0909\u092A\u0932\u092C\u094D\u0927 \u091C\u093E\u0932\u094B.",
   "heritage.title": "A few more details (optional)",
@@ -5559,18 +5454,18 @@ var ks_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u062C\u0648\u0627\u0628",
-  "inquiries.replyPlaceholder": "\u062C\u0648\u0627\u0628 \u0644\u06A9\u06BE\u06CC\u0648\u060C \u06CC\u06C1 \u062E\u0631\u06CC\u062F\u0627\u0631 \u0633\u0672\u0679\u06BE \u0627\u06CC \u0645\u06CC\u0644 \u06C1\u0648\u0672\u06D2 \u06AF\u0627",
-  "inquiries.replyRequired": "\u0628\u06BE\u06CC\u062C\u064E\u0646 \u0633\u0672\u0679\u06BE \u067E\u06C1\u0644\u06C2 \u062C\u0648\u0627\u0628 \u0644\u06A9\u06BE\u06CC\u0648",
-  "inquiries.sendReply": "\u062C\u0648\u0627\u0628 \u0628\u06BE\u06CC\u062C\u0648",
-  "inquiries.yourReply": "\u062A\u0648\u06C1\u0646\u062F \u062C\u0648\u0627\u0628",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u062A\u0648\u06C1",
+  "inquiryThread.artisan": "\u06A9\u0627\u0631\u06AF\u0631",
+  "inquiryThread.buyer": "\u062E\u0631\u06CC\u062F\u0627\u0631",
+  "inquiryThread.placeholder": "\u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u06CC\u0648\u060C \u06CC\u06C1 \u062F\u0648\u0633\u0631\u0627 \u067E\u0679\u06BE\u0646 \u06C1\u0646\u062F \u0627\u06CC \u0645\u06CC\u0644 \u06A9\u0631\u0646 \u06C1\u0646\u062F \u0686\u06BE",
+  "inquiryThread.messageRequired": "\u0628\u06BE\u06CC\u062C\u0646 \u0633\u06C4\u0646\u06C1 \u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u06CC\u0648",
+  "inquiryThread.send": "\u0628\u06BE\u06CC\u062C\u0648",
+  "inquiryThread.closedNote": "\u06CC\u06C1 \u0627\u0633\u062A\u0641\u0633\u0627\u0631 \u0628\u0646\u062F \u0686\u06BE",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -5665,9 +5560,6 @@ var ks_default = {
   "marketplace.inquiryStatusOpen": "\u062C\u0648\u0627\u0628 \u0627\u0646\u062A\u0638\u0627\u0631\u06CC",
   "marketplace.inquiryStatusOpenResponded": "\u06A9\u06BE\u064F\u0644",
   "marketplace.inquiryStatusClosed": "\u0628\u0646\u062F",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u06A9\u0627\u0631\u06AF\u064E\u0631 \u06C1\u06CC\u06C1 \u062C\u0648\u0627\u0628 \u062F\u0650\u062A\u06BE \u0646\u0634\u0627\u0646 \u0644\u06AF\u0627\u0648",
-  "marketplace.artisanReplyLabel": "\u06A9\u0627\u0631\u06AF\u064E\u0631 \u06C1\u0646\u062F \u062C\u0648\u0627\u0628",
   "marketplace.outOfStock": "\u0633\u0679\u0627\u06A9 \u062E\u062A\u0645",
   "marketplace.outOfStockInquiryNote": "\u06CC\u06C1 \u0634\u06D2 \u06C1\u0646\u0672\u06C1 \u0633\u0679\u0627\u06A9 \u062E\u062A\u0645 \u0686\u06BE\u064F\u06D4 \u062A\u0648\u06C1\u0646\u062F \u06A9\u0627\u0631\u06AF\u064E\u0631 \u0633\u0672\u0679\u06BE \u067E\u064F\u0686\u06BE \u0633\u0672\u0679\u06BE \u06C1\u0646\u062F\u0650\u06CC \u062F\u0633\u062A\u06CC\u0627\u0628 \u06C1\u0648\u0646\u0672\u06C1\u06D4",
   "heritage.title": "A few more details (optional)",
@@ -5918,18 +5810,18 @@ var mai_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u091C\u0935\u093E\u092C",
-  "inquiries.replyPlaceholder": "\u091C\u0935\u093E\u092C \u0932\u093F\u0916\u0942, \u0908 \u0916\u0930\u0940\u0926\u093E\u0930 \u0915\u0947\u0901 \u0908\u092E\u0947\u0932 \u0915' \u092D\u0947\u091C\u0932 \u091C\u093E\u092F\u0924",
-  "inquiries.replyRequired": "\u092D\u0947\u091C\u0948 \u0938\u0901 \u092A\u0939\u093F\u0928\u0947 \u091C\u0935\u093E\u092C \u0932\u093F\u0916\u0942",
-  "inquiries.sendReply": "\u091C\u0935\u093E\u092C \u092D\u0947\u091C\u0942",
-  "inquiries.yourReply": "\u0905\u0939\u093E\u0901\u0915 \u091C\u0935\u093E\u092C",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0905\u0939\u093E\u0901",
+  "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
+  "inquiryThread.buyer": "\u0916\u0930\u0940\u0926\u093E\u0930",
+  "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0942, \u0908 \u0926\u094B\u0938\u0930 \u092A\u0915\u094D\u0937 \u0915\u0947 \u0908\u092E\u0947\u0932 \u0915\u090F\u0932 \u091C\u093E\u092F\u0924",
+  "inquiryThread.messageRequired": "\u092D\u0947\u091C\u0948 \u0938\u0901 \u092A\u0939\u093F\u0928\u0947 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0942",
+  "inquiryThread.send": "\u092D\u0947\u091C\u0942",
+  "inquiryThread.closedNote": "\u0908 \u092A\u0942\u091B\u0924\u093E\u091B \u092C\u0902\u0926 \u0905\u091B\u093F\u0964",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -6024,9 +5916,6 @@ var mai_default = {
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092C\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E",
   "marketplace.inquiryStatusOpenResponded": "\u0916\u0941\u0932\u0932",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0915\u093E\u0930\u0940\u0917\u0930 \u090F\u0939\u0940 \u0915\u0947\u0901 \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0932 \u0917\u0947\u0932 \u091A\u093F\u0928\u094D\u0939\u093F\u0924 \u0915\u090F\u0932\u0928\u094D\u0939\u093F\u0964",
-  "marketplace.artisanReplyLabel": "\u0915\u093E\u0930\u0940\u0917\u0930\u0915 \u091C\u0935\u093E\u092C",
   "marketplace.outOfStock": "\u0938\u094D\u091F\u0949\u0915 \u0916\u0924\u094D\u092E",
   "marketplace.outOfStockInquiryNote": "\u0908 \u0935\u0938\u094D\u0924\u0941 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0938\u094D\u091F\u0949\u0915 \u0916\u0924\u094D\u092E \u0905\u091B\u093F\u0964 \u0905\u0939\u093E\u0901 \u0905\u092D\u0940\u092F\u094B \u0915\u093E\u0930\u0940\u0917\u0930 \u0938\u0901 \u092A\u0942\u091B\u093F \u0938\u0915\u0948\u0924 \u091B\u0940 \u091C\u0947 \u0908 \u0915\u092C \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u092F\u0924\u0964",
   "heritage.title": "A few more details (optional)",
@@ -6277,18 +6166,18 @@ var ml_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F",
-  "inquiries.replyPlaceholder": "\u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F \u0D0E\u0D34\u0D41\u0D24\u0D41\u0D15, \u0D07\u0D24\u0D4D \u0D35\u0D3E\u0D19\u0D4D\u0D19\u0D41\u0D28\u0D4D\u0D28\u0D35\u0D28\u0D4D \u0D07\u0D2E\u0D46\u0D2F\u0D3F\u0D32\u0D4D\u200D \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D41\u0D02",
-  "inquiries.replyRequired": "\u0D05\u0D2F\u0D2F\u0D4D\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D24\u0D3F\u0D28\u0D4D \u0D2E\u0D41\u0D2E\u0D4D\u0D2A\u0D4D \u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F \u0D0E\u0D34\u0D41\u0D24\u0D41\u0D15",
-  "inquiries.sendReply": "\u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F \u0D05\u0D2F\u0D2F\u0D4D\u0D15\u0D4D\u0D15\u0D41\u0D15",
-  "inquiries.yourReply": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D33\u0D41\u0D1F\u0D46 \u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D7E",
+  "inquiryThread.artisan": "\u0D15\u0D32\u0D3E\u0D15\u0D3E\u0D30\u0D3F",
+  "inquiryThread.buyer": "\u0D35\u0D3E\u0D19\u0D4D\u0D19\u0D41\u0D28\u0D4D\u0D28\u0D35\u0D7B",
+  "inquiryThread.placeholder": "\u0D12\u0D30\u0D41 \u0D38\u0D28\u0D4D\u0D26\u0D47\u0D36\u0D02 \u0D0E\u0D34\u0D41\u0D24\u0D41\u0D15, \u0D07\u0D24\u0D4D \u0D2E\u0D31\u0D4D\u0D31\u0D35\u0D7C\u0D15\u0D4D\u0D15\u0D41 \u0D07\u0D2E\u0D46\u0D2F\u0D3F\u0D7D \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D41\u0D02",
+  "inquiryThread.messageRequired": "\u0D05\u0D2F\u0D2F\u0D4D\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D24\u0D3F\u0D28\u0D4D \u0D2E\u0D41\u0D2E\u0D4D\u0D2A\u0D4D \u0D12\u0D30\u0D41 \u0D38\u0D28\u0D4D\u0D26\u0D47\u0D36\u0D02 \u0D0E\u0D34\u0D41\u0D24\u0D41\u0D15",
+  "inquiryThread.send": "\u0D05\u0D2F\u0D15\u0D4D\u0D15\u0D41\u0D15",
+  "inquiryThread.closedNote": "\u0D08 \u0D1A\u0D4B\u0D26\u0D4D\u0D2F\u0D02 \u0D05\u0D1F\u0D1A\u0D4D\u0D1A\u0D3F\u0D30\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D41.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -6383,9 +6272,6 @@ var ml_default = {
   "marketplace.inquiryStatusOpen": "\u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F \u0D15\u0D3E\u0D24\u0D4D\u0D24\u0D3F\u0D30\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D41",
   "marketplace.inquiryStatusOpenResponded": "\u0D24\u0D41\u0D31\u0D28\u0D4D\u0D28",
   "marketplace.inquiryStatusClosed": "\u0D05\u0D1F\u0D1E\u0D4D\u0D1E\u0D41",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0D15\u0D32\u0D3E\u0D15\u0D3E\u0D30\u0D28\u0D4D\u200D \u0D07\u0D24\u0D3F\u0D28\u0D46 \u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F \u0D28\u0D32\u0D4D\u200D\u0D15\u0D3F\u0D2F\u0D24\u0D3E\u0D2F\u0D3F \u0D05\u0D1F\u0D2F\u0D3E\u0D33\u0D2A\u0D4D\u0D2A\u0D46\u0D1F\u0D41\u0D24\u0D4D\u0D24\u0D3F",
-  "marketplace.artisanReplyLabel": "\u0D15\u0D32\u0D3E\u0D15\u0D3E\u0D30\u0D28\u0D4D\u0D31\u0D46 \u0D2E\u0D31\u0D41\u0D2A\u0D1F\u0D3F",
   "marketplace.outOfStock": "\u0D38\u0D4D\u0D31\u0D4D\u0D31\u0D4B\u0D15\u0D4D\u0D15\u0D4D \u0D07\u0D32\u0D4D\u0D32",
   "marketplace.outOfStockInquiryNote": "\u0D08 \u0D09\u0D7D\u0D2A\u0D4D\u0D2A\u0D28\u0D4D\u0D28\u0D02 \u0D28\u0D3F\u0D32\u0D35\u0D3F\u0D7D \u0D38\u0D4D\u0D31\u0D4D\u0D31\u0D4B\u0D15\u0D4D\u0D15\u0D4D \u0D07\u0D32\u0D4D\u0D32. \u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D7E\u0D15\u0D4D\u0D15\u0D4D \u0D07\u0D2A\u0D4D\u0D2A\u0D4B\u0D34\u0D41\u0D02 \u0D15\u0D32\u0D3E\u0D15\u0D3E\u0D30\u0D28\u0D4B\u0D1F\u0D4D \u0D07\u0D24\u0D4D \u0D0E\u0D2A\u0D4D\u0D2A\u0D4B\u0D7E \u0D32\u0D2D\u0D4D\u0D2F\u0D2E\u0D3E\u0D15\u0D41\u0D02 \u0D0E\u0D28\u0D4D\u0D28\u0D4D \u0D1A\u0D4B\u0D26\u0D3F\u0D15\u0D4D\u0D15\u0D3E\u0D02.",
   "heritage.title": "A few more details (optional)",
@@ -6636,18 +6522,18 @@ var mni_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
-  "inquiries.replyPlaceholder": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
-  "inquiries.replyRequired": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
-  "inquiries.sendReply": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
-  "inquiries.yourReply": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\uABC5\uABE4",
+  "inquiryThread.artisan": "\uABC3\uABC1\uABE4\uABDF\uABC5\uABE4",
+  "inquiryThread.buyer": "\uABCA\uABE7\uABD5\uABE4",
+  "inquiryThread.placeholder": "\uABC3\uABE6\uABC1\uABE6\uABD6 \uABCD\uABDF\uABD5\uABE4, \uABD1\uABC3\uABC1\uABE4 \uABCA\uABE7\uABD4\uABE4\uABE1 \uABCA\uABD5\uABE4",
+  "inquiryThread.messageRequired": "\uABC3\uABE6\uABC1\uABE6\uABD6 \uABCD\uABDF\uABD5\uABE4 \uABCA\uABE7\uABD4\uABE4\uABE1 \uABCA\uABD5\uABE4",
+  "inquiryThread.send": "\uABCA\uABD5\uABE4",
+  "inquiryThread.closedNote": "\uABCA\uABE7\uABD4\uABE4\uABE1 \uABCA\uABD5\uABE4 \uABD1\uABC3\uABC1\uABE4 \uABCA\uABE8\uABD4\uABE4\uABDF",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -6742,9 +6628,6 @@ var mni_default = {
   "marketplace.inquiryStatusOpen": "\uABCD\uABDF\uABD5\uABE4 \uABCA\uABD5\uABE4",
   "marketplace.inquiryStatusOpenResponded": "\uABD1\uABE3\uABDE",
   "marketplace.inquiryStatusClosed": "\uABCD\uABDF\uABD5\uABE4 \uA351\uABC1\uABE4",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
-  "marketplace.artisanReplyLabel": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
   "marketplace.outOfStock": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
   "marketplace.outOfStockInquiryNote": "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF",
   "heritage.title": "A few more details (optional)",
@@ -6995,18 +6878,18 @@ var mr_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0909\u0924\u094D\u0924\u0930",
-  "inquiries.replyPlaceholder": "\u0916\u0930\u0947\u0926\u0940\u0926\u093E\u0930\u093E\u0932\u093E \u0908\u092E\u0947\u0932 \u0939\u094B\u0908\u0932, \u0909\u0924\u094D\u0924\u0930 \u0932\u093F\u0939\u093E",
-  "inquiries.replyRequired": "\u092A\u093E\u0920\u0935\u0923\u094D\u092F\u093E\u092A\u0942\u0930\u094D\u0935\u0940 \u0909\u0924\u094D\u0924\u0930 \u0932\u093F\u0939\u093E",
-  "inquiries.sendReply": "\u0909\u0924\u094D\u0924\u0930 \u092A\u093E\u0920\u0935\u093E",
-  "inquiries.yourReply": "\u0924\u0941\u092E\u091A\u0947 \u0909\u0924\u094D\u0924\u0930",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0924\u0941\u092E\u094D\u0939\u0940",
+  "inquiryThread.artisan": "\u0915\u093E\u0930\u093F\u0917\u0930",
+  "inquiryThread.buyer": "\u0916\u0930\u0947\u0926\u0940\u0926\u093E\u0930",
+  "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u091F\u093E\u0907\u092A \u0915\u0930\u093E, \u0939\u093E \u0926\u0941\u0938\u0931\u094D\u092F\u093E \u0935\u094D\u092F\u0915\u094D\u0924\u0940\u0932\u093E \u0908\u092E\u0947\u0932 \u0915\u0947\u0932\u093E \u091C\u093E\u0908\u0932",
+  "inquiryThread.messageRequired": "\u092A\u093E\u0920\u0935\u0923\u094D\u092F\u093E\u092A\u0942\u0930\u094D\u0935\u0940 \u0938\u0902\u0926\u0947\u0936 \u091F\u093E\u0907\u092A \u0915\u0930\u093E",
+  "inquiryThread.send": "\u092A\u093E\u0920\u0935\u093E",
+  "inquiryThread.closedNote": "\u0939\u0940 \u091A\u094C\u0915\u0936\u0940 \u092C\u0902\u0926 \u0906\u0939\u0947.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -7101,9 +6984,6 @@ var mr_default = {
   "marketplace.inquiryStatusOpen": "\u092A\u094D\u0930\u0924\u093F\u0938\u093E\u0926\u093E\u091A\u0940 \u0935\u093E\u091F \u092A\u093E\u0939\u0924 \u0906\u0939\u0947",
   "marketplace.inquiryStatusOpenResponded": "\u0909\u0918\u0921\u0932\u0947\u0932\u0947",
   "marketplace.inquiryStatusClosed": "\u092C\u0902\u0926",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0915\u0932\u093E\u0915\u093E\u0930\u093E\u0928\u0947 \u0939\u0947 \u0909\u0924\u094D\u0924\u0930 \u0926\u093F\u0932\u0947 \u092E\u094D\u0939\u0923\u0942\u0928 \u091A\u093F\u0928\u094D\u0939\u093E\u0902\u0915\u093F\u0924 \u0915\u0947\u0932\u0947 \u0906\u0939\u0947.",
-  "marketplace.artisanReplyLabel": "\u0915\u0932\u093E\u0915\u093E\u0930\u093E\u091A\u0947 \u0909\u0924\u094D\u0924\u0930",
   "marketplace.outOfStock": "\u0938\u094D\u091F\u0949\u0915 \u0938\u0902\u092A\u0932\u093E",
   "marketplace.outOfStockInquiryNote": "\u0939\u0947 \u0909\u0924\u094D\u092A\u093E\u0926\u0928 \u0938\u0927\u094D\u092F\u093E \u0938\u094D\u091F\u0949\u0915 \u0938\u0902\u092A\u0932\u0947 \u0906\u0939\u0947. \u0924\u0941\u092E\u094D\u0939\u0940 \u0905\u091C\u0942\u0928\u0939\u0940 \u0915\u0932\u093E\u0915\u093E\u0930\u093E\u0932\u093E \u0909\u092A\u0932\u092C\u094D\u0927\u0924\u0947\u092C\u0926\u094D\u0926\u0932 \u0935\u093F\u091A\u093E\u0930\u0942 \u0936\u0915\u0924\u093E.",
   "heritage.title": "A few more details (optional)",
@@ -7354,18 +7234,18 @@ var ne_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u091C\u0935\u093E\u092B",
-  "inquiries.replyPlaceholder": "\u091C\u0935\u093E\u092B \u0932\u0947\u0916\u094D\u0928\u0941\u0939\u094B\u0938\u094D, \u092F\u094B \u0916\u0930\u093F\u0926\u0915\u0930\u094D\u0924\u093E\u0932\u093E\u0908 \u0907\u092E\u0947\u0932 \u0917\u0930\u093F\u0928\u0947\u091B",
-  "inquiries.replyRequired": "\u092A\u0920\u093E\u0909\u0928\u0941\u092D\u0928\u094D\u0926\u093E \u092A\u0939\u093F\u0932\u0947 \u091C\u0935\u093E\u092B \u0932\u0947\u0916\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
-  "inquiries.sendReply": "\u091C\u0935\u093E\u092B \u092A\u0920\u093E\u0909\u0928\u0941\u0939\u094B\u0938\u094D",
-  "inquiries.yourReply": "\u0924\u092A\u093E\u0908\u0902\u0915\u094B \u091C\u0935\u093E\u092B",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0924\u092A\u093E\u0908\u0902",
+  "inquiryThread.artisan": "\u0915\u0941\u0936\u0932\u0915\u093E\u0930\u0940",
+  "inquiryThread.buyer": "\u0917\u094D\u0930\u093E\u0939\u0915",
+  "inquiryThread.placeholder": "\u0938\u0928\u094D\u0926\u0947\u0936 \u0932\u0947\u0916\u094D\u0928\u0941\u0939\u094B\u0938\u094D, \u092F\u094B \u0905\u0930\u094D\u0915\u094B \u092A\u0915\u094D\u0937\u0932\u093E\u0908 \u0907\u092E\u0947\u0932 \u0917\u0930\u093F\u0928\u094D\u091B",
+  "inquiryThread.messageRequired": "\u092A\u0920\u093E\u0909\u0928\u0941 \u0905\u0918\u093F \u0938\u0928\u094D\u0926\u0947\u0936 \u0932\u0947\u0916\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
+  "inquiryThread.send": "\u092A\u0920\u093E\u0909\u0928\u0941\u0939\u094B\u0938\u094D",
+  "inquiryThread.closedNote": "\u092F\u094B \u0938\u094B\u0927\u092A\u0941\u091B \u092C\u0928\u094D\u0926 \u0917\u0930\u093F\u090F\u0915\u094B \u091B\u0964",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -7460,9 +7340,6 @@ var ne_default = {
   "marketplace.inquiryStatusOpen": "\u091C\u0935\u093E\u092B\u0915\u094B \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E",
   "marketplace.inquiryStatusOpenResponded": "\u0916\u0941\u0932\u094D\u0932\u093E",
   "marketplace.inquiryStatusClosed": "\u092C\u0928\u094D\u0926",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0936\u093F\u0932\u094D\u092A\u0940\u0932\u0947 \u092F\u0938\u0932\u093E\u0908 \u091C\u0935\u093E\u092B \u0926\u093F\u0907\u090F\u0915\u094B \u092D\u0928\u0947\u0930 \u091A\u093F\u0928\u094D\u0939 \u0932\u0917\u093E\u090F",
-  "marketplace.artisanReplyLabel": "\u0936\u093F\u0932\u094D\u092A\u0940\u0915\u094B \u091C\u0935\u093E\u092B",
   "marketplace.outOfStock": "\u0938\u094D\u091F\u0915 \u0938\u092E\u093E\u092A\u094D\u0924",
   "marketplace.outOfStockInquiryNote": "\u092F\u094B \u0935\u0938\u094D\u0924\u0941 \u0905\u0939\u093F\u0932\u0947 \u0938\u094D\u091F\u0915 \u0938\u092E\u093E\u092A\u094D\u0924 \u092D\u090F\u0915\u094B \u091B\u0964 \u0924\u092A\u093E\u0908\u0902 \u0905\u091D\u0948 \u0936\u093F\u0932\u094D\u092A\u0940\u0932\u093E\u0908 \u092F\u094B \u0915\u0939\u093F\u0932\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0941\u0928\u0947\u091B \u092D\u0928\u0947\u0930 \u0938\u094B\u0927\u094D\u0928 \u0938\u0915\u094D\u0928\u0941\u0939\u0941\u0928\u094D\u091B\u0964",
   "heritage.title": "A few more details (optional)",
@@ -7713,18 +7590,18 @@ var or_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0B09\u0B24\u0B4D\u0B24\u0B30",
-  "inquiries.replyPlaceholder": "\u0B09\u0B24\u0B4D\u0B24\u0B30 \u0B32\u0B47\u0B16\u0B28\u0B4D\u0B24\u0B41, \u0B15\u0B4D\u0B30\u0B47\u0B24\u0B3E\u0B19\u0B4D\u0B15\u0B41 \u0B07\u0B2E\u0B47\u0B32\u0B4D \u0B39\u0B47\u0B2C",
-  "inquiries.replyRequired": "\u0B2A\u0B20\u0B3E\u0B07\u0B2C\u0B3E \u0B2A\u0B42\u0B30\u0B4D\u0B2C\u0B30\u0B41 \u0B09\u0B24\u0B4D\u0B24\u0B30 \u0B32\u0B47\u0B16\u0B28\u0B4D\u0B24\u0B41",
-  "inquiries.sendReply": "\u0B09\u0B24\u0B4D\u0B24\u0B30 \u0B2A\u0B20\u0B3E\u0B28\u0B4D\u0B24\u0B41",
-  "inquiries.yourReply": "\u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15\u0B30 \u0B09\u0B24\u0B4D\u0B24\u0B30",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0B06\u0B2A\u0B23",
+  "inquiryThread.artisan": "\u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30",
+  "inquiryThread.buyer": "\u0B15\u0B4D\u0B30\u0B47\u0B24\u0B3E",
+  "inquiryThread.placeholder": "\u0B0F\u0B15 \u0B38\u0B28\u0B4D\u0B26\u0B47\u0B36 \u0B32\u0B47\u0B16\u0B28\u0B4D\u0B24\u0B41, \u0B0F\u0B39\u0B3E \u0B05\u0B28\u0B4D\u0B5F \u0B2A\u0B15\u0B4D\u0B37\u0B15\u0B41 \u0B07\u0B2E\u0B47\u0B32\u0B4D \u0B39\u0B47\u0B2C",
+  "inquiryThread.messageRequired": "\u0B2A\u0B20\u0B3E\u0B07\u0B2C\u0B3E \u0B2A\u0B42\u0B30\u0B4D\u0B2C\u0B30\u0B41 \u0B38\u0B28\u0B4D\u0B26\u0B47\u0B36 \u0B32\u0B47\u0B16\u0B28\u0B4D\u0B24\u0B41",
+  "inquiryThread.send": "\u0B2A\u0B20\u0B3E\u0B28\u0B4D\u0B24\u0B41",
+  "inquiryThread.closedNote": "\u0B0F\u0B39\u0B3F \u0B2A\u0B4D\u0B30\u0B36\u0B4D\u0B28\u0B1F\u0B3F \u0B2C\u0B28\u0B4D\u0B26 \u0B39\u0B4B\u0B07\u0B1B\u0B3F\u0964",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -7819,9 +7696,6 @@ var or_default = {
   "marketplace.inquiryStatusOpen": "\u0B09\u0B24\u0B4D\u0B24\u0B30 \u0B05\u0B2A\u0B47\u0B15\u0B4D\u0B37\u0B3E\u0B30\u0B24",
   "marketplace.inquiryStatusOpenResponded": "\u0B16\u0B4B\u0B32\u0B3E",
   "marketplace.inquiryStatusClosed": "\u0B2C\u0B28\u0B4D\u0B26",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30 \u0B0F\u0B39\u0B3E\u0B15\u0B41 \u0B09\u0B24\u0B4D\u0B24\u0B30\u0B3F\u0B24 \u0B2D\u0B3E\u0B2C\u0B47 \u0B1A\u0B3F\u0B39\u0B4D\u0B28\u0B3F\u0B24 \u0B15\u0B32\u0B47",
-  "marketplace.artisanReplyLabel": "\u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30\u0B19\u0B4D\u0B15 \u0B09\u0B24\u0B4D\u0B24\u0B30",
   "marketplace.outOfStock": "\u0B38\u0B4D\u0B1F\u0B15\u0B4D \u0B36\u0B47\u0B37",
   "marketplace.outOfStockInquiryNote": "\u0B0F\u0B39\u0B3F \u0B2C\u0B38\u0B4D\u0B24\u0B41 \u0B2C\u0B30\u0B4D\u0B24\u0B4D\u0B24\u0B2E\u0B3E\u0B28 \u0B38\u0B4D\u0B1F\u0B15\u0B4D \u0B36\u0B47\u0B37\u0964 \u0B06\u0B2A\u0B23 \u0B24\u0B25\u0B3E\u0B2A\u0B3F \u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30\u0B19\u0B4D\u0B15\u0B41 \u0B0F\u0B39\u0B3E \u0B15\u0B47\u0B2C\u0B47 \u0B09\u0B2A\u0B32\u0B2C\u0B4D\u0B27 \u0B39\u0B47\u0B2C \u0B2C\u0B4B\u0B32\u0B3F \u0B2A\u0B1A\u0B3E\u0B30\u0B3F\u0B2A\u0B3E\u0B30\u0B3F\u0B2C\u0B47\u0964",
   "heritage.title": "A few more details (optional)",
@@ -8072,18 +7946,18 @@ var pa_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0A1C\u0A35\u0A3E\u0A2C",
-  "inquiries.replyPlaceholder": "\u0A1C\u0A35\u0A3E\u0A2C \u0A32\u0A3F\u0A16\u0A4B, \u0A07\u0A39 \u0A16\u0A30\u0A40\u0A26\u0A26\u0A3E\u0A30 \u0A28\u0A42\u0A70 \u0A08\u0A2E\u0A47\u0A32 \u0A15\u0A40\u0A24\u0A3E \u0A1C\u0A3E\u0A02\u0A26\u0A3E \u0A39\u0A48",
-  "inquiries.replyRequired": "\u0A2D\u0A47\u0A1C\u0A23 \u0A24\u0A4B\u0A02 \u0A2A\u0A39\u0A3F\u0A32\u0A3E\u0A02 \u0A1C\u0A35\u0A3E\u0A2C \u0A32\u0A3F\u0A16\u0A4B",
-  "inquiries.sendReply": "\u0A1C\u0A35\u0A3E\u0A2C \u0A2D\u0A47\u0A1C\u0A4B",
-  "inquiries.yourReply": "\u0A24\u0A41\u0A39\u0A3E\u0A21\u0A3E \u0A1C\u0A35\u0A3E\u0A2C",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0A24\u0A41\u0A38\u0A40\u0A02",
+  "inquiryThread.artisan": "\u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30",
+  "inquiryThread.buyer": "\u0A16\u0A30\u0A40\u0A26\u0A26\u0A3E\u0A30",
+  "inquiryThread.placeholder": "\u0A38\u0A41\u0A28\u0A47\u0A39\u0A3E \u0A32\u0A3F\u0A16\u0A4B, \u0A07\u0A39 \u0A26\u0A42\u0A1C\u0A47 \u0A2A\u0A3E\u0A38\u0A47 \u0A28\u0A42\u0A70 \u0A08\u0A2E\u0A47\u0A32 \u0A15\u0A40\u0A24\u0A3E \u0A1C\u0A3E\u0A02\u0A26\u0A3E \u0A39\u0A48",
+  "inquiryThread.messageRequired": "\u0A2D\u0A47\u0A1C\u0A23 \u0A24\u0A4B\u0A02 \u0A2A\u0A39\u0A3F\u0A32\u0A3E\u0A02 \u0A38\u0A41\u0A28\u0A47\u0A39\u0A3E \u0A32\u0A3F\u0A16\u0A4B",
+  "inquiryThread.send": "\u0A2D\u0A47\u0A1C\u0A4B",
+  "inquiryThread.closedNote": "\u0A07\u0A39 \u0A2A\u0A41\u0A71\u0A1B\u0A17\u0A3F\u0A71\u0A1B \u0A2C\u0A70\u0A26 \u0A39\u0A48\u0964",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -8178,9 +8052,6 @@ var pa_default = {
   "marketplace.inquiryStatusOpen": "\u0A1C\u0A35\u0A3E\u0A2C \u0A26\u0A40 \u0A09\u0A21\u0A40\u0A15",
   "marketplace.inquiryStatusOpenResponded": "\u0A16\u0A41\u0A71\u0A32\u0A4D\u0A39\u0A3E",
   "marketplace.inquiryStatusClosed": "\u0A2C\u0A70\u0A26",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30 \u0A28\u0A47 \u0A07\u0A38 \u0A28\u0A42\u0A70 \u0A1C\u0A35\u0A3E\u0A2C \u0A26\u0A3F\u0A71\u0A24\u0A3E \u0A39\u0A4B\u0A07\u0A06 \u0A1A\u0A3F\u0A70\u0A28\u0A4D\u0A39\u0A3F\u0A06 \u0A39\u0A48\u0964",
-  "marketplace.artisanReplyLabel": "\u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30 \u0A26\u0A3E \u0A1C\u0A35\u0A3E\u0A2C",
   "marketplace.outOfStock": "\u0A38\u0A1F\u0A3E\u0A15 \u0A16\u0A24\u0A2E",
   "marketplace.outOfStockInquiryNote": "\u0A07\u0A39 \u0A1A\u0A40\u0A1C\u0A3C \u0A07\u0A38 \u0A35\u0A47\u0A32\u0A47 \u0A38\u0A1F\u0A3E\u0A15 \u0A35\u0A3F\u0A71\u0A1A \u0A28\u0A39\u0A40\u0A02 \u0A39\u0A48\u0964 \u0A24\u0A41\u0A38\u0A40\u0A02 \u0A2B\u0A3F\u0A30 \u0A35\u0A40 \u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30 \u0A28\u0A42\u0A70 \u0A2A\u0A41\u0A71\u0A1B \u0A38\u0A15\u0A26\u0A47 \u0A39\u0A4B \u0A15\u0A3F \u0A07\u0A39 \u0A15\u0A26\u0A4B\u0A02 \u0A09\u0A2A\u0A32\u0A2C\u0A27 \u0A39\u0A4B\u0A35\u0A47\u0A17\u0A40\u0964",
   "heritage.title": "A few more details (optional)",
@@ -8431,18 +8302,18 @@ var sa_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0909\u0924\u094D\u0924\u0930",
-  "inquiries.replyPlaceholder": "\u0909\u0924\u094D\u0924\u0930\u0902 \u0932\u093F\u0916\u0924\u0941, \u090F\u0924\u0924\u094D \u0915\u094D\u0930\u0947\u0924\u0941\u0902 \u0908\u092E\u0947\u0932\u094D \u0915\u0930\u094D\u0924\u0941\u0902 \u092D\u0935\u093F\u0937\u094D\u092F\u0924\u093F",
-  "inquiries.replyRequired": "\u092A\u0920\u0928\u094D\u0924\u0941 \u092A\u0942\u0930\u094D\u0935\u0902 \u0909\u0924\u094D\u0924\u0930\u0902 \u0932\u093F\u0916\u0924\u0941",
-  "inquiries.sendReply": "\u0909\u0924\u094D\u0924\u0930\u0902 \u092A\u094D\u0930\u0947\u0937\u092F",
-  "inquiries.yourReply": "\u0924\u0935 \u0909\u0924\u094D\u0924\u0930\u092E\u094D",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0924\u094D\u0935\u092E\u094D",
+  "inquiryThread.artisan": "\u0936\u093F\u0932\u094D\u092A\u0940",
+  "inquiryThread.buyer": "\u0915\u094D\u0930\u0947\u0924\u093E",
+  "inquiryThread.placeholder": "\u0938\u0928\u094D\u0926\u0947\u0936\u0902 \u0932\u093F\u0916\u0924\u0941, \u0907\u0926\u0902 \u092A\u094D\u0930\u0924\u093F\u092A\u0915\u094D\u0937\u0947 \u0908\u092E\u0947\u0932\u094D \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u0920\u094D\u092F\u0924\u0947",
+  "inquiryThread.messageRequired": "\u092A\u0920\u0928\u0947 \u092A\u0942\u0930\u094D\u0935\u0902 \u0938\u0928\u094D\u0926\u0947\u0936\u0902 \u0932\u093F\u0916\u0924\u0941",
+  "inquiryThread.send": "\u092A\u0920",
+  "inquiryThread.closedNote": "\u0905\u092F\u0902 \u092A\u0942\u091B\u0924\u093E\u091B \u0938\u092E\u093E\u092A\u094D\u0924\u0903\u0964",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -8537,9 +8408,6 @@ var sa_default = {
   "marketplace.inquiryStatusOpen": "\u0909\u0924\u094D\u0924\u0930\u0938\u094D\u092F \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E",
   "marketplace.inquiryStatusOpenResponded": "\u0909\u0926\u094D\u0918\u091F\u093F\u0924",
   "marketplace.inquiryStatusClosed": "\u0938\u092E\u093E\u092A\u094D\u0924\u092E\u094D",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0936\u093F\u0932\u094D\u092A\u0940 \u0907\u0926\u0902 \u092A\u094D\u0930\u0924\u094D\u092F\u0941\u0924\u094D\u0924\u0930\u093F\u0924\u092E\u094D \u0907\u0924\u093F \u091A\u093F\u0928\u094D\u0939\u093F\u0924\u0935\u093E\u0928\u094D",
-  "marketplace.artisanReplyLabel": "\u0936\u093F\u0932\u094D\u092A\u0940 \u0909\u0924\u094D\u0924\u0930\u092E\u094D",
   "marketplace.outOfStock": "\u0938\u094D\u091F\u0949\u0915 \u0938\u092E\u093E\u092A\u094D\u0924",
   "marketplace.outOfStockInquiryNote": "\u0907\u0926\u0902 \u0935\u0938\u094D\u0924\u0941 \u0935\u0930\u094D\u0924\u092E\u093E\u0928\u0902 \u0938\u094D\u091F\u0949\u0915 \u0938\u092E\u093E\u092A\u094D\u0924\u092E\u094D \u0905\u0938\u094D\u0924\u093F\u0964 \u0936\u093F\u0932\u094D\u092A\u0940\u092D\u094D\u092F\u0903 \u0915\u0926\u093E \u0909\u092A\u0932\u092C\u094D\u0927\u092E\u094D \u092D\u0935\u093F\u0937\u094D\u092F\u0924\u093F \u0907\u0924\u093F \u092A\u0943\u091A\u094D\u091B\u093F\u0924\u0941\u0902 \u0936\u0915\u094D\u092F\u0924\u0947\u0964",
   "heritage.title": "A few more details (optional)",
@@ -8790,18 +8658,18 @@ var sat_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F",
-  "inquiries.replyPlaceholder": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5E\u1C64\u1C71\u1C5F, \u1C71\u1C64\u1C71 \u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5F\u1C79\u1C5C\u1C5A\u1C72 \u1C5F\u1C79\u1C5C\u1C5F",
-  "inquiries.replyRequired": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5E\u1C64\u1C71\u1C5F \u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5A\u1C71\u1C5A\u1C72\u1C5F",
-  "inquiries.sendReply": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C66\u1C5A\u1C72\u1C5F",
-  "inquiries.yourReply": "\u1C5F\u1C79\u1C5C\u1C5A\u1C72 \u1691\u1690\u1691\u1690",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u1C5F\u1C79\u1C5C",
+  "inquiryThread.artisan": "\u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C",
+  "inquiryThread.buyer": "\u1C5A\u1C71\u1C5A\u1C5E\u1C64\u1C71",
+  "inquiryThread.placeholder": "\u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C \u1C62\u1C6E\u1C65\u1C5F\u1C5C, \u1C71\u1C64\u1C71\u1C5F \u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C \u1C5F\u1C79\u1C5C\u1C5F \u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C",
+  "inquiryThread.messageRequired": "\u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C \u1C62\u1C6E\u1C65\u1C5F\u1C5C \u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C \u1C5F\u1C79\u1C5C\u1C5F \u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C",
+  "inquiryThread.send": "\u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C\u1C5A",
+  "inquiryThread.closedNote": "\u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C \u1C5F\u1C79\u1C5C\u1C5F \u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C\u1C5A",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -8896,9 +8764,6 @@ var sat_default = {
   "marketplace.inquiryStatusOpen": "Awaiting reply",
   "marketplace.inquiryStatusOpenResponded": "\u1C5A\u1C71\u1C5A",
   "marketplace.inquiryStatusClosed": "Closed",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1691\u1690\u1691\u1690 \u1691\u1690\u1691\u1690 \u1691\u1690\u1691\u1690",
-  "marketplace.artisanReplyLabel": "\u1691\u1690\u1691\u1690 \u1691\u1690\u1691\u1690",
   "marketplace.outOfStock": "\u1C5A\u1C71\u1C5A\u1C72 \u1C5F\u1C79\u1C5C\u1C5F",
   "marketplace.outOfStockInquiryNote": "\u1C5A\u1C71\u1C5A\u1C72 \u1C5F\u1C79\u1C5C\u1C5F \u1691\u1690\u1691\u1690, \u1691\u1690\u1691\u1690 \u1691\u1690\u1691\u1690 \u1691\u1690\u1691\u1690",
   "heritage.title": "A few more details (optional)",
@@ -9149,18 +9014,18 @@ var sd_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u062C\u0648\u0627\u0628",
-  "inquiries.replyPlaceholder": "\u062C\u0648\u0627\u0628 \u0644\u06A9\u062C\u0648\u060C \u0627\u0647\u0648 \u062E\u0631\u064A\u062F\u0627\u0631 \u06A9\u064A \u0627\u064A \u0645\u064A\u0644 \u067F\u064A\u0646\u062F\u0648",
-  "inquiries.replyRequired": "\u0645\u0648\u06AA\u0644\u06BB \u06A9\u0627\u0646 \u0627\u06B3 \u062C\u0648\u0627\u0628 \u0644\u06A9\u062C\u0648",
-  "inquiries.sendReply": "\u062C\u0648\u0627\u0628 \u0645\u0648\u06AA\u0644\u0648",
-  "inquiries.yourReply": "\u062A\u0648\u06BE\u0627\u0646\u062C\u0648 \u062C\u0648\u0627\u0628",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u062A\u0648\u06BE\u0627\u0646",
+  "inquiryThread.artisan": "\u06AA\u0627\u0631\u064A\u06AF\u0631",
+  "inquiryThread.buyer": "\u062E\u0631\u064A\u062F\u0627\u0631",
+  "inquiryThread.placeholder": "\u0647\u06AA \u067E\u064A\u063A\u0627\u0645 \u0644\u06A9\u062C\u0648\u060C \u0627\u0647\u0648 \u067B\u0626\u064A \u067E\u0627\u0633\u064A \u06A9\u064A \u0627\u064A \u0645\u064A\u0644 \u067F\u064A\u0646\u062F\u0648",
+  "inquiryThread.messageRequired": "\u0645\u0648\u06AA\u0644\u06BB \u06A9\u0627\u0646 \u0627\u06B3 \u067E\u064A\u063A\u0627\u0645 \u0644\u06A9\u062C\u0648",
+  "inquiryThread.send": "\u0645\u0648\u06AA\u0644\u0648",
+  "inquiryThread.closedNote": "\u0647\u064A \u067E\u0687\u0627 \u06B3\u0627\u0687\u0627 \u0628\u0646\u062F \u0622\u0647\u064A.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -9255,9 +9120,6 @@ var sd_default = {
   "marketplace.inquiryStatusOpen": "\u062C\u0648\u0627\u0628 \u062C\u064A \u0627\u0646\u062A\u0638\u0627\u0631",
   "marketplace.inquiryStatusOpenResponded": "\u06A9\u064F\u0644\u0647\u064F",
   "marketplace.inquiryStatusClosed": "\u0628\u0646\u062F",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u06AA\u0627\u0631\u064A\u06AF\u0631 \u0627\u0646 \u06A9\u064A \u062C\u0648\u0627\u0628 \u067F\u064A\u0644 \u0646\u0634\u0627\u0646 \u0644\u06B3\u0627\u064A\u0648.",
-  "marketplace.artisanReplyLabel": "\u06AA\u0627\u0631\u064A\u06AF\u0631 \u062C\u0648 \u062C\u0648\u0627\u0628",
   "marketplace.outOfStock": "\u0627\u0633\u067D\u0627\u06AA \u062E\u062A\u0645",
   "marketplace.outOfStockInquiryNote": "\u0647\u064A \u0634\u064A\u0621\u0650 \u0647\u0646 \u0648\u0642\u062A \u0627\u0633\u067D\u0627\u06AA \u062E\u062A\u0645 \u0622\u0647\u064A. \u062A\u0648\u06BE\u0627\u0646 \u0627\u0683\u0627 \u0628\u0647 \u06AA\u0627\u0631\u064A\u06AF\u0631 \u06A9\u0627\u0646 \u067E\u0687\u064A \u0633\u06AF\u06BE\u0648 \u067F\u0627 \u062A\u0647 \u06AA\u068F\u0647\u0646 \u0645\u0648\u062C\u0648\u062F \u067F\u064A\u0646\u062F\u064A.",
   "heritage.title": "A few more details (optional)",
@@ -9508,18 +9370,18 @@ var ta_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0BAA\u0BA4\u0BBF\u0BB2\u0BCD",
-  "inquiries.replyPlaceholder": "\u0BAA\u0BA4\u0BBF\u0BB2\u0BC8 \u0B8E\u0BB4\u0BC1\u0BA4\u0BB5\u0BC1\u0BAE\u0BCD, \u0B87\u0BA4\u0BC1 \u0BB5\u0BBE\u0B99\u0BCD\u0B95\u0BC1\u0BAA\u0BB5\u0BB0\u0BC1\u0B95\u0BCD\u0B95\u0BC1 \u0BAE\u0BBF\u0BA9\u0BCD\u0BA9\u0B9E\u0BCD\u0B9A\u0BB2\u0BCD \u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BAA\u0BCD\u0BAA\u0B9F\u0BC1\u0BAE\u0BCD",
-  "inquiries.replyRequired": "\u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1\u0BB5\u0BA4\u0BB1\u0BCD\u0B95\u0BC1 \u0BAE\u0BC1\u0BA9\u0BCD \u0BAA\u0BA4\u0BBF\u0BB2\u0BC8 \u0B8E\u0BB4\u0BC1\u0BA4\u0BB5\u0BC1\u0BAE\u0BCD",
-  "inquiries.sendReply": "\u0BAA\u0BA4\u0BBF\u0BB2\u0BC8 \u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1",
-  "inquiries.yourReply": "\u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BAA\u0BA4\u0BBF\u0BB2\u0BCD",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0BA8\u0BC0",
+  "inquiryThread.artisan": "\u0B95\u0BB2\u0BC8\u0B9E\u0BB0\u0BCD",
+  "inquiryThread.buyer": "\u0BB5\u0BBE\u0B99\u0BCD\u0B95\u0BC1\u0BAA\u0BB5\u0BB0\u0BCD",
+  "inquiryThread.placeholder": "\u0B92\u0BB0\u0BC1 \u0B9A\u0BC6\u0BAF\u0BCD\u0BA4\u0BBF\u0BAF\u0BC8 \u0B8E\u0BB4\u0BC1\u0BA4\u0BC1\u0B99\u0BCD\u0B95\u0BB3\u0BCD; \u0B87\u0BA4\u0BC1 \u0BAE\u0BB1\u0BCD\u0BB1\u0BB5\u0BB0\u0BC1\u0B95\u0BCD\u0B95\u0BC1 \u0BAE\u0BBF\u0BA9\u0BCD\u0BA9\u0B9E\u0BCD\u0B9A\u0BB2\u0BBE\u0B95 \u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BAA\u0BCD\u0BAA\u0B9F\u0BC1\u0BAE\u0BCD",
+  "inquiryThread.messageRequired": "\u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1\u0BB5\u0BA4\u0BB1\u0BCD\u0B95\u0BC1 \u0BAE\u0BC1\u0BA9\u0BCD \u0B92\u0BB0\u0BC1 \u0B9A\u0BC6\u0BAF\u0BCD\u0BA4\u0BBF\u0BAF\u0BC8 \u0B8E\u0BB4\u0BC1\u0BA4\u0BC1\u0B99\u0BCD\u0B95\u0BB3\u0BCD",
+  "inquiryThread.send": "\u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1",
+  "inquiryThread.closedNote": "\u0B87\u0BA8\u0BCD\u0BA4 \u0BB5\u0BBF\u0B9A\u0BBE\u0BB0\u0BA3\u0BC8 \u0BAE\u0BC2\u0B9F\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BC1\u0BB3\u0BCD\u0BB3\u0BA4\u0BC1.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -9614,9 +9476,6 @@ var ta_default = {
   "marketplace.inquiryStatusOpen": "\u0BAA\u0BA4\u0BBF\u0BB2\u0BCD \u0B95\u0BBE\u0BA4\u0BCD\u0BA4\u0BBF\u0BB0\u0BC1\u0B95\u0BCD\u0B95\u0BBF\u0BB1\u0BA4\u0BC1",
   "marketplace.inquiryStatusOpenResponded": "\u0BA4\u0BBF\u0BB1\u0BA8\u0BCD\u0BA4\u0BA4\u0BC1",
   "marketplace.inquiryStatusClosed": "\u0BAE\u0BC2\u0B9F\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0B95\u0BC8\u0BB5\u0BBF\u0BA9\u0BC8\u0BAF\u0BBE\u0BB3\u0BB0\u0BCD \u0B87\u0BA4\u0BC8 \u0BAA\u0BA4\u0BBF\u0BB2\u0BB3\u0BBF\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BBE\u0B95 \u0B95\u0BC1\u0BB1\u0BBF\u0BA4\u0BCD\u0BA4\u0BBE\u0BB0\u0BCD",
-  "marketplace.artisanReplyLabel": "\u0B95\u0BC8\u0BB5\u0BBF\u0BA9\u0BC8\u0BAF\u0BBE\u0BB3\u0BB0\u0BCD \u0BAA\u0BA4\u0BBF\u0BB2\u0BCD",
   "marketplace.outOfStock": "\u0B95\u0BC8\u0BAF\u0BBF\u0BB0\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1 \u0B87\u0BB2\u0BCD\u0BB2\u0BC8",
   "marketplace.outOfStockInquiryNote": "\u0B87\u0BA8\u0BCD\u0BA4 \u0BAA\u0BCA\u0BB0\u0BC1\u0BB3\u0BCD \u0BA4\u0BB1\u0BCD\u0BAA\u0BCB\u0BA4\u0BC1 \u0B95\u0BC8\u0BAF\u0BBF\u0BB0\u0BC1\u0BAA\u0BCD\u0BAA\u0BC1 \u0B87\u0BB2\u0BCD\u0BB2\u0BC8. \u0B85\u0BA4\u0BC1 \u0B8E\u0BAA\u0BCD\u0BAA\u0BCB\u0BA4\u0BC1 \u0B95\u0BBF\u0B9F\u0BC8\u0B95\u0BCD\u0B95\u0BC1\u0BAE\u0BCD \u0B8E\u0BA9\u0BCD\u0BB1\u0BC1 \u0B95\u0BC8\u0BB5\u0BBF\u0BA9\u0BC8\u0BAF\u0BBE\u0BB3\u0BB0\u0BBF\u0B9F\u0BAE\u0BCD \u0B95\u0BC7\u0B9F\u0BCD\u0B95\u0BB2\u0BBE\u0BAE\u0BCD.",
   "heritage.title": "A few more details (optional)",
@@ -9867,18 +9726,18 @@ var te_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u0C1C\u0C35\u0C3E\u0C2C\u0C41",
-  "inquiries.replyPlaceholder": "\u0C1C\u0C35\u0C3E\u0C2C\u0C41 \u0C30\u0C3E\u0C2F\u0C02\u0C21\u0C3F, \u0C07\u0C26\u0C3F \u0C15\u0C4A\u0C28\u0C41\u0C17\u0C4B\u0C32\u0C41\u0C26\u0C3E\u0C30\u0C41\u0C15\u0C41 \u0C07\u0C2E\u0C46\u0C2F\u0C3F\u0C32\u0C4D \u0C26\u0C4D\u0C35\u0C3E\u0C30\u0C3E \u0C2A\u0C02\u0C2A\u0C2C\u0C21\u0C41\u0C24\u0C41\u0C02\u0C26\u0C3F",
-  "inquiries.replyRequired": "\u0C2A\u0C02\u0C2A\u0C47 \u0C2E\u0C41\u0C02\u0C26\u0C41 \u0C1C\u0C35\u0C3E\u0C2C\u0C41 \u0C30\u0C3E\u0C2F\u0C02\u0C21\u0C3F",
-  "inquiries.sendReply": "\u0C1C\u0C35\u0C3E\u0C2C\u0C41 \u0C2A\u0C02\u0C2A\u0C02\u0C21\u0C3F",
-  "inquiries.yourReply": "\u0C2E\u0C40 \u0C1C\u0C35\u0C3E\u0C2C\u0C41",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0C2E\u0C40\u0C30\u0C41",
+  "inquiryThread.artisan": "\u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C02",
+  "inquiryThread.buyer": "\u0C15\u0C4A\u0C28\u0C41\u0C17\u0C4B\u0C32\u0C41\u0C26\u0C3E\u0C30\u0C41",
+  "inquiryThread.placeholder": "\u0C38\u0C02\u0C26\u0C47\u0C36\u0C3E\u0C28\u0C4D\u0C28\u0C3F \u0C30\u0C3E\u0C2F\u0C02\u0C21\u0C3F, \u0C07\u0C26\u0C3F \u0C07\u0C24\u0C30\u0C35\u0C3E\u0C30\u0C3F\u0C15\u0C3F \u0C07\u0C2E\u0C46\u0C2F\u0C3F\u0C32\u0C4D \u0C26\u0C4D\u0C35\u0C3E\u0C30\u0C3E \u0C2A\u0C02\u0C2A\u0C2C\u0C21\u0C41\u0C24\u0C41\u0C02\u0C26\u0C3F",
+  "inquiryThread.messageRequired": "\u0C2A\u0C02\u0C2A\u0C21\u0C3E\u0C28\u0C3F\u0C15\u0C3F \u0C2E\u0C41\u0C02\u0C26\u0C41 \u0C38\u0C02\u0C26\u0C47\u0C36\u0C3E\u0C28\u0C4D\u0C28\u0C3F \u0C30\u0C3E\u0C2F\u0C02\u0C21\u0C3F",
+  "inquiryThread.send": "\u0C2A\u0C02\u0C2A\u0C41",
+  "inquiryThread.closedNote": "\u0C08 \u0C35\u0C3F\u0C1A\u0C3E\u0C30\u0C23 \u0C2E\u0C42\u0C38\u0C3F\u0C35\u0C47\u0C2F\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F.",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -9973,9 +9832,6 @@ var te_default = {
   "marketplace.inquiryStatusOpen": "\u0C2A\u0C4D\u0C30\u0C24\u0C3F\u0C38\u0C4D\u0C2A\u0C02\u0C26\u0C28 \u0C15\u0C4B\u0C38\u0C02 \u0C35\u0C47\u0C1A\u0C3F\u0C35\u0C41\u0C02\u0C26\u0C3F",
   "marketplace.inquiryStatusOpenResponded": "\u0C24\u0C46\u0C30\u0C3F\u0C1A\u0C3F\u0C02\u0C26\u0C3F",
   "marketplace.inquiryStatusClosed": "\u0C2E\u0C42\u0C38\u0C3F\u0C35\u0C47\u0C2F\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C41\u0C21\u0C41 \u0C26\u0C40\u0C28\u0C3F\u0C28\u0C3F \u0C2A\u0C4D\u0C30\u0C24\u0C3F\u0C38\u0C4D\u0C2A\u0C02\u0C26\u0C3F\u0C02\u0C1A\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F\u0C17\u0C3E \u0C17\u0C41\u0C30\u0C4D\u0C24\u0C3F\u0C02\u0C1A\u0C3E\u0C30\u0C41",
-  "marketplace.artisanReplyLabel": "\u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C41\u0C21\u0C3F \u0C1C\u0C35\u0C3E\u0C2C\u0C41",
   "marketplace.outOfStock": "\u0C38\u0C4D\u0C1F\u0C3E\u0C15\u0C4D\u200C\u0C32\u0C4B \u0C32\u0C47\u0C26\u0C41",
   "marketplace.outOfStockInquiryNote": "\u0C08 \u0C35\u0C38\u0C4D\u0C24\u0C41\u0C35\u0C41 \u0C2A\u0C4D\u0C30\u0C38\u0C4D\u0C24\u0C41\u0C24\u0C02 \u0C38\u0C4D\u0C1F\u0C3E\u0C15\u0C4D\u200C\u0C32\u0C4B \u0C32\u0C47\u0C26\u0C41. \u0C2E\u0C40\u0C30\u0C41 \u0C07\u0C02\u0C15\u0C3E \u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C41\u0C21\u0C3F\u0C28\u0C3F \u0C07\u0C26\u0C3F \u0C0E\u0C2A\u0C4D\u0C2A\u0C41\u0C21\u0C41 \u0C32\u0C2D\u0C4D\u0C2F\u0C2E\u0C35\u0C41\u0C24\u0C41\u0C02\u0C26\u0C4B \u0C05\u0C21\u0C17\u0C35\u0C1A\u0C4D\u0C1A\u0C41.",
   "heritage.title": "A few more details (optional)",
@@ -10226,18 +10082,18 @@ var ur_default = {
   "inquiries.loadError": "Could not load your inquiries",
   "inquiries.empty": "No inquiries yet. When a buyer messages you about a product, it shows up here.",
   "inquiries.badgeNew": "New",
-  "inquiries.badgeResponded": "Responded",
   "inquiries.quantityLine": "Quantity interested in: {n}",
   "inquiries.contactLine": "Preferred contact: {preference} ({value})",
   "inquiries.replyOnWhatsapp": "Reply on WhatsApp",
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
-  "inquiries.markResponded": "Mark as responded",
-  "inquiries.reply": "\u062C\u0648\u0627\u0628",
-  "inquiries.replyPlaceholder": "\u062C\u0648\u0627\u0628 \u0644\u06A9\u06BE\u06CC\u06BA\u060C \u06CC\u06C1 \u062E\u0631\u06CC\u062F\u0627\u0631 \u06A9\u0648 \u0627\u06CC\u2011\u0645\u06CC\u0644 \u06A9\u06CC\u0627 \u062C\u0627\u0626\u06D2 \u06AF\u0627",
-  "inquiries.replyRequired": "\u0628\u06BE\u06CC\u062C\u0646\u06D2 \u0633\u06D2 \u067E\u06C1\u0644\u06D2 \u062C\u0648\u0627\u0628 \u0644\u06A9\u06BE\u06CC\u06BA",
-  "inquiries.sendReply": "\u062C\u0648\u0627\u0628 \u0628\u06BE\u06CC\u062C\u06CC\u06BA",
-  "inquiries.yourReply": "\u0622\u067E \u06A9\u0627 \u062C\u0648\u0627\u0628",
   "inquiries.close": "Close inquiry",
+  "inquiryThread.you": "\u0622\u067E",
+  "inquiryThread.artisan": "\u06A9\u0627\u0631\u06CC\u06AF\u0631",
+  "inquiryThread.buyer": "\u062E\u0631\u06CC\u062F\u0627\u0631",
+  "inquiryThread.placeholder": "\u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u06CC\u06BA\u060C \u06CC\u06C1 \u062F\u0648\u0633\u0631\u06CC \u0637\u0631\u0641 \u0627\u06CC \u0645\u06CC\u0644 \u06A9\u06CC\u0627 \u062C\u0627\u0626\u06D2 \u06AF\u0627",
+  "inquiryThread.messageRequired": "\u0628\u06BE\u06CC\u062C\u0646\u06D2 \u0633\u06D2 \u067E\u06C1\u0644\u06D2 \u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u06CC\u06BA",
+  "inquiryThread.send": "\u0628\u06BE\u06CC\u062C\u06CC\u06BA",
+  "inquiryThread.closedNote": "\u06CC\u06C1 \u0627\u0633\u062A\u0641\u0633\u0627\u0631 \u0628\u0646\u062F \u06C1\u06D2\u06D4",
   "shipping.estimateToggle": "Estimated shipping cost by destination",
   "shipping.estimateDisclaimer": "A rough estimate based on typical Indian courier rates, not a live quote or a booking. Actual cost depends on the courier a buyer's order is shipped with.",
   "shipping.weightMissingArtisanNote": "Add an approximate weight on the previous step to see an estimated shipping cost here, and to let buyers see one too.",
@@ -10332,9 +10188,6 @@ var ur_default = {
   "marketplace.inquiryStatusOpen": "\u062C\u0648\u0627\u0628 \u06A9\u0627 \u0627\u0646\u062A\u0638\u0627\u0631",
   "marketplace.inquiryStatusOpenResponded": "\u06A9\u06BE\u0644\u0627",
   "marketplace.inquiryStatusClosed": "\u0628\u0646\u062F",
-  "marketplace.inquiryResponded": "Artisan responded",
-  "marketplace.inquiryRespondedNoText": "\u06A9\u0627\u0631\u06CC\u06AF\u0631 \u0646\u06D2 \u0627\u0633\u06D2 \u062C\u0648\u0627\u0628 \u0634\u062F\u06C1 \u0646\u0634\u0627\u0646 \u0644\u06AF\u0627\u06CC\u0627\u06D4",
-  "marketplace.artisanReplyLabel": "\u06A9\u0627\u0631\u06CC\u06AF\u0631 \u06A9\u0627 \u062C\u0648\u0627\u0628",
   "marketplace.outOfStock": "\u0627\u0633\u0679\u0627\u06A9 \u062E\u062A\u0645",
   "marketplace.outOfStockInquiryNote": "\u06CC\u06C1 \u0622\u0626\u0679\u0645 \u0627\u0633 \u0648\u0642\u062A \u0627\u0633\u0679\u0627\u06A9 \u062E\u062A\u0645 \u06C1\u06D2\u06D4 \u0622\u067E \u067E\u06BE\u0631 \u0628\u06BE\u06CC \u06A9\u0627\u0631\u06CC\u06AF\u0631 \u0633\u06D2 \u067E\u0648\u0686\u06BE \u0633\u06A9\u062A\u06D2 \u06C1\u06CC\u06BA \u06A9\u06C1 \u06CC\u06C1 \u06A9\u0628 \u062F\u0633\u062A\u06CC\u0627\u0628 \u06C1\u0648\u06AF\u0627\u06D4",
   "heritage.title": "A few more details (optional)",
@@ -11555,38 +11408,29 @@ var pricing_default = router8;
 import { Router as Router9 } from "express";
 import { z as z10 } from "zod";
 var router9 = Router9();
-var INQUIRY_COLUMNS = "id, product_id, buyer_id, artisan_id, message, quantity, contact_preference, contact_value, status, read_at, responded_at, notified_at, reply_message, created_at";
-function toInquiry(row, product, buyerEmail) {
+var INQUIRY_COLUMNS = "id, product_id, buyer_id, artisan_id, quantity, contact_preference, contact_value, status, artisan_last_read_at, buyer_last_read_at, created_at";
+function toMessage(row) {
   return {
-    inquiryId: row.id,
-    productId: row.product_id,
-    buyerId: row.buyer_id,
-    buyerEmail,
-    artisanId: row.artisan_id,
-    message: row.message,
-    quantity: row.quantity,
-    contactPreference: row.contact_preference ?? "email",
-    contactValue: row.contact_value,
-    status: row.status,
-    readAt: row.read_at,
-    respondedAt: row.responded_at,
-    notifiedAt: row.notified_at,
-    replyMessage: row.reply_message,
-    createdAt: row.created_at,
-    product
+    messageId: row.id,
+    senderRole: row.sender_role,
+    body: row.body,
+    createdAt: row.created_at
   };
 }
-async function enrichInquiries(rows) {
+async function enrichInquiries(rows, viewerRole) {
   if (rows.length === 0) return [];
+  const inquiryIds = rows.map((row) => row.id);
   const productIds = [...new Set(rows.map((row) => row.product_id))];
   const buyerIds = [...new Set(rows.map((row) => row.buyer_id))];
   const supabase = getSupabase();
-  const [productsResult, buyersResult] = await Promise.all([
+  const [productsResult, buyersResult, messagesResult] = await Promise.all([
     supabase.from("products").select("id, title_en, title_local, local_language, image_url, price, passport_id").in("id", productIds),
-    supabase.from("users").select("id, email").in("id", buyerIds)
+    supabase.from("users").select("id, email").in("id", buyerIds),
+    supabase.from("inquiry_messages").select("id, inquiry_id, sender_role, body, created_at").in("inquiry_id", inquiryIds).order("created_at", { ascending: true })
   ]);
   if (productsResult.error) throw new Error(`Could not load inquiry products: ${productsResult.error.message}`);
   if (buyersResult.error) throw new Error(`Could not load inquiry buyers: ${buyersResult.error.message}`);
+  if (messagesResult.error) throw new Error(`Could not load inquiry messages: ${messagesResult.error.message}`);
   const productById = new Map(
     (productsResult.data ?? []).map((product) => [
       product.id,
@@ -11601,13 +11445,67 @@ async function enrichInquiries(rows) {
     ])
   );
   const emailByBuyerId = new Map((buyersResult.data ?? []).map((buyer) => [buyer.id, buyer.email]));
-  return rows.map(
-    (row) => toInquiry(row, productById.get(row.product_id) ?? null, emailByBuyerId.get(row.buyer_id) ?? null)
-  );
+  const messagesByInquiryId = /* @__PURE__ */ new Map();
+  for (const row of messagesResult.data ?? []) {
+    const list = messagesByInquiryId.get(row.inquiry_id) ?? [];
+    list.push(row);
+    messagesByInquiryId.set(row.inquiry_id, list);
+  }
+  const otherRole = viewerRole === "buyer" ? "artisan" : "buyer";
+  return rows.map((row) => {
+    const messages = (messagesByInquiryId.get(row.id) ?? []).map(toMessage);
+    const lastReadAt = viewerRole === "buyer" ? row.buyer_last_read_at : row.artisan_last_read_at;
+    const lastFromOther = [...messages].reverse().find((message) => message.senderRole === otherRole);
+    const isUnread = Boolean(
+      lastFromOther && (!lastReadAt || new Date(lastFromOther.createdAt) > new Date(lastReadAt))
+    );
+    return {
+      inquiryId: row.id,
+      productId: row.product_id,
+      buyerId: row.buyer_id,
+      buyerEmail: emailByBuyerId.get(row.buyer_id) ?? null,
+      artisanId: row.artisan_id,
+      quantity: row.quantity,
+      contactPreference: row.contact_preference ?? "email",
+      contactValue: row.contact_value,
+      status: row.status,
+      createdAt: row.created_at,
+      product: productById.get(row.product_id) ?? null,
+      messages,
+      isUnread
+    };
+  });
+}
+async function notifyNewMessage(params) {
+  const supabase = getSupabase();
+  const [recipientResult, productResult, senderResult] = await Promise.all([
+    supabase.from("users").select("email").eq("id", params.recipientId).maybeSingle(),
+    supabase.from("products").select("title_en, image_url, passport_id").eq("id", params.productId).maybeSingle(),
+    supabase.from("users").select("display_name, shop_name").eq("id", params.senderId).maybeSingle()
+  ]);
+  if (!recipientResult.data?.email || !productResult.data) {
+    console.warn("[inquiries] could not resolve a recipient email or the product, skipping notification", {
+      inquiryId: params.inquiryId
+    });
+    return false;
+  }
+  const senderName = params.senderRole === "artisan" ? senderResult.data?.shop_name ?? senderResult.data?.display_name ?? "The artisan" : senderResult.data?.display_name ?? "A buyer";
+  const env = loadEnv();
+  const inboxUrl = params.senderRole === "artisan" ? `${env.PUBLIC_APP_URL}/marketplace/profile` : `${env.PUBLIC_APP_URL}/inquiries`;
+  const mailResult = await sendInquiryMessageEmail({
+    recipientEmail: recipientResult.data.email,
+    senderName,
+    productTitle: productResult.data.title_en,
+    productImageUrl: productResult.data.image_url,
+    passportId: productResult.data.passport_id,
+    messageBody: params.body,
+    inboxUrl
+  });
+  return mailResult.delivered;
 }
 var CreateInquirySchema = z10.object({
   productId: z10.string().uuid(),
-  message: z10.string().min(1).max(2e3),
+  message: z10.string().trim().min(1).max(2e3),
   quantity: z10.number().int().positive().optional(),
   contactPreference: z10.enum(["email", "phone", "whatsapp"]),
   contactValue: z10.string().trim().min(1).max(40).optional()
@@ -11626,51 +11524,36 @@ router9.post(
       return;
     }
     const supabase = getSupabase();
-    const { data: product, error: productError } = await supabase.from("products").select("id, user_id, status, flagged, title_en, image_url, passport_id").eq("id", parsed.data.productId).maybeSingle();
+    const { data: product, error: productError } = await supabase.from("products").select("id, user_id, status, flagged").eq("id", parsed.data.productId).maybeSingle();
     if (productError) throw new Error(`Could not look up the product: ${productError.message}`);
     if (!product || product.status !== "published" || product.flagged) {
       res.status(404).json({ error: "Product not found" });
       return;
     }
-    const { data: inserted, error } = await supabase.from("inquiries").insert({
+    const { data: inquiry, error: insertError } = await supabase.from("inquiries").insert({
       product_id: product.id,
       buyer_id: req.uid,
       artisan_id: product.user_id,
-      message: parsed.data.message,
       quantity: parsed.data.quantity ?? null,
       contact_preference: parsed.data.contactPreference,
       contact_value: parsed.data.contactValue ?? null
     }).select("id").single();
-    if (error) throw new Error(`Could not create the inquiry: ${error.message}`);
-    const [artisanResult, buyerResult] = await Promise.all([
-      supabase.from("users").select("email").eq("id", product.user_id).maybeSingle(),
-      supabase.from("users").select("email").eq("id", req.uid).maybeSingle()
-    ]);
-    let emailDelivered = false;
-    if (artisanResult.data?.email && buyerResult.data?.email) {
-      const env = loadEnv();
-      const mailResult = await sendInquiryEmail({
-        artisanEmail: artisanResult.data.email,
-        productTitle: product.title_en,
-        productImageUrl: product.image_url,
-        passportId: product.passport_id,
-        buyerMessage: parsed.data.message,
-        quantity: parsed.data.quantity ?? null,
-        contactPreference: parsed.data.contactPreference,
-        contactValue: parsed.data.contactValue ?? null,
-        buyerEmail: buyerResult.data.email,
-        inboxUrl: `${env.PUBLIC_APP_URL}/inquiries`
-      });
-      emailDelivered = mailResult.delivered;
-      if (emailDelivered) {
-        await supabase.from("inquiries").update({ notified_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", inserted.id);
-      }
-    } else {
-      console.warn("[inquiries] could not resolve an email address for the artisan or buyer, skipping notification", {
-        inquiryId: inserted.id
-      });
-    }
-    res.status(201).json({ inquiryId: inserted.id, emailDelivered });
+    if (insertError) throw new Error(`Could not create the inquiry: ${insertError.message}`);
+    const { error: messageError } = await supabase.from("inquiry_messages").insert({
+      inquiry_id: inquiry.id,
+      sender_role: "buyer",
+      body: parsed.data.message
+    });
+    if (messageError) throw new Error(`Could not save the inquiry message: ${messageError.message}`);
+    const emailDelivered = await notifyNewMessage({
+      inquiryId: inquiry.id,
+      productId: product.id,
+      senderRole: "buyer",
+      senderId: req.uid,
+      recipientId: product.user_id,
+      body: parsed.data.message
+    });
+    res.status(201).json({ inquiryId: inquiry.id, emailDelivered });
   })
 );
 router9.get(
@@ -11678,9 +11561,17 @@ router9.get(
   requireAuth,
   requireRole("buyer"),
   asyncRoute(async (req, res) => {
-    const { data, error } = await getSupabase().from("inquiries").select(INQUIRY_COLUMNS).eq("buyer_id", req.uid).order("created_at", { ascending: false });
+    const supabase = getSupabase();
+    const { data, error } = await supabase.from("inquiries").select(INQUIRY_COLUMNS).eq("buyer_id", req.uid).order("created_at", { ascending: false });
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
-    res.json(await enrichInquiries(data));
+    const rows = data;
+    const result = await enrichInquiries(rows, "buyer");
+    const unreadIds = result.filter((inquiry) => inquiry.isUnread).map((inquiry) => inquiry.inquiryId);
+    if (unreadIds.length > 0) {
+      const { error: readError } = await supabase.from("inquiries").update({ buyer_last_read_at: (/* @__PURE__ */ new Date()).toISOString() }).in("id", unreadIds);
+      if (readError) console.warn("[inquiries] could not mark inquiries as read", { message: readError.message });
+    }
+    res.json(result);
   })
 );
 router9.get(
@@ -11692,14 +11583,13 @@ router9.get(
     const { data, error } = await supabase.from("inquiries").select(INQUIRY_COLUMNS).eq("artisan_id", req.uid).order("created_at", { ascending: false });
     if (error) throw new Error(`Could not list inquiries: ${error.message}`);
     const rows = data;
-    const unreadIds = rows.filter((row) => !row.read_at).map((row) => row.id);
+    const result = await enrichInquiries(rows, "artisan");
+    const unreadIds = result.filter((inquiry) => inquiry.isUnread).map((inquiry) => inquiry.inquiryId);
     if (unreadIds.length > 0) {
-      const { error: readError } = await supabase.from("inquiries").update({ read_at: (/* @__PURE__ */ new Date()).toISOString() }).in("id", unreadIds);
-      if (readError) {
-        console.warn("[inquiries] could not mark inquiries as read", { message: readError.message });
-      }
+      const { error: readError } = await supabase.from("inquiries").update({ artisan_last_read_at: (/* @__PURE__ */ new Date()).toISOString() }).in("id", unreadIds);
+      if (readError) console.warn("[inquiries] could not mark inquiries as read", { message: readError.message });
     }
-    res.json(await enrichInquiries(rows));
+    res.json(result);
   })
 );
 var CloseInquirySchema = z10.object({
@@ -11723,66 +11613,40 @@ router9.patch(
     res.json({ success: true });
   })
 );
-router9.patch(
-  "/:id/responded",
-  requireAuth,
-  requireRole("artisan"),
-  asyncRoute(async (req, res) => {
-    const { data, error } = await getSupabase().from("inquiries").update({ responded_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", req.params.id).eq("artisan_id", req.uid).select("id");
-    if (error) throw new Error(`Could not update the inquiry: ${error.message}`);
-    if (!data || data.length === 0) {
-      res.status(404).json({ error: "Inquiry not found" });
-      return;
-    }
-    res.json({ success: true });
-  })
-);
-var ReplyInquirySchema = z10.object({
-  message: z10.string().trim().min(1).max(2e3)
+var SendMessageSchema = z10.object({
+  body: z10.string().trim().min(1).max(2e3)
 });
-router9.patch(
-  "/:id/reply",
+router9.post(
+  "/:id/messages",
   requireAuth,
-  requireRole("artisan"),
   asyncRoute(async (req, res) => {
-    const parsed = ReplyInquirySchema.safeParse(req.body);
+    const parsed = SendMessageSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
     const supabase = getSupabase();
-    const respondedAt = (/* @__PURE__ */ new Date()).toISOString();
-    const { data, error } = await supabase.from("inquiries").update({ reply_message: parsed.data.message, responded_at: respondedAt }).eq("id", req.params.id).eq("artisan_id", req.uid).select("id, buyer_id, product_id, message").maybeSingle();
-    if (error) throw new Error(`Could not save the reply: ${error.message}`);
-    if (!data) {
+    const { data: inquiry, error } = await supabase.from("inquiries").select("id, buyer_id, artisan_id, product_id").eq("id", req.params.id).maybeSingle();
+    if (error) throw new Error(`Could not load the inquiry: ${error.message}`);
+    let senderRole = null;
+    if (inquiry?.buyer_id === req.uid) senderRole = "buyer";
+    else if (inquiry?.artisan_id === req.uid) senderRole = "artisan";
+    if (!inquiry || !senderRole) {
       res.status(404).json({ error: "Inquiry not found" });
       return;
     }
-    const [buyerResult, productResult, artisanResult] = await Promise.all([
-      supabase.from("users").select("email").eq("id", data.buyer_id).maybeSingle(),
-      supabase.from("products").select("title_en, image_url, passport_id").eq("id", data.product_id).maybeSingle(),
-      supabase.from("users").select("shop_name, display_name").eq("id", req.uid).maybeSingle()
-    ]);
-    let emailDelivered = false;
-    if (buyerResult.data?.email && productResult.data) {
-      const env = loadEnv();
-      const mailResult = await sendInquiryReplyEmail({
-        buyerEmail: buyerResult.data.email,
-        artisanName: artisanResult.data?.shop_name ?? artisanResult.data?.display_name ?? "The artisan",
-        productTitle: productResult.data.title_en,
-        productImageUrl: productResult.data.image_url,
-        passportId: productResult.data.passport_id,
-        originalMessage: data.message,
-        replyMessage: parsed.data.message,
-        inboxUrl: `${env.PUBLIC_APP_URL}/marketplace/profile`
-      });
-      emailDelivered = mailResult.delivered;
-    } else {
-      console.warn("[inquiries] could not resolve a buyer email or product for a reply, skipping notification", {
-        inquiryId: data.id
-      });
-    }
-    res.json({ success: true, emailDelivered });
+    const { data: message, error: insertError } = await supabase.from("inquiry_messages").insert({ inquiry_id: inquiry.id, sender_role: senderRole, body: parsed.data.body }).select("id, created_at").single();
+    if (insertError) throw new Error(`Could not save the message: ${insertError.message}`);
+    const recipientId = senderRole === "buyer" ? inquiry.artisan_id : inquiry.buyer_id;
+    const emailDelivered = await notifyNewMessage({
+      inquiryId: inquiry.id,
+      productId: inquiry.product_id,
+      senderRole,
+      senderId: req.uid,
+      recipientId,
+      body: parsed.data.body
+    });
+    res.status(201).json({ messageId: message.id, createdAt: message.created_at, emailDelivered });
   })
 );
 var inquiries_default = router9;

@@ -17,16 +17,16 @@ let schemaReady = false;
 
 beforeAll(async () => {
   if (!HAS_CREDENTIALS) return;
-  const [inquiriesCheck, usersCheck, replyCheck] = await Promise.all([
-    getSupabase().from("inquiries").select("quantity, contact_preference, contact_value, read_at, responded_at, notified_at").limit(1),
+  const [inquiriesCheck, usersCheck, messagesCheck] = await Promise.all([
+    getSupabase().from("inquiries").select("quantity, contact_preference, contact_value, artisan_last_read_at, buyer_last_read_at").limit(1),
     getSupabase().from("users").select("whatsapp_number").limit(1),
-    getSupabase().from("inquiries").select("reply_message").limit(1),
+    getSupabase().from("inquiry_messages").select("id").limit(1),
   ]);
-  schemaReady = !inquiriesCheck.error && !usersCheck.error && !replyCheck.error;
+  schemaReady = !inquiriesCheck.error && !usersCheck.error && !messagesCheck.error;
   if (!schemaReady) {
     console.warn(
-      "Skipping inquiry flow tests: this database predates the inquiry details / WhatsApp or reply migration. " +
-        "Run supabase/migrations/008-inquiry-details-and-whatsapp.sql and 011-stock-and-replies.sql first.",
+      "Skipping inquiry flow tests: this database predates the inquiry threads migration. " +
+        "Run supabase/migrations/008-inquiry-details-and-whatsapp.sql and 014-inquiry-threads.sql first.",
     );
   }
 });
@@ -92,6 +92,36 @@ async function createProduct(token: string, overrides: Record<string, unknown> =
   return body.productId;
 }
 
+interface InquiryMessageJson {
+  messageId: string;
+  senderRole: "buyer" | "artisan";
+  body: string;
+  createdAt: string;
+}
+
+interface InquiryJson {
+  inquiryId: string;
+  productId: string;
+  status: "open" | "closed";
+  messages: InquiryMessageJson[];
+  isUnread: boolean;
+}
+
+async function createInquiry(
+  buyerToken: string,
+  productId: string,
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
+  const res = await fetch(`${base}/api/inquiries`, {
+    method: "POST",
+    headers: { ...auth(buyerToken), "Content-Type": "application/json" },
+    body: JSON.stringify({ productId, message: "Interested", contactPreference: "email", ...overrides }),
+  });
+  const body = await json<{ inquiryId: string }>(res);
+  if (res.status !== 201) throw new Error(`Could not create test inquiry: ${JSON.stringify(body)}`);
+  return body.inquiryId;
+}
+
 beforeAll(async () => {
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());
@@ -109,8 +139,8 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-suite("buyer-to-artisan inquiry flow", () => {
-  it("PASS/FAIL: creates an inquiry with quantity and contact preference, and never loses the record even when email delivery is unavailable", async () => {
+suite("buyer-to-artisan inquiry threads", () => {
+  it("PASS/FAIL: creates an inquiry with a first message, quantity, and contact preference, and never loses the record even when email delivery is unavailable", async () => {
     const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
     const buyer = await signInAs(EMAIL_BUYER, "buyer");
     const productId = await createProduct(artisan.token);
@@ -130,15 +160,17 @@ suite("buyer-to-artisan inquiry flow", () => {
     expect(res.status).toBe(201);
     expect(typeof body.emailDelivered).toBe("boolean");
 
-    const { data } = await getSupabase()
-      .from("inquiries")
-      .select("quantity, contact_preference, message")
-      .eq("id", body.inquiryId)
-      .single();
-
+    const { data } = await getSupabase().from("inquiries").select("quantity, contact_preference").eq("id", body.inquiryId).single();
     expect(data?.quantity).toBe(3);
     expect(data?.contact_preference).toBe("email");
-    expect(data?.message).toBe("Do you have this in a larger size?");
+
+    const { data: messages } = await getSupabase()
+      .from("inquiry_messages")
+      .select("sender_role, body")
+      .eq("inquiry_id", body.inquiryId);
+    expect(messages).toHaveLength(1);
+    expect(messages?.[0].sender_role).toBe("buyer");
+    expect(messages?.[0].body).toBe("Do you have this in a larger size?");
   }, 15000);
 
   it("PASS/FAIL: requires a contact value when the preference is phone or whatsapp", async () => {
@@ -191,135 +223,99 @@ suite("buyer-to-artisan inquiry flow", () => {
     const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
     const buyer = await signInAs(EMAIL_BUYER, "buyer");
     const productId = await createProduct(artisan.token);
+    const inquiryId = await createInquiry(buyer.token, productId);
 
-    const createRes = await fetch(`${base}/api/inquiries`, {
-      method: "POST",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, message: "Interested", contactPreference: "email" }),
-    });
-    const { inquiryId } = await json<{ inquiryId: string }>(createRes);
+    const firstView = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }));
+    expect(firstView.find((item) => item.inquiryId === inquiryId)?.isUnread).toBe(true);
 
-    const firstView = await json<Array<{ inquiryId: string; readAt: string | null }>>(
-      await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }),
-    );
-    const firstEntry = firstView.find((item) => item.inquiryId === inquiryId);
-    expect(firstEntry?.readAt).toBeNull();
-
-    const secondView = await json<Array<{ inquiryId: string; readAt: string | null }>>(
-      await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }),
-    );
-    const secondEntry = secondView.find((item) => item.inquiryId === inquiryId);
-    expect(secondEntry?.readAt).not.toBeNull();
+    const secondView = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }));
+    expect(secondView.find((item) => item.inquiryId === inquiryId)?.isUnread).toBe(false);
   }, 15000);
 
-  it("PASS/FAIL: the artisan can mark an inquiry as responded, and the buyer sees that reflected", async () => {
+  it("PASS/FAIL: a real back-and-forth: artisan replies, buyer replies again, artisan replies again, all visible to both sides in order", async () => {
     const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
     const buyer = await signInAs(EMAIL_BUYER, "buyer");
     const productId = await createProduct(artisan.token);
+    const inquiryId = await createInquiry(buyer.token, productId, { message: "Is this in stock?" });
 
-    const createRes = await fetch(`${base}/api/inquiries`, {
+    const reply1 = await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
       method: "POST",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, message: "Interested", contactPreference: "email" }),
-    });
-    const { inquiryId } = await json<{ inquiryId: string }>(createRes);
-
-    const respondRes = await fetch(`${base}/api/inquiries/${inquiryId}/responded`, {
-      method: "PATCH",
-      headers: auth(artisan.token),
-    });
-    expect(respondRes.status).toBe(200);
-
-    const mine = await json<Array<{ inquiryId: string; respondedAt: string | null }>>(
-      await fetch(`${base}/api/inquiries/mine`, { headers: auth(buyer.token) }),
-    );
-    const entry = mine.find((item) => item.inquiryId === inquiryId);
-    expect(entry?.respondedAt).not.toBeNull();
-  }, 15000);
-
-  it("PASS/FAIL: the artisan can send a reply, and the buyer sees the reply text on their own inquiry", async () => {
-    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
-    const buyer = await signInAs(EMAIL_BUYER, "buyer");
-    const productId = await createProduct(artisan.token);
-
-    const createRes = await fetch(`${base}/api/inquiries`, {
-      method: "POST",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, message: "Is this in stock?", contactPreference: "email" }),
-    });
-    const { inquiryId } = await json<{ inquiryId: string }>(createRes);
-
-    const replyRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
-      method: "PATCH",
       headers: { ...auth(artisan.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Yes, it's ready to ship." }),
+      body: JSON.stringify({ body: "Yes, it's ready to ship." }),
     });
-    expect(replyRes.status).toBe(200);
-    const replyBody = await json<{ success: boolean; emailDelivered: boolean }>(replyRes);
-    expect(replyBody.success).toBe(true);
+    expect(reply1.status).toBe(201);
+    const reply1Body = await json<{ messageId: string; emailDelivered: boolean }>(reply1);
+    expect(typeof reply1Body.emailDelivered).toBe("boolean");
 
-    const mine = await json<Array<{ inquiryId: string; replyMessage: string | null; respondedAt: string | null }>>(
-      await fetch(`${base}/api/inquiries/mine`, { headers: auth(buyer.token) }),
-    );
-    const entry = mine.find((item) => item.inquiryId === inquiryId);
-    expect(entry?.replyMessage).toBe("Yes, it's ready to ship.");
-    expect(entry?.respondedAt).not.toBeNull();
-  }, 15000);
+    const followUp = await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
+      method: "POST",
+      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "Great, can you do it in blue?" }),
+    });
+    expect(followUp.status).toBe(201);
 
-  it("PASS/FAIL: a reply cannot be empty, and an artisan cannot reply to another artisan's inquiry", async () => {
+    const reply2 = await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
+      method: "POST",
+      headers: { ...auth(artisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "Sure, that works." }),
+    });
+    expect(reply2.status).toBe(201);
+
+    const buyerView = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/mine`, { headers: auth(buyer.token) }));
+    const buyerEntry = buyerView.find((item) => item.inquiryId === inquiryId);
+    expect(buyerEntry?.messages.map((m) => [m.senderRole, m.body])).toEqual([
+      ["buyer", "Is this in stock?"],
+      ["artisan", "Yes, it's ready to ship."],
+      ["buyer", "Great, can you do it in blue?"],
+      ["artisan", "Sure, that works."],
+    ]);
+
+    const artisanView = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }));
+    const artisanEntry = artisanView.find((item) => item.inquiryId === inquiryId);
+    expect(artisanEntry?.messages).toHaveLength(4);
+  }, 20000);
+
+  it("PASS/FAIL: unread tracking works independently for each side of the conversation", async () => {
+    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const buyer = await signInAs(EMAIL_BUYER, "buyer");
+    const productId = await createProduct(artisan.token);
+    const inquiryId = await createInquiry(buyer.token, productId);
+
+    await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) });
+
+    await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
+      method: "POST",
+      headers: { ...auth(artisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "Replying now" }),
+    });
+
+    const buyerView = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/mine`, { headers: auth(buyer.token) }));
+    expect(buyerView.find((item) => item.inquiryId === inquiryId)?.isUnread).toBe(true);
+
+    const artisanView = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }));
+    expect(artisanView.find((item) => item.inquiryId === inquiryId)?.isUnread).toBe(false);
+  }, 20000);
+
+  it("PASS/FAIL: a message cannot be empty, and only the buyer or artisan on the inquiry can send one", async () => {
     const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
     const otherArtisan = await signInAs(EMAIL_OTHER_ARTISAN, "artisan");
     const buyer = await signInAs(EMAIL_BUYER, "buyer");
     const productId = await createProduct(artisan.token);
+    const inquiryId = await createInquiry(buyer.token, productId);
 
-    const createRes = await fetch(`${base}/api/inquiries`, {
+    const emptyRes = await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
       method: "POST",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, message: "Interested", contactPreference: "email" }),
-    });
-    const { inquiryId } = await json<{ inquiryId: string }>(createRes);
-
-    const emptyRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
-      method: "PATCH",
       headers: { ...auth(artisan.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "" }),
+      body: JSON.stringify({ body: "" }),
     });
     expect(emptyRes.status).toBe(400);
 
-    const wrongArtisanRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
-      method: "PATCH",
-      headers: { ...auth(otherArtisan.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Trying to reply to someone else's inquiry" }),
-    });
-    expect(wrongArtisanRes.status).toBe(404);
-
-    const buyerReplyRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
-      method: "PATCH",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "A buyer should not be able to reply" }),
-    });
-    expect(buyerReplyRes.status).toBe(403);
-  }, 15000);
-
-  it("PASS/FAIL: an artisan cannot mark another artisan's inquiry as responded", async () => {
-    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
-    const otherArtisan = await signInAs(EMAIL_OTHER_ARTISAN, "artisan");
-    const buyer = await signInAs(EMAIL_BUYER, "buyer");
-    const productId = await createProduct(artisan.token);
-
-    const createRes = await fetch(`${base}/api/inquiries`, {
+    const wrongPartyRes = await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
       method: "POST",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, message: "Interested", contactPreference: "email" }),
+      headers: { ...auth(otherArtisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "Trying to message someone else's inquiry" }),
     });
-    const { inquiryId } = await json<{ inquiryId: string }>(createRes);
-
-    const res = await fetch(`${base}/api/inquiries/${inquiryId}/responded`, {
-      method: "PATCH",
-      headers: auth(otherArtisan.token),
-    });
-
-    expect(res.status).toBe(404);
+    expect(wrongPartyRes.status).toBe(404);
   }, 15000);
 
   it("PASS/FAIL: only an artisan can list received inquiries", async () => {
@@ -335,23 +331,30 @@ suite("buyer-to-artisan inquiry flow", () => {
     const ownProductId = await createProduct(artisan.token);
     const otherProductId = await createProduct(otherArtisan.token);
 
-    await fetch(`${base}/api/inquiries`, {
-      method: "POST",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId: ownProductId, message: "For artisan A", contactPreference: "email" }),
-    });
-    await fetch(`${base}/api/inquiries`, {
-      method: "POST",
-      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ productId: otherProductId, message: "For artisan B", contactPreference: "email" }),
-    });
+    await createInquiry(buyer.token, ownProductId, { message: "For artisan A" });
+    await createInquiry(buyer.token, otherProductId, { message: "For artisan B" });
 
-    const received = await json<Array<{ productId: string }>>(
-      await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }),
-    );
+    const received = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }));
 
     expect(received.some((item) => item.productId === ownProductId)).toBe(true);
     expect(received.some((item) => item.productId === otherProductId)).toBe(false);
+  }, 15000);
+
+  it("PASS/FAIL: either party can close an inquiry", async () => {
+    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const buyer = await signInAs(EMAIL_BUYER, "buyer");
+    const productId = await createProduct(artisan.token);
+    const inquiryId = await createInquiry(buyer.token, productId);
+
+    const res = await fetch(`${base}/api/inquiries/${inquiryId}`, {
+      method: "PATCH",
+      headers: { ...auth(artisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "closed" }),
+    });
+    expect(res.status).toBe(200);
+
+    const buyerView = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/mine`, { headers: auth(buyer.token) }));
+    expect(buyerView.find((item) => item.inquiryId === inquiryId)?.status).toBe("closed");
   }, 15000);
 
   it("PASS/FAIL: an artisan can set and clear an optional WhatsApp number on their profile", async () => {
