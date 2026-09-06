@@ -30,6 +30,13 @@
   text-decoration: none;
 }
 
+.marketplace-brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-thumb);
+  object-fit: cover;
+}
+
 .marketplace-nav-links {
   display: flex;
   align-items: center;

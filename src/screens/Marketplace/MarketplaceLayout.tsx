@@ -4,20 +4,6 @@ import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import "./MarketplaceLayout.css";
 
-function LogoIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M4 9v10h16V9M3 9l1.5-5h15L21 9M3 9h18M9 19v-5h6v5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function ProfileIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -48,7 +34,7 @@ export function MarketplaceLayout() {
     <div className="marketplace-shell">
       <header className="marketplace-nav">
         <NavLink to="/marketplace" className="marketplace-brand">
-          <LogoIcon />
+          <img src="/icons/logo-mark.png" alt="" className="marketplace-brand-logo" />
           <span>{t("app.name")}</span>
         </NavLink>
 

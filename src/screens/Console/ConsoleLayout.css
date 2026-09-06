@@ -19,10 +19,20 @@
 }
 
 .console-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--color-surface);
   font-family: var(--font-heading);
   font-size: var(--text-h3-size);
   font-weight: 700;
+}
+
+.console-brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-thumb);
+  object-fit: cover;
 }
 
 .console-nav-links {

@@ -22,7 +22,10 @@ export function ConsoleLayout() {
   return (
     <div className="console-shell">
       <header className="console-nav">
-        <span className="console-brand">KalaSetu Console</span>
+        <span className="console-brand">
+          <img src="/icons/logo-mark.png" alt="" className="console-brand-logo" />
+          KalaSetu Console
+        </span>
 
         <nav className="console-nav-links" aria-label="Primary">
           <NavLink to="/internal/console" end className={({ isActive }) => `console-nav-link${isActive ? " console-nav-link-active" : ""}`}>

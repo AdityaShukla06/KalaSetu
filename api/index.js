@@ -320,6 +320,11 @@ function buildHtmlBody(code) {
   <p style="font-size:13px;line-height:1.5;color:#6b6b6b;margin:0">It expires in ${OTP_TTL_MINUTES} minutes. If you did not ask to sign in, you can ignore this email.</p>
 </div>`;
 }
+var CONTACT_PREFERENCE_LABEL = {
+  email: "Email",
+  phone: "A phone call",
+  whatsapp: "WhatsApp"
+};
 async function sendInquiryMessageEmail(input) {
   const env = loadEnv();
   if (!env.RESEND_API_KEY) {
@@ -357,25 +362,38 @@ async function sendInquiryMessageEmail(input) {
     return { delivered: false, reason: "send_failed" };
   }
 }
+function contactLine(context) {
+  const label = CONTACT_PREFERENCE_LABEL[context.contactPreference];
+  if (context.contactPreference === "email") return `${label}: ${context.buyerEmail}`;
+  return `${label}: ${context.contactValue ?? context.buyerEmail}`;
+}
 function buildMessagePlainTextBody(input) {
-  return [
+  const lines = [
     `${input.senderName} sent a message about your inquiry on KalaSetu.`,
     ``,
-    `Product: ${input.productTitle} (${input.passportId})`,
-    ``,
-    `Message:`,
-    `"${input.messageBody}"`,
-    ``,
-    `View and reply in KalaSetu: ${input.inboxUrl}`
-  ].join("\n");
+    `Product: ${input.productTitle} (${input.passportId})`
+  ];
+  if (input.firstMessageContext?.quantity) {
+    lines.push(`Quantity interested in: ${input.firstMessageContext.quantity}`);
+  }
+  lines.push(``, `Message:`, `"${input.messageBody}"`, ``);
+  if (input.firstMessageContext) {
+    lines.push(`Preferred contact: ${contactLine(input.firstMessageContext)}`, ``);
+  }
+  lines.push(`View and reply in KalaSetu: ${input.inboxUrl}`);
+  return lines.join("\n");
 }
 function buildMessageHtmlBody(input) {
+  const quantityRow = input.firstMessageContext?.quantity ? `<p style="font-size:14px;line-height:1.5;margin:0 0 12px"><strong>Quantity interested in:</strong> ${input.firstMessageContext.quantity}</p>` : "";
+  const contactRow = input.firstMessageContext ? `<p style="font-size:14px;line-height:1.5;margin:0 0 20px"><strong>Preferred contact:</strong> ${contactLine(input.firstMessageContext)}</p>` : "";
   return `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#2b2b2b">
   <h1 style="font-size:20px;margin:0 0 16px">${input.senderName} sent you a message</h1>
   <img src="${input.productImageUrl}" alt="" style="width:100%;max-width:280px;border-radius:8px;margin:0 0 16px;display:block" />
   <p style="font-size:15px;line-height:1.5;margin:0 0 4px"><strong>${input.productTitle}</strong></p>
   <p style="font-size:13px;color:#6b6b6b;margin:0 0 16px">${input.passportId}</p>
-  <p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#FBF4EA;border-radius:8px">${input.messageBody}</p>
+  ${quantityRow}
+  <p style="font-size:14px;line-height:1.5;margin:0 0 16px;padding:12px;background:#FBF4EA;border-radius:8px">${input.messageBody}</p>
+  ${contactRow}
   <a href="${input.inboxUrl}" style="display:inline-block;padding:12px 20px;background:#C1502E;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">View and reply in KalaSetu</a>
 </div>`;
 }
@@ -11499,7 +11517,8 @@ async function notifyNewMessage(params) {
     productImageUrl: productResult.data.image_url,
     passportId: productResult.data.passport_id,
     messageBody: params.body,
-    inboxUrl
+    inboxUrl,
+    firstMessageContext: params.firstMessageContext
   });
   return mailResult.delivered;
 }
@@ -11551,7 +11570,13 @@ router9.post(
       senderRole: "buyer",
       senderId: req.uid,
       recipientId: product.user_id,
-      body: parsed.data.message
+      body: parsed.data.message,
+      firstMessageContext: {
+        quantity: parsed.data.quantity ?? null,
+        contactPreference: parsed.data.contactPreference,
+        contactValue: parsed.data.contactValue ?? null,
+        buyerEmail: req.email
+      }
     });
     res.status(201).json({ inquiryId: inquiry.id, emailDelivered });
   })

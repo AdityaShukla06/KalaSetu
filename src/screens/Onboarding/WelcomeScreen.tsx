@@ -21,6 +21,7 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
   return (
     <div className="onboarding-screen onboarding-screen-center" lang={language}>
       <div className="onboarding-hero">
+        <img src="/icons/logo-mark.png" alt="" className="onboarding-logo" />
         <h1>{t("app.name")}</h1>
         <p className="body-s onboarding-tagline">{t("welcome.tagline")}</p>
       </div>
