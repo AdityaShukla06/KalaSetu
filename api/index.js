@@ -136,7 +136,13 @@ var OPTIONAL_EXTRA = [
   "GROQ_FALLBACK_API_KEYS",
   "GEMINI_API_KEY"
 ];
-var OPTIONAL = ["RESEND_API_KEY", "SUPABASE_STORAGE_BUCKET", "DEMO_FALLBACK_OTP_ENABLED", ...OPTIONAL_EXTRA];
+var OPTIONAL = [
+  "RESEND_API_KEY",
+  "SUPABASE_STORAGE_BUCKET",
+  "DEMO_FALLBACK_OTP_ENABLED",
+  "PUBLIC_APP_URL",
+  ...OPTIONAL_EXTRA
+];
 var router = Router();
 function isSet(name) {
   const value = process.env[name];
