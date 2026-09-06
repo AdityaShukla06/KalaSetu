@@ -34,7 +34,7 @@ export function FilterPanel({ filters, onChange, onClear }: FilterPanelProps) {
       </div>
 
       <div className="filter-field">
-        <span className="filter-label">{t("category.title")}</span>
+        <span className="filter-label">{t("marketplace.filterCategoryLabel")}</span>
         <div className="filter-chip-row">
           <button
             type="button"

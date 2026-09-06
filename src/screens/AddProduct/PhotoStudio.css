@@ -69,6 +69,89 @@
   letter-spacing: 0.02em;
 }
 
+.studio-tile-button {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.studio-tile-zoom-hint {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(20, 16, 14, 0.5);
+  color: #fff;
+}
+
+.studio-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-5);
+  background: rgba(20, 16, 14, 0.88);
+}
+
+.studio-zoom-close {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+
+.studio-zoom-content {
+  position: relative;
+  width: min(90vw, 480px);
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--color-secondary);
+}
+
+.studio-zoom-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.studio-zoom-label {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(20, 16, 14, 0.62);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .studio-controls {
   display: flex;
   flex-direction: column;

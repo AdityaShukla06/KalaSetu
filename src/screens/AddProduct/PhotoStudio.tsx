@@ -75,6 +75,23 @@ function CheckIcon() {
   );
 }
 
+function ZoomIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15.5 15.5 21 21M10.5 8v5M8 10.5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function backgroundNoticeKey(notice: string | undefined): string {
   switch (notice) {
     case "background_removal_timed_out":
@@ -128,6 +145,7 @@ export function PhotoStudio({ blob, originalUrl, enhancedUrl, onAccept, onRetake
 
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeFailed, setFinalizeFailed] = useState(false);
+  const [zoomedTile, setZoomedTile] = useState<"original" | "processed" | null>(null);
 
   const filter = useMemo(
     () => previewFilter(brightness, contrast, sharpen, autoLighting),
@@ -194,32 +212,74 @@ export function PhotoStudio({ blob, originalUrl, enhancedUrl, onAccept, onRetake
     onAccept(enhancedUrl);
   }
 
+  function renderProcessed(imageClassName: string) {
+    return backgroundActive && cutoutUrl ? (
+      <div className="studio-composite">
+        {backgroundTreatment === "blur" ? (
+          <img src={enhancedUrl} alt="" className={`${imageClassName} studio-backdrop-blur`} />
+        ) : (
+          <div className="studio-backdrop-fill" style={{ background: fillColorFor(backgroundTreatment) }} />
+        )}
+        <img src={cutoutUrl} alt="" className={`${imageClassName} studio-subject`} style={{ filter }} />
+      </div>
+    ) : (
+      <img src={enhancedUrl} alt="" className={imageClassName} style={{ filter }} />
+    );
+  }
+
   return (
     <div className="studio-screen">
       <h1 className="onboarding-title studio-title">{t("studio.title")}</h1>
 
       <div className="studio-tiles">
-        <div className="studio-tile">
+        <button
+          type="button"
+          className="studio-tile studio-tile-button"
+          onClick={() => setZoomedTile("original")}
+        >
           <img src={originalUrl} alt="" className="studio-tile-image" />
           <span className="studio-tile-label">{t("studio.original")}</span>
-        </div>
+          <span className="studio-tile-zoom-hint" aria-hidden="true">
+            <ZoomIcon />
+          </span>
+        </button>
 
-        <div className="studio-tile" style={{ aspectRatio: aspect }}>
-          {backgroundActive && cutoutUrl ? (
-            <div className="studio-composite">
-              {backgroundTreatment === "blur" ? (
-                <img src={enhancedUrl} alt="" className="studio-tile-image studio-backdrop-blur" />
-              ) : (
-                <div className="studio-backdrop-fill" style={{ background: fillColorFor(backgroundTreatment) }} />
-              )}
-              <img src={cutoutUrl} alt="" className="studio-tile-image studio-subject" style={{ filter }} />
-            </div>
-          ) : (
-            <img src={enhancedUrl} alt="" className="studio-tile-image" style={{ filter }} />
-          )}
+        <button
+          type="button"
+          className="studio-tile studio-tile-button"
+          style={{ aspectRatio: aspect }}
+          onClick={() => setZoomedTile("processed")}
+        >
+          {renderProcessed("studio-tile-image")}
           <span className="studio-tile-label">{t("studio.processed")}</span>
-        </div>
+          <span className="studio-tile-zoom-hint" aria-hidden="true">
+            <ZoomIcon />
+          </span>
+        </button>
       </div>
+
+      {zoomedTile && (
+        <div className="studio-zoom-overlay" onClick={() => setZoomedTile(null)}>
+          <button
+            type="button"
+            className="studio-zoom-close"
+            onClick={() => setZoomedTile(null)}
+            aria-label={t("home.detailClose")}
+          >
+            <CloseIcon />
+          </button>
+          <div className="studio-zoom-content" onClick={(event) => event.stopPropagation()}>
+            {zoomedTile === "original" ? (
+              <img src={originalUrl} alt="" className="studio-zoom-image" />
+            ) : (
+              renderProcessed("studio-zoom-image")
+            )}
+            <span className="studio-zoom-label">
+              {t(zoomedTile === "original" ? "studio.original" : "studio.processed")}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="studio-controls">
         <div className="studio-group">

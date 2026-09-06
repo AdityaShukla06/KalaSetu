@@ -249,6 +249,7 @@
   "marketplace.filtersTitle": "ফিল্টার",
   "marketplace.filtersClear": "সব মুছুন",
   "marketplace.filterAll": "সব",
+  "marketplace.filterCategoryLabel": "আপনি কী খুঁজছেন?",
   "marketplace.filterMaterial": "উপাদান",
   "marketplace.filterRegion": "অঞ্চল",
   "marketplace.filterPrice": "মূল্য সীমা (₹)",

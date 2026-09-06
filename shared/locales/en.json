@@ -249,6 +249,7 @@
   "marketplace.filtersTitle": "Filters",
   "marketplace.filtersClear": "Clear all",
   "marketplace.filterAll": "All",
+  "marketplace.filterCategoryLabel": "What are you looking for?",
   "marketplace.filterMaterial": "Material",
   "marketplace.filterRegion": "Region",
   "marketplace.filterPrice": "Price range (₹)",
