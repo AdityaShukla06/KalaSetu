@@ -5,6 +5,7 @@ import { getSupabase } from "../lib/supabase";
 import { loadEnv } from "../lib/env";
 import { signSessionToken } from "../lib/jwt";
 import { sendOtpEmail } from "../lib/mailer";
+import { verifyPassword } from "../lib/password";
 import { UserRole } from "../types";
 import {
   OTP_LENGTH,
@@ -40,9 +41,25 @@ router.post(
     }
 
     const email = normaliseEmail(parsed.data.email);
+    const supabase = getSupabase();
+
+    const { data: existing, error: lookupError } = await supabase
+      .from("users")
+      .select("role, password_hash")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (lookupError) {
+      throw new Error(`Could not look up the user: ${lookupError.message}`);
+    }
+
+    if (existing?.role === "admin" && existing.password_hash) {
+      res.json({ success: true, emailDelivered: false, expiresInMinutes: 0, requiresPassword: true });
+      return;
+    }
+
     const code = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000).toISOString();
-    const supabase = getSupabase();
 
     const { error } = await supabase.from("otp_codes").insert({
       email,
@@ -60,7 +77,78 @@ router.post(
       success: true,
       emailDelivered: mail.delivered,
       expiresInMinutes: OTP_TTL_MINUTES,
+      requiresPassword: false,
     });
+  }),
+);
+
+const AdminLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MINUTES = 15;
+
+router.post(
+  "/admin-login",
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const parsed = AdminLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const email = normaliseEmail(parsed.data.email);
+    const supabase = getSupabase();
+
+    const { data: user, error: lookupError } = await supabase
+      .from("users")
+      .select("id, role, is_active, password_hash, failed_login_attempts, locked_until")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (lookupError) {
+      throw new Error(`Could not look up the user: ${lookupError.message}`);
+    }
+
+    if (!user || user.role !== "admin" || !user.password_hash) {
+      res.status(401).json({ error: "invalid_credentials" });
+      return;
+    }
+
+    if (user.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
+      res.status(429).json({ error: "account_locked" });
+      return;
+    }
+
+    if (!verifyPassword(parsed.data.password, user.password_hash)) {
+      const attempts = user.failed_login_attempts + 1;
+      const lockedOut = attempts >= LOGIN_MAX_ATTEMPTS;
+      await supabase
+        .from("users")
+        .update({
+          failed_login_attempts: lockedOut ? 0 : attempts,
+          locked_until: lockedOut ? new Date(Date.now() + LOGIN_LOCKOUT_MINUTES * 60_000).toISOString() : null,
+        })
+        .eq("id", user.id);
+
+      res.status(lockedOut ? 429 : 401).json({ error: lockedOut ? "account_locked" : "invalid_credentials" });
+      return;
+    }
+
+    if (!user.is_active) {
+      res.status(403).json({ error: "account_deactivated" });
+      return;
+    }
+
+    if (user.failed_login_attempts > 0 || user.locked_until) {
+      await supabase.from("users").update({ failed_login_attempts: 0, locked_until: null }).eq("id", user.id);
+    }
+
+    const token = signSessionToken({ sub: user.id, email });
+
+    res.json({ token, userId: user.id, email, role: user.role as UserRole });
   }),
 );
 

@@ -52,7 +52,7 @@ export type { PublicPassport } from "./api/passport";
 export type { AnalyticsDailyPoint, AnalyticsListingStat, AnalyticsSummary } from "./api/analytics";
 
 // importing utility apis
-export { sendOtp, verifyOtp, OTP_LENGTH } from "./api/auth";
+export { sendOtp, verifyOtp, adminLogin, OTP_LENGTH } from "./api/auth";
 export { enhanceImage, removeImageBackground, finalizeImage } from "./api/images";
 export { transcribeAndDescribe, translateText } from "./api/voice";
 export { suggestPrice } from "./api/pricing";

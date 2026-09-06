@@ -7,7 +7,12 @@ import { useLanguage } from "../../context/LanguageContext";
 import "./Onboarding.css";
 
 interface EmailEntryScreenProps {
-  onOtpSent: (email: string, emailDelivered: boolean, intendedRole: SelfServeRole) => void;
+  onOtpSent: (
+    email: string,
+    emailDelivered: boolean,
+    intendedRole: SelfServeRole,
+    requiresPassword: boolean,
+  ) => void;
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -85,7 +90,7 @@ export function EmailEntryScreen({ onOtpSent }: EmailEntryScreenProps) {
 
     try {
       const result = await sendOtp(trimmed);
-      onOtpSent(trimmed, result.emailDelivered, intendedRole);
+      onOtpSent(trimmed, result.emailDelivered, intendedRole, result.requiresPassword);
     } catch {
       setError(t("email.error"));
     } finally {

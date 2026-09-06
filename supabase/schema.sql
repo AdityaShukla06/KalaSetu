@@ -17,6 +17,9 @@ create table if not exists users (
   is_active      boolean not null default true,
   total_products integer not null default 0,
   is_seed        boolean not null default false,
+  password_hash  text,
+  failed_login_attempts integer not null default 0,
+  locked_until   timestamptz,
   created_at     timestamptz not null default now()
 );
 

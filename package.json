@@ -18,7 +18,8 @@
     "promote:admin": "node scripts/promote-admin.mjs",
     "seed:demo-admin": "node scripts/seed-demo-admin.mjs",
     "seed:demo-data": "node scripts/seed-demo-data.mjs",
-    "seed:demo-data:wipe": "node scripts/seed-demo-data.mjs --wipe"
+    "seed:demo-data:wipe": "node scripts/seed-demo-data.mjs --wipe",
+    "admin:set-password": "tsx scripts/set-admin-password.mts"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",

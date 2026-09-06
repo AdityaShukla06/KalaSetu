@@ -127,6 +127,8 @@ Then work through [`TESTING.md`](TESTING.md) on a real Android phone.
 
 `npm run seed:demo-admin -- you@example.com` creates that account directly as an active admin, no prior sign-in needed (defaults to `admin@kalasetu.demo` if you omit the email). Sign in through the normal email screen with that address; the sell/buy choice on that screen is ignored since the account already exists. You'll land on `/internal/console` automatically. The path is deliberately not linked from anywhere in the app, by design (see the README's "Admin console" section), so bookmark it.
 
+**Give it a password instead of an OTP** (recommended for the account you'll actually use during judging): `npm run admin:set-password -- you@example.com yourpassword`. From then on, entering that email on the sign-in screen skips the emailed code entirely and asks for the password directly, so getting into the console during a demo never depends on Resend or an inbox being reachable. Five wrong attempts locks it for 15 minutes.
+
 ---
 
 ## The demo fallback OTP
@@ -154,4 +156,6 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |
 | Sign in returns 403 `account_deactivated` | An admin deactivated that artisan in the console | Reactivate them from `/internal/console/artisans`, or it's expected if that was intentional. |
 | `/internal/console` shows "Page not found" | You're not signed in as an admin | That's the intended behaviour for anyone else, not a bug. Seed or promote an admin account (see "Admin console for judging" above). |
+| Admin sign-in asks for a password you never set | An earlier run of `npm run admin:set-password` set one and you forgot | Run it again with a new password, it overwrites the old one. |
+| Admin sign-in says "too many incorrect attempts" | 5 wrong passwords locks the account for 15 minutes | Wait 15 minutes, or clear `users.locked_until` directly in the Supabase Table Editor if you need to sign in sooner. |
 | The app loads but nothing works locally (login hangs, screens stay blank, `/api/health` returns HTML instead of JSON) | The API process isn't running. Running `vite` directly, or an older terminal tab still running just `vite`, skips the API entirely | Use `npm run dev` (not `vite` directly), and check its `[api]`-labelled output for a startup error. Two dev servers on the same ports at once (an old tab left open) will also cause this. |

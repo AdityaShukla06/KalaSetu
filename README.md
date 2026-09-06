@@ -43,6 +43,7 @@ Full walkthrough for Supabase, Gemini, and deploying to Vercel is in [SETUP.md](
 | `npm run verify:rls` | Checks row level security policies directly against Postgres |
 | `npm run promote:admin -- <email>` | Promotes an existing account to admin (they must have signed in once first) |
 | `npm run seed:demo-admin -- [email]` | Creates (or fixes up) one admin account directly, no prior sign-in needed. Defaults to `admin@kalasetu.demo` |
+| `npm run admin:set-password -- <email> <password>` | Sets or changes an admin's sign-in password (8+ characters). They sign in with it instead of an OTP from then on |
 | `npm run seed:demo-data` | Populates the marketplace with realistic demo artisans, products, buyers, inquiries, and view history. Wipes and regenerates its own data, safe to re-run |
 | `npm run seed:demo-data:wipe` | Removes everything the seed script created, without regenerating it |
 
@@ -100,8 +101,9 @@ Everything is mounted under `/api` and served from the same origin as the PWA, s
 | Method | Route | Body / query | Returns |
 |---|---|---|---|
 | GET | `/api/health` | | `{ status, version }` |
-| POST | `/api/auth/request-otp` | `{ email }` | `{ success, emailDelivered, expiresInMinutes }` |
+| POST | `/api/auth/request-otp` | `{ email }` | `{ success, emailDelivered, expiresInMinutes, requiresPassword }`, sends no code when `requiresPassword` is true |
 | POST | `/api/auth/verify-otp` | `{ email, otp, intendedRole? }` | `{ token, userId, email, role }` |
+| POST | `/api/auth/admin-login` | `{ email, password }` | `{ token, userId, email, role }`, admin only, locks for 15 minutes after 5 wrong attempts |
 | GET | `/api/users/me` | | `UserProfile` |
 | PATCH | `/api/users/me` | `{ displayName?, shopName?, region?, whatsappNumber?, pincode?, language? }` | `{ success }` |
 | POST | `/api/images/enhance` | raw image bytes | `{ enhancedImageUrl, originalImageUrl, width, height }`, artisan only |
@@ -143,6 +145,10 @@ Email OTP, issued by this API rather than a third party. SMS was not viable: sen
 `request-otp` stores a SHA-256 hash of a 4 digit code with a 10 minute expiry and emails it through Resend. `verify-otp` checks it and returns a JWT that the client sends on every later request. Codes are single use, capped at 5 attempts, and compared with a timing safe comparison. Sessions last 7 days; changing `JWT_SECRET` revokes all of them at once.
 
 Email delivery is optional. Without `RESEND_API_KEY` the app still works through the demo fallback code, which is documented in [SETUP.md](SETUP.md) along with how to turn it off.
+
+**Admin accounts sign in with a password instead, once one is set.** An admin's email never gets an OTP, so there is nothing in an inbox for anyone else to intercept, and no dependency on Resend being configured for the account that runs the moderation console. `POST /api/auth/request-otp` looks the email up first; if it belongs to an admin with `users.password_hash` set, it sends no code at all and returns `{ requiresPassword: true }`, which sends the frontend to a password screen instead of the OTP one. `POST /api/auth/admin-login` verifies the password (salted scrypt via [server/lib/password.ts](server/lib/password.ts), timing-safe compare, no dependency added) and issues the same session token `verify-otp` would. Five wrong passwords locks the account for 15 minutes (`users.failed_login_attempts`/`locked_until`), and every response is a generic `invalid_credentials` regardless of whether the email or the password was wrong, so a failed attempt never confirms which admin emails exist.
+
+**There is deliberately no in-app way to set an admin's own password.** The one and only way is `npm run admin:set-password -- <email> <password>` (a `service_role`-key script, same trust model as `promote:admin`), because a self-serve "set my password" flow would need to exist before the account can prove who it is, which is exactly the bootstrap problem OTP already solves for everyone else. An admin promoted via `promote:admin` or created via `seed:demo-admin` keeps signing in with OTP until someone runs this script for them; nothing breaks in the meantime.
 
 ## Roles
 
@@ -232,7 +238,7 @@ Four screens under `src/screens/Console/`, deliberately unlinked from anywhere i
 
 **Confirm dialogs are one reusable component** ([src/components/ConfirmDialog.tsx](src/components/ConfirmDialog.tsx)), used for deactivate and for reject/flag's required-reason prompt, matching the existing design system rather than adding a modal library.
 
-**Demo login**: `npm run seed:demo-admin -- you@example.com` (or no argument, defaults to `admin@kalasetu.demo`) creates the account directly with the service role key, no prior sign-in required, unlike `promote:admin`. Sign in through the normal email/OTP screen afterward; the role choice on that screen is ignored for an account that already exists.
+**Demo login**: `npm run seed:demo-admin -- you@example.com` (or no argument, defaults to `admin@kalasetu.demo`) creates the account directly with the service role key, no prior sign-in required, unlike `promote:admin`. Sign in through the normal email screen afterward; the role choice on that screen is ignored for an account that already exists. Optionally follow it with `npm run admin:set-password -- you@example.com yourpassword` so that account signs in with a password from then on instead of an OTP.
 
 ## Craft Heritage Passport
 

@@ -2,9 +2,10 @@ import { useState } from "react";
 import { WelcomeScreen } from "./WelcomeScreen";
 import { EmailEntryScreen } from "./EmailEntryScreen";
 import { OtpVerificationScreen } from "./OtpVerificationScreen";
+import { AdminPasswordScreen } from "./AdminPasswordScreen";
 import type { SelfServeRole } from "../../services/api";
 
-type Phase = "welcome" | "email" | "otp";
+type Phase = "welcome" | "email" | "otp" | "admin-password";
 
 export function LoginScreen() {
   const [phase, setPhase] = useState<Phase>("welcome");
@@ -14,6 +15,10 @@ export function LoginScreen() {
 
   if (phase === "welcome") {
     return <WelcomeScreen onGetStarted={() => setPhase("email")} />;
+  }
+
+  if (phase === "admin-password" && email) {
+    return <AdminPasswordScreen email={email} onChangeEmail={() => setPhase("email")} />;
   }
 
   if (phase === "otp" && email) {
@@ -29,11 +34,11 @@ export function LoginScreen() {
 
   return (
     <EmailEntryScreen
-      onOtpSent={(sentEmail, delivered, role) => {
+      onOtpSent={(sentEmail, delivered, role, requiresPassword) => {
         setEmail(sentEmail);
         setEmailDelivered(delivered);
         setIntendedRole(role);
-        setPhase("otp");
+        setPhase(requiresPassword ? "admin-password" : "otp");
       }}
     />
   );
