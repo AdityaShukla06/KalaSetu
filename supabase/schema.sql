@@ -57,6 +57,7 @@ create table if not exists products (
   weight_kg       numeric(6, 3) check (weight_kg is null or weight_kg > 0),
   product_story   text,
   story_generated_at timestamptz,
+  in_stock        boolean not null default true,
   is_seed         boolean not null default false,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
@@ -80,6 +81,9 @@ create index if not exists products_review_status_idx
 create index if not exists products_is_seed_idx
   on products (is_seed);
 
+create index if not exists products_in_stock_idx
+  on products (in_stock);
+
 create table if not exists passport_counters (
   year       int primary key,
   last_value int not null default 0
@@ -100,6 +104,7 @@ create table if not exists inquiries (
   read_at      timestamptz,
   responded_at timestamptz,
   notified_at  timestamptz,
+  reply_message text,
   created_at  timestamptz not null default now()
 );
 

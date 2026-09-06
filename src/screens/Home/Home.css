@@ -193,6 +193,25 @@
   color: var(--color-error);
 }
 
+.product-card-badge-out-of-stock {
+  background: var(--color-disabled-bg);
+  color: var(--color-disabled-text);
+}
+
+.product-card-out-of-stock .product-card-photo {
+  opacity: 0.5;
+}
+
+.sheet-out-of-stock-badge {
+  align-self: flex-start;
+  font-size: var(--text-caption-size);
+  font-weight: 600;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
+  border-radius: var(--radius-pill);
+  padding: 2px var(--space-2);
+}
+
 .product-card-body {
   padding: var(--space-3);
   display: flex;

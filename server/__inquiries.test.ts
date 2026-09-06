@@ -17,15 +17,16 @@ let schemaReady = false;
 
 beforeAll(async () => {
   if (!HAS_CREDENTIALS) return;
-  const [inquiriesCheck, usersCheck] = await Promise.all([
+  const [inquiriesCheck, usersCheck, replyCheck] = await Promise.all([
     getSupabase().from("inquiries").select("quantity, contact_preference, contact_value, read_at, responded_at, notified_at").limit(1),
     getSupabase().from("users").select("whatsapp_number").limit(1),
+    getSupabase().from("inquiries").select("reply_message").limit(1),
   ]);
-  schemaReady = !inquiriesCheck.error && !usersCheck.error;
+  schemaReady = !inquiriesCheck.error && !usersCheck.error && !replyCheck.error;
   if (!schemaReady) {
     console.warn(
-      "Skipping inquiry flow tests: this database predates the inquiry details / WhatsApp migration. " +
-        "Run supabase/migrations/008-inquiry-details-and-whatsapp.sql first.",
+      "Skipping inquiry flow tests: this database predates the inquiry details / WhatsApp or reply migration. " +
+        "Run supabase/migrations/008-inquiry-details-and-whatsapp.sql and 011-stock-and-replies.sql first.",
     );
   }
 });
@@ -234,6 +235,70 @@ suite("buyer-to-artisan inquiry flow", () => {
     );
     const entry = mine.find((item) => item.inquiryId === inquiryId);
     expect(entry?.respondedAt).not.toBeNull();
+  }, 15000);
+
+  it("PASS/FAIL: the artisan can send a reply, and the buyer sees the reply text on their own inquiry", async () => {
+    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const buyer = await signInAs(EMAIL_BUYER, "buyer");
+    const productId = await createProduct(artisan.token);
+
+    const createRes = await fetch(`${base}/api/inquiries`, {
+      method: "POST",
+      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ productId, message: "Is this in stock?", contactPreference: "email" }),
+    });
+    const { inquiryId } = await json<{ inquiryId: string }>(createRes);
+
+    const replyRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
+      method: "PATCH",
+      headers: { ...auth(artisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Yes, it's ready to ship." }),
+    });
+    expect(replyRes.status).toBe(200);
+    const replyBody = await json<{ success: boolean; emailDelivered: boolean }>(replyRes);
+    expect(replyBody.success).toBe(true);
+
+    const mine = await json<Array<{ inquiryId: string; replyMessage: string | null; respondedAt: string | null }>>(
+      await fetch(`${base}/api/inquiries/mine`, { headers: auth(buyer.token) }),
+    );
+    const entry = mine.find((item) => item.inquiryId === inquiryId);
+    expect(entry?.replyMessage).toBe("Yes, it's ready to ship.");
+    expect(entry?.respondedAt).not.toBeNull();
+  }, 15000);
+
+  it("PASS/FAIL: a reply cannot be empty, and an artisan cannot reply to another artisan's inquiry", async () => {
+    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const otherArtisan = await signInAs(EMAIL_OTHER_ARTISAN, "artisan");
+    const buyer = await signInAs(EMAIL_BUYER, "buyer");
+    const productId = await createProduct(artisan.token);
+
+    const createRes = await fetch(`${base}/api/inquiries`, {
+      method: "POST",
+      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ productId, message: "Interested", contactPreference: "email" }),
+    });
+    const { inquiryId } = await json<{ inquiryId: string }>(createRes);
+
+    const emptyRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
+      method: "PATCH",
+      headers: { ...auth(artisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "" }),
+    });
+    expect(emptyRes.status).toBe(400);
+
+    const wrongArtisanRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
+      method: "PATCH",
+      headers: { ...auth(otherArtisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Trying to reply to someone else's inquiry" }),
+    });
+    expect(wrongArtisanRes.status).toBe(404);
+
+    const buyerReplyRes = await fetch(`${base}/api/inquiries/${inquiryId}/reply`, {
+      method: "PATCH",
+      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "A buyer should not be able to reply" }),
+    });
+    expect(buyerReplyRes.status).toBe(403);
   }, 15000);
 
   it("PASS/FAIL: an artisan cannot mark another artisan's inquiry as responded", async () => {

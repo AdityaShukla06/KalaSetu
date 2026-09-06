@@ -44,6 +44,7 @@ export interface Product extends ProductInput {
   passportId: string;
   productStory: string | null;
   storyGeneratedAt: string | null;
+  inStock: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,6 +115,7 @@ export interface Inquiry {
   readAt: string | null;
   respondedAt: string | null;
   notifiedAt: string | null;
+  replyMessage: string | null;
   createdAt: string;
   product: InquiryProductSummary | null;
 }

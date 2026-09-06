@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Skeleton } from "../../components/Skeleton";
-import { listReceivedInquiries, closeInquiry, markInquiryResponded } from "../../services/api";
+import { listReceivedInquiries, closeInquiry, markInquiryResponded, replyToInquiry } from "../../services/api";
 import type { Inquiry } from "../../services/api";
 import { buildWhatsAppUrl } from "../../../shared/whatsapp";
 import { useLanguage } from "../../context/LanguageContext";
@@ -54,6 +54,9 @@ export function InquiriesScreen() {
   const [state, setState] = useState<LoadState>("loading");
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [replyingId, setReplyingId] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replyError, setReplyError] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -89,6 +92,42 @@ export function InquiriesScreen() {
       setInquiries((prev) =>
         prev.map((item) => (item.inquiryId === inquiryId ? { ...item, status: "closed" } : item)),
       );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startReply(inquiryId: string) {
+    setReplyingId(inquiryId);
+    setReplyDraft("");
+    setReplyError(false);
+  }
+
+  function cancelReply() {
+    setReplyingId(null);
+    setReplyDraft("");
+    setReplyError(false);
+  }
+
+  async function handleSendReply(inquiryId: string) {
+    if (!replyDraft.trim()) {
+      setReplyError(true);
+      return;
+    }
+    setBusyId(inquiryId);
+    try {
+      await replyToInquiry(inquiryId, replyDraft.trim());
+      setInquiries((prev) =>
+        prev.map((item) =>
+          item.inquiryId === inquiryId
+            ? { ...item, replyMessage: replyDraft.trim(), respondedAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+      setReplyingId(null);
+      setReplyDraft("");
+    } catch {
+      setReplyError(true);
     } finally {
       setBusyId(null);
     }
@@ -161,6 +200,50 @@ export function InquiriesScreen() {
                     })}
                   </p>
 
+                  {inquiry.replyMessage && (
+                    <div className="inquiries-reply-sent">
+                      <p className="caption inquiries-reply-sent-label">{t("inquiries.yourReply")}</p>
+                      <p className="body-s">{inquiry.replyMessage}</p>
+                    </div>
+                  )}
+
+                  {replyingId === inquiry.inquiryId && (
+                    <div className="inquiries-reply-form">
+                      <label className="visually-hidden" htmlFor={`reply-${inquiry.inquiryId}`}>
+                        {t("inquiries.replyPlaceholder")}
+                      </label>
+                      <textarea
+                        id={`reply-${inquiry.inquiryId}`}
+                        className={`inquiries-reply-textarea${replyError ? " inquiries-reply-textarea-error" : ""}`}
+                        rows={3}
+                        placeholder={t("inquiries.replyPlaceholder")}
+                        value={replyDraft}
+                        onChange={(event) => {
+                          setReplyDraft(event.target.value);
+                          setReplyError(false);
+                        }}
+                        disabled={busyId === inquiry.inquiryId}
+                      />
+                      {replyError && (
+                        <p className="field-error" role="alert">
+                          {t("inquiries.replyRequired")}
+                        </p>
+                      )}
+                      <div className="inquiries-reply-actions">
+                        <Button
+                          variant="primary"
+                          loading={busyId === inquiry.inquiryId}
+                          onClick={() => handleSendReply(inquiry.inquiryId)}
+                        >
+                          {t("inquiries.sendReply")}
+                        </Button>
+                        <Button variant="tertiary" disabled={busyId === inquiry.inquiryId} onClick={cancelReply}>
+                          {t("home.editCancel")}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="inquiries-item-actions">
                     {whatsappTarget && (
                       <a
@@ -174,6 +257,12 @@ export function InquiriesScreen() {
                       </a>
                     )}
 
+                    {!inquiry.replyMessage && replyingId !== inquiry.inquiryId && (
+                      <Button variant="secondary" onClick={() => startReply(inquiry.inquiryId)}>
+                        {t("inquiries.reply")}
+                      </Button>
+                    )}
+
                     {isResponded ? (
                       <span className="inquiries-badge inquiries-badge-responded">
                         <CheckIcon />
@@ -181,7 +270,7 @@ export function InquiriesScreen() {
                       </span>
                     ) : (
                       <Button
-                        variant="secondary"
+                        variant="tertiary"
                         loading={busyId === inquiry.inquiryId}
                         onClick={() => handleMarkResponded(inquiry.inquiryId)}
                       >

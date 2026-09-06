@@ -32,6 +32,7 @@ function makeRow(overrides: Partial<Parameters<typeof matchesSearch>[0]> = {}) {
     care_instructions: null,
     product_story: null,
     story_generated_at: null,
+    in_stock: true,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     ...overrides,

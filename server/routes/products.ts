@@ -99,7 +99,7 @@ function assessOverchargeSafely(input: {
 }
 
 export const PRODUCT_COLUMNS =
-  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, auto_flag_reason, review_status, reviewed_at, reviewed_by, review_reason, passport_id, technique, time_taken, gi_tag, care_instructions, product_story, story_generated_at, created_at, updated_at";
+  "id, user_id, category, material, region, artisan_name, title_en, title_local, description_en, description_local, local_language, image_url, price, material_cost, status, flagged, flag_reason, auto_flag_reason, review_status, reviewed_at, reviewed_by, review_reason, passport_id, technique, time_taken, gi_tag, care_instructions, product_story, story_generated_at, in_stock, created_at, updated_at";
 
 export interface ProductRow {
   id: string;
@@ -131,6 +131,7 @@ export interface ProductRow {
   care_instructions: string | null;
   product_story: string | null;
   story_generated_at: string | null;
+  in_stock: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -166,6 +167,7 @@ export function toProduct(row: ProductRow): Product {
     passportId: row.passport_id,
     productStory: row.product_story,
     storyGeneratedAt: row.story_generated_at,
+    inStock: row.in_stock,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -538,6 +540,38 @@ router.patch(
       .select("id");
 
     if (error) throw new Error(`Could not update the product: ${error.message}`);
+    if (!data || data.length === 0) {
+      res.status(404).json({ error: "Product not found" });
+      return;
+    }
+
+    res.json({ success: true });
+  }),
+);
+
+const SetStockSchema = z.object({
+  inStock: z.boolean(),
+});
+
+router.patch(
+  "/:id/stock",
+  requireAuth,
+  requireRole("artisan"),
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const parsed = SetStockSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const { data, error } = await getSupabase()
+      .from("products")
+      .update({ in_stock: parsed.data.inStock, updated_at: new Date().toISOString() })
+      .eq("id", req.params.id as string)
+      .eq("user_id", req.uid)
+      .select("id");
+
+    if (error) throw new Error(`Could not update stock status: ${error.message}`);
     if (!data || data.length === 0) {
       res.status(404).json({ error: "Product not found" });
       return;

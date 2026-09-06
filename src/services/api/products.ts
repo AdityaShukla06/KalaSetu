@@ -39,6 +39,7 @@ export interface Product extends ProductInput {
   passportId: string;
   productStory: string | null;
   storyGeneratedAt: string | null;
+  inStock: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -106,6 +107,14 @@ export function updateProduct(
   return apiFetch(`/products/${encodeURIComponent(productId)}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
+  });
+}
+
+//set stock status
+export function setProductStock(productId: string, inStock: boolean): Promise<{ success: boolean }> {
+  return apiFetch(`/products/${encodeURIComponent(productId)}/stock`, {
+    method: "PATCH",
+    body: JSON.stringify({ inStock }),
   });
 }
 

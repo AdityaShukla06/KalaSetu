@@ -257,6 +257,9 @@ export function ProductDetailScreen() {
 
         <div className="product-detail-body">
           <h1>{title}</h1>
+          {!product.inStock && (
+            <span className="product-detail-out-of-stock-badge">{t("marketplace.outOfStock")}</span>
+          )}
           <p className="price">₹{product.price}</p>
 
           {shippingUnavailable ? (
@@ -349,6 +352,9 @@ export function ProductDetailScreen() {
           <div className="inquiry-card">
             <h3>{t("marketplace.inquiryTitle")}</h3>
             <p className="caption inquiry-card-subtitle">{t("marketplace.inquirySubtitle")}</p>
+            {!product.inStock && (
+              <p className="caption inquiry-out-of-stock-note">{t("marketplace.outOfStockInquiryNote")}</p>
+            )}
 
             {inquiryState === "sent" ? (
               <p className="body-s inquiry-sent">{t("marketplace.inquirySent")}</p>

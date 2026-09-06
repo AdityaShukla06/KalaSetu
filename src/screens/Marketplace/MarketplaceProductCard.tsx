@@ -26,9 +26,15 @@ export function MarketplaceProductCard({ product }: MarketplaceProductCardProps)
   const title = language === product.localLanguage ? product.titleLocal : product.titleEn;
 
   return (
-    <Link to={`/marketplace/${product.productId}`} className="marketplace-product-card">
+    <Link
+      to={`/marketplace/${product.productId}`}
+      className={`marketplace-product-card${!product.inStock ? " marketplace-product-card-out-of-stock" : ""}`}
+    >
       <div className="marketplace-product-photo-wrap">
         <img src={product.imageUrl} alt="" className="marketplace-product-photo" loading="lazy" />
+        {!product.inStock && (
+          <span className="marketplace-product-badge">{t("marketplace.outOfStock")}</span>
+        )}
       </div>
       <div className="marketplace-product-body">
         <p className="marketplace-product-title">{title}</p>

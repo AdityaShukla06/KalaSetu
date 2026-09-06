@@ -201,6 +201,26 @@
   border-color: var(--color-error);
 }
 
+.product-detail-out-of-stock-badge {
+  align-self: flex-start;
+  display: inline-block;
+  margin-top: var(--space-1);
+  font-size: var(--text-caption-size);
+  font-weight: 600;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-bg);
+  border-radius: var(--radius-pill);
+  padding: 2px var(--space-2);
+}
+
+.inquiry-out-of-stock-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-disabled-bg);
+  color: var(--color-secondary);
+}
+
 .inquiry-sent {
   color: var(--color-success);
   font-weight: 600;

@@ -20,6 +20,8 @@ function RetryIcon() {
 }
 
 export function ModerationScreen() {
+  const [searchInput, setSearchInput] = useState("");
+  const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [state, setState] = useState<LoadState>("loading");
   const [items, setItems] = useState<Product[]>([]);
@@ -31,7 +33,7 @@ export function ModerationScreen() {
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const result = await getModerationQueue(page, PAGE_SIZE);
+      const result = await getModerationQueue(q, page, PAGE_SIZE);
       setItems(result.items);
       setTotal(result.total);
       setHasMore(result.hasMore);
@@ -39,11 +41,19 @@ export function ModerationScreen() {
     } catch {
       setState("error");
     }
-  }, [page]);
+  }, [q, page]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPage(1);
+      setQ(searchInput.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   async function handleApprove(product: Product) {
     setBusyId(product.productId);
@@ -72,6 +82,13 @@ export function ModerationScreen() {
     <div>
       <div className="console-page-header">
         <h1>Listing moderation</h1>
+        <input
+          type="search"
+          placeholder="Search by title, artisan, or category"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          className="console-search-input"
+        />
       </div>
 
       {state === "loading" && (
@@ -101,7 +118,11 @@ export function ModerationScreen() {
 
       {state === "loaded" && items.length === 0 && (
         <div className="console-empty">
-          <p>Nothing pending review. New listings will appear here as they're published.</p>
+          <p>
+            {q
+              ? `No pending listings match "${q}".`
+              : "Nothing pending review. New listings will appear here as they're published."}
+          </p>
         </div>
       )}
 

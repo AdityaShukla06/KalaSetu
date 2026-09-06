@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Skeleton } from "../../components/Skeleton";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { getArtisanDetail, setArtisanActive } from "../../services/api";
+import { getArtisanDetail, setArtisanActive, deleteListing } from "../../services/api";
 import type { ConsoleArtisanDetail } from "../../services/api";
 import "./ConsoleLayout.css";
 import "./ArtisanDetail.css";
@@ -32,6 +32,8 @@ export function ArtisanDetailScreen() {
   const [artisan, setArtisan] = useState<ConsoleArtisanDetail | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ productId: string; titleEn: string } | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!artisanId) return;
@@ -62,6 +64,18 @@ export function ArtisanDetailScreen() {
       await load();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleDeleteListing(reason?: string) {
+    if (!deleteTarget || !reason) return;
+    setDeleteBusy(true);
+    try {
+      await deleteListing(deleteTarget.productId, reason);
+      setDeleteTarget(null);
+      await load();
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -120,6 +134,12 @@ export function ArtisanDetailScreen() {
 
       <div className="dashboard-section" style={{ marginTop: "24px" }}>
         <h3>Listings ({artisan.listings.length})</h3>
+        <p className="body-s" style={{ color: "var(--color-text-muted)", marginTop: "-8px", marginBottom: "12px" }}>
+          "Status" is what buyers see (a published listing is already live in the marketplace). "Review" is
+          separate, internal bookkeeping for this admin console: "Pending" means no admin has looked at it yet, not
+          that it's hidden or waiting for approval to go live. Approve it from the moderation queue once you've
+          checked it.
+        </p>
         {artisan.listings.length === 0 ? (
           <p className="body-s" style={{ color: "var(--color-text-muted)" }}>
             No listings yet.
@@ -135,6 +155,7 @@ export function ArtisanDetailScreen() {
                   <th>Status</th>
                   <th>Review</th>
                   <th>Flagged</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,6 +171,14 @@ export function ArtisanDetailScreen() {
                       </span>
                     </td>
                     <td>{listing.flagged ? listing.flagReason ?? "Yes" : "—"}</td>
+                    <td>
+                      <Button
+                        variant="destructive"
+                        onClick={() => setDeleteTarget({ productId: listing.productId, titleEn: listing.titleEn })}
+                      >
+                        Delete
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -157,6 +186,21 @@ export function ArtisanDetailScreen() {
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title={`Delete "${deleteTarget.titleEn}"?`}
+          message="This permanently removes the listing, its passport, and its inquiry history. This cannot be undone."
+          confirmLabel="Delete listing"
+          cancelLabel="Cancel"
+          destructive
+          requireReason
+          reasonLabel="Reason (shown in the audit log, required)"
+          busy={deleteBusy}
+          onConfirm={handleDeleteListing}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
 
       {confirmOpen && (
         <ConfirmDialog

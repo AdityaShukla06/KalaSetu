@@ -78,6 +78,24 @@
   white-space: nowrap;
 }
 
+.inquiry-list-reply {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-primary-tint);
+}
+
+.inquiry-list-reply-label {
+  margin: 0 0 2px;
+  font-weight: 600;
+  color: var(--color-primary-pressed);
+}
+
+.inquiry-list-reply-note {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
 .inquiry-status {
   align-self: flex-start;
   margin-top: 4px;

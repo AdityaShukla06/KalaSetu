@@ -26,6 +26,7 @@ export interface Inquiry {
   readAt: string | null;
   respondedAt: string | null;
   notifiedAt: string | null;
+  replyMessage: string | null;
   createdAt: string;
   product: InquiryProductSummary | null;
 }
@@ -63,5 +64,15 @@ export function closeInquiry(inquiryId: string): Promise<{ success: boolean }> {
 export function markInquiryResponded(inquiryId: string): Promise<{ success: boolean }> {
   return apiFetch(`/inquiries/${encodeURIComponent(inquiryId)}/responded`, {
     method: "PATCH",
+  });
+}
+
+export function replyToInquiry(
+  inquiryId: string,
+  message: string,
+): Promise<{ success: boolean; emailDelivered: boolean }> {
+  return apiFetch(`/inquiries/${encodeURIComponent(inquiryId)}/reply`, {
+    method: "PATCH",
+    body: JSON.stringify({ message }),
   });
 }

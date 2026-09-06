@@ -1,3 +1,5 @@
+export { ApiError } from "./api/_helpers";
+
 //importing product apis
 export type {
   ProductStatus,
@@ -58,6 +60,7 @@ export {
   createProduct,
   listProducts,
   updateProduct,
+  setProductStock,
   deleteProduct,
   relocaliseProducts,
   searchMarketplace,
@@ -70,6 +73,7 @@ export {
   listReceivedInquiries,
   closeInquiry,
   markInquiryResponded,
+  replyToInquiry,
 } from "./api/inquiries";
 export {
   getDashboardStats,
@@ -80,6 +84,7 @@ export {
   approveListing,
   rejectListing,
   flagListing,
+  deleteListing,
   getFlaggedListings,
   getAuditLog,
 } from "./api/console";

@@ -217,24 +217,35 @@ const MAX_MODERATION_CANDIDATES = 1000;
 router.get(
   "/moderation/queue",
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const q = (req.query.q as string | undefined)?.trim().toLowerCase();
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
 
-    const { data, error, count } = await getSupabase()
+    const { data, error } = await getSupabase()
       .from("products")
-      .select(PRODUCT_COLUMNS, { count: "exact" })
+      .select(PRODUCT_COLUMNS)
       .eq("review_status", "pending")
       .order("created_at", { ascending: true })
-      .range(from, Math.min(to, MAX_MODERATION_CANDIDATES));
+      .limit(MAX_MODERATION_CANDIDATES);
 
     if (error) throw new Error(`Could not load the moderation queue: ${error.message}`);
 
-    const items = (data as ProductRow[]).map(toProduct);
-    const total = count ?? items.length;
+    let items = (data as ProductRow[]).map(toProduct);
+    if (q) {
+      items = items.filter(
+        (item) =>
+          item.titleEn.toLowerCase().includes(q) ||
+          item.titleLocal.toLowerCase().includes(q) ||
+          (item.artisanName ?? "").toLowerCase().includes(q) ||
+          item.category.toLowerCase().includes(q),
+      );
+    }
 
-    res.json({ items, page, limit, total, hasMore: from + items.length < total });
+    const total = items.length;
+    const start = (page - 1) * limit;
+    const page_ = items.slice(start, start + limit);
+
+    res.json({ items: page_, page, limit, total, hasMore: start + page_.length < total });
   }),
 );
 
@@ -338,6 +349,33 @@ router.patch(
     if (error) throw new Error(`Could not flag the product: ${error.message}`);
 
     await recordAudit(req.uid, "product.flag", "products", productId, { reason: parsed.data.reason });
+
+    res.json({ success: true });
+  }),
+);
+
+router.delete(
+  "/products/:id",
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const parsed = ReasonSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const productId = req.params.id as string;
+    const product = await loadProductOr404(productId, res);
+    if (!product) return;
+
+    const supabase = getSupabase();
+    const { error } = await supabase.from("products").delete().eq("id", productId);
+    if (error) throw new Error(`Could not delete the product: ${error.message}`);
+
+    await supabase.rpc("increment_total_products", { target_user: product.user_id, delta: -1 });
+    await recordAudit(req.uid, "product.delete", "products", productId, {
+      reason: parsed.data.reason,
+      metadata: { artisanId: product.user_id, titleEn: product.title_en },
+    });
 
     res.json({ success: true });
   }),

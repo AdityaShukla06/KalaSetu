@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "../../components/Button";
 import { LanguageTabs, type DescriptionTab } from "../../components/LanguageTabs";
-import { deleteProduct, updateProduct, type Product } from "../../services/api";
+import { deleteProduct, updateProduct, setProductStock, type Product } from "../../services/api";
 import { buildSingleProductExport, downloadJson } from "../../services/ondcExport";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
@@ -67,6 +67,19 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
   const [mode, setMode] = useState<Mode>("view");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stockBusy, setStockBusy] = useState(false);
+  const [inStock, setInStock] = useState(product.inStock);
+
+  async function handleToggleStock() {
+    setStockBusy(true);
+    try {
+      await setProductStock(product.productId, !inStock);
+      setInStock((prev) => !prev);
+      onChanged();
+    } finally {
+      setStockBusy(false);
+    }
+  }
 
   function handleExportOndc() {
     const exportData = buildSingleProductExport(userId ?? "", product);
@@ -159,6 +172,8 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
         <div className="sheet-body">
           <h2>{title}</h2>
 
+          {!inStock && <span className="sheet-out-of-stock-badge">{t("home.outOfStock")}</span>}
+
           {mode === "edit" ? (
             <label className="sheet-field">
               <span className="caption">{t("home.editPriceLabel")}</span>
@@ -241,6 +256,9 @@ export function ProductDetailSheet({ product, onClose, onChanged }: ProductDetai
               <>
                 <Button variant="secondary" icon={<EditIcon />} onClick={startEdit}>
                   {t("home.detailEdit")}
+                </Button>
+                <Button variant="tertiary" loading={stockBusy} onClick={handleToggleStock}>
+                  {inStock ? t("home.markOutOfStock") : t("home.markInStock")}
                 </Button>
                 <Button
                   variant="destructive"

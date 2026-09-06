@@ -40,7 +40,7 @@ const created: { users: string[]; products: string[]; emails: string[] } = {
   emails: [EMAIL_ARTISAN_A, EMAIL_ARTISAN_B, EMAIL_BUYER, EMAIL_ADMIN],
 };
 
-async function signIn(email: string): Promise<{ token: string; userId: string }> {
+async function signIn(email: string, intendedRole: "artisan" | "buyer" = "artisan"): Promise<{ token: string; userId: string }> {
   await fetch(`${base}/api/auth/request-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -50,7 +50,7 @@ async function signIn(email: string): Promise<{ token: string; userId: string }>
   const res = await fetch(`${base}/api/auth/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, otp: FALLBACK }),
+    body: JSON.stringify({ email, otp: FALLBACK, intendedRole }),
   });
   const body = await json<{ token: string; userId: string }>(res);
   created.users.push(body.userId);
@@ -58,8 +58,8 @@ async function signIn(email: string): Promise<{ token: string; userId: string }>
 }
 
 async function signInAs(email: string, role: "artisan" | "buyer" | "admin"): Promise<{ token: string; userId: string }> {
-  const account = await signIn(email);
-  if (role !== "artisan") {
+  const account = await signIn(email, role === "buyer" ? "buyer" : "artisan");
+  if (role === "admin") {
     const { error } = await getSupabase().from("users").update({ role }).eq("id", account.userId);
     if (error) throw new Error(`Could not seed role ${role} for the test: ${error.message}`);
   }
@@ -255,7 +255,7 @@ suite("self-serve role choice at signup", () => {
     expect(body.role).toBe("buyer");
   });
 
-  it("PASS/FAIL: an existing account's role does not change on a later login", async () => {
+  it("PASS/FAIL: picking the other role on an existing account is rejected, and the account's role never changes", async () => {
     const email = `roles-selfserve-existing-${Date.now()}@example.com`;
     created.emails.push(email);
 
@@ -265,10 +265,15 @@ suite("self-serve role choice at signup", () => {
     expect(firstBody.role).toBe("artisan");
 
     const second = await verifyWithRole(email, "buyer");
-    const secondBody = await json<{ userId: string; role: string }>(second);
+    expect(second.status).toBe(409);
+    const secondBody = await json<{ error: string; existingRole: string }>(second);
+    expect(secondBody.error).toBe("email_role_mismatch");
+    expect(secondBody.existingRole).toBe("artisan");
 
-    expect(secondBody.userId).toBe(firstBody.userId);
-    expect(secondBody.role).toBe("artisan");
+    const third = await verifyWithRole(email, "artisan");
+    const thirdBody = await json<{ userId: string; role: string }>(third);
+    expect(thirdBody.userId).toBe(firstBody.userId);
+    expect(thirdBody.role).toBe("artisan");
   });
 
   it("PASS/FAIL: intendedRole cannot be admin, even as a raw request", async () => {

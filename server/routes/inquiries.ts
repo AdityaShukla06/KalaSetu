@@ -4,14 +4,14 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
-import { sendInquiryEmail } from "../lib/mailer";
+import { sendInquiryEmail, sendInquiryReplyEmail } from "../lib/mailer";
 import { loadEnv } from "../lib/env";
 import { Inquiry, InquiryStatus, InquiryProductSummary, InquiryContactPreference } from "../types";
 
 const router = Router();
 
 const INQUIRY_COLUMNS =
-  "id, product_id, buyer_id, artisan_id, message, quantity, contact_preference, contact_value, status, read_at, responded_at, notified_at, created_at";
+  "id, product_id, buyer_id, artisan_id, message, quantity, contact_preference, contact_value, status, read_at, responded_at, notified_at, reply_message, created_at";
 
 interface InquiryRow {
   id: string;
@@ -26,6 +26,7 @@ interface InquiryRow {
   read_at: string | null;
   responded_at: string | null;
   notified_at: string | null;
+  reply_message: string | null;
   created_at: string;
 }
 
@@ -44,6 +45,7 @@ function toInquiry(row: InquiryRow, product: InquiryProductSummary | null, buyer
     readAt: row.read_at,
     respondedAt: row.responded_at,
     notifiedAt: row.notified_at,
+    replyMessage: row.reply_message,
     createdAt: row.created_at,
     product,
   };
@@ -269,6 +271,68 @@ router.patch(
     }
 
     res.json({ success: true });
+  }),
+);
+
+const ReplyInquirySchema = z.object({
+  message: z.string().trim().min(1).max(2000),
+});
+
+router.patch(
+  "/:id/reply",
+  requireAuth,
+  requireRole("artisan"),
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const parsed = ReplyInquirySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const supabase = getSupabase();
+    const respondedAt = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from("inquiries")
+      .update({ reply_message: parsed.data.message, responded_at: respondedAt })
+      .eq("id", req.params.id as string)
+      .eq("artisan_id", req.uid)
+      .select("id, buyer_id, product_id, message")
+      .maybeSingle();
+
+    if (error) throw new Error(`Could not save the reply: ${error.message}`);
+    if (!data) {
+      res.status(404).json({ error: "Inquiry not found" });
+      return;
+    }
+
+    const [buyerResult, productResult, artisanResult] = await Promise.all([
+      supabase.from("users").select("email").eq("id", data.buyer_id).maybeSingle(),
+      supabase.from("products").select("title_en, image_url, passport_id").eq("id", data.product_id).maybeSingle(),
+      supabase.from("users").select("shop_name, display_name").eq("id", req.uid).maybeSingle(),
+    ]);
+
+    let emailDelivered = false;
+    if (buyerResult.data?.email && productResult.data) {
+      const env = loadEnv();
+      const mailResult = await sendInquiryReplyEmail({
+        buyerEmail: buyerResult.data.email,
+        artisanName: artisanResult.data?.shop_name ?? artisanResult.data?.display_name ?? "The artisan",
+        productTitle: productResult.data.title_en,
+        productImageUrl: productResult.data.image_url,
+        passportId: productResult.data.passport_id,
+        originalMessage: data.message,
+        replyMessage: parsed.data.message,
+        inboxUrl: `${env.PUBLIC_APP_URL}/marketplace/profile`,
+      });
+      emailDelivered = mailResult.delivered;
+    } else {
+      console.warn("[inquiries] could not resolve a buyer email or product for a reply, skipping notification", {
+        inquiryId: data.id,
+      });
+    }
+
+    res.json({ success: true, emailDelivered });
   }),
 );
 

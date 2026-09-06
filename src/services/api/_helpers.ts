@@ -7,6 +7,18 @@ export const API_BASE_URL =
 
 const TOKEN_KEY = "kalasetu.token";
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(status: number, code: string | undefined, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
   const headers = new Headers(options.headers);
@@ -22,7 +34,14 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
   if (!response.ok) {
-    throw new Error(`${path} failed with status ${response.status}`);
+    let code: string | undefined;
+    try {
+      const body = await response.json();
+      if (typeof body?.error === "string") code = body.error;
+    } catch {
+      // response body wasn't JSON, code stays undefined
+    }
+    throw new ApiError(response.status, code, `${path} failed with status ${response.status}`);
   }
   return response.json() as Promise<T>;
 }

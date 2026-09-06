@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { OtpInput } from "../../components/OtpInput";
-import { sendOtp, verifyOtp, OTP_LENGTH } from "../../services/api";
+import { sendOtp, verifyOtp, OTP_LENGTH, ApiError } from "../../services/api";
 import type { SelfServeRole } from "../../services/api";
 import { useAuth, roleLandingPath } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
@@ -72,9 +72,15 @@ export function OtpVerificationScreen({
       const { token, userId, email: verifiedEmail, role } = await verifyOtp(email, otp, intendedRole);
       login(token, userId, verifiedEmail, role);
       navigate(roleLandingPath(role), { replace: true });
-    } catch {
+    } catch (err) {
       setOtp("");
-      setError(t("otp.wrong"));
+      if (err instanceof ApiError && err.code === "email_role_mismatch") {
+        setError(t(intendedRole === "buyer" ? "otp.emailIsSeller" : "otp.emailIsBuyer"));
+      } else if (err instanceof ApiError && err.code === "account_deactivated") {
+        setError(t("otp.accountDeactivated"));
+      } else {
+        setError(t("otp.wrong"));
+      }
     } finally {
       setVerifying(false);
     }

@@ -193,6 +193,16 @@ export function BuyerProfileScreen() {
                   <div className="inquiry-list-body">
                     <p className="inquiry-list-title">{title}</p>
                     <p className="caption inquiry-list-message">{inquiry.message}</p>
+                    {inquiry.replyMessage ? (
+                      <div className="inquiry-list-reply">
+                        <p className="caption inquiry-list-reply-label">{t("marketplace.artisanReplyLabel")}</p>
+                        <p className="body-s">{inquiry.replyMessage}</p>
+                      </div>
+                    ) : (
+                      inquiry.respondedAt && (
+                        <p className="caption inquiry-list-reply-note">{t("marketplace.inquiryRespondedNoText")}</p>
+                      )
+                    )}
                     <div className="inquiry-list-badges">
                       <span className={`inquiry-status inquiry-status-${inquiry.status}`}>
                         {t(STATUS_LABEL_KEY[inquiry.status])}

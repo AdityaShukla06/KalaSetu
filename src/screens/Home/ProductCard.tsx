@@ -33,12 +33,20 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
   const description = language === product.localLanguage ? product.descriptionLocal : product.descriptionEn;
 
   return (
-    <button type="button" className="product-card" onClick={onClick}>
+    <button
+      type="button"
+      className={`product-card${!product.inStock ? " product-card-out-of-stock" : ""}`}
+      onClick={onClick}
+    >
       <div className="product-card-photo-wrap">
         <img src={product.imageUrl} alt="" className="product-card-photo" />
-        <span className={`product-card-badge product-card-badge-${product.status}`}>
-          {t(STATUS_LABEL_KEY[product.status])}
-        </span>
+        {!product.inStock ? (
+          <span className="product-card-badge product-card-badge-out-of-stock">{t("home.outOfStock")}</span>
+        ) : (
+          <span className={`product-card-badge product-card-badge-${product.status}`}>
+            {t(STATUS_LABEL_KEY[product.status])}
+          </span>
+        )}
       </div>
       <div className="product-card-body">
         <p className="product-card-title">{title}</p>

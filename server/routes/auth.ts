@@ -126,7 +126,12 @@ router.post(
         .eq("id", record.id);
     }
 
-    const { userId, role, isActive } = await findOrCreateUser(email, parsed.data.intendedRole);
+    const { userId, role, isActive, roleMismatch } = await findOrCreateUser(email, parsed.data.intendedRole);
+
+    if (roleMismatch) {
+      res.status(409).json({ error: "email_role_mismatch", existingRole: roleMismatch });
+      return;
+    }
 
     if (!isActive) {
       res.status(403).json({ error: "account_deactivated" });
@@ -143,6 +148,7 @@ interface FoundUser {
   userId: string;
   role: UserRole;
   isActive: boolean;
+  roleMismatch?: UserRole;
 }
 
 async function findOrCreateUser(
@@ -160,7 +166,15 @@ async function findOrCreateUser(
   if (readError) {
     throw new Error(`Could not look up the user: ${readError.message}`);
   }
-  if (existing) return { userId: existing.id, role: existing.role, isActive: existing.is_active };
+  if (existing) {
+    const mismatched = existing.role !== "admin" && existing.role !== intendedRole;
+    return {
+      userId: existing.id,
+      role: existing.role,
+      isActive: existing.is_active,
+      roleMismatch: mismatched ? existing.role : undefined,
+    };
+  }
 
   const { data: created, error: writeError } = await supabase
     .from("users")

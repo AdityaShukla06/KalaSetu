@@ -96,8 +96,11 @@ export function setArtisanActive(
   });
 }
 
-export function getModerationQueue(page: number, limit = 20): Promise<ModerationQueueResult> {
-  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+export function getModerationQueue(q: string, page: number, limit = 20): Promise<ModerationQueueResult> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  params.set("page", String(page));
+  params.set("limit", String(limit));
   return apiFetch(`${BASE}/moderation/queue?${params.toString()}`, { method: "GET" });
 }
 
@@ -115,6 +118,13 @@ export function rejectListing(productId: string, reason: string): Promise<{ succ
 export function flagListing(productId: string, reason: string): Promise<{ success: boolean }> {
   return apiFetch(`${BASE}/moderation/${encodeURIComponent(productId)}/flag`, {
     method: "PATCH",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function deleteListing(productId: string, reason: string): Promise<{ success: boolean }> {
+  return apiFetch(`${BASE}/products/${encodeURIComponent(productId)}`, {
+    method: "DELETE",
     body: JSON.stringify({ reason }),
   });
 }
