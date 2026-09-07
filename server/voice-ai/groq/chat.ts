@@ -9,6 +9,7 @@ export interface GroqChatOptions {
   prompt: string;
   imageDataUrl?: string;
   json: boolean;
+  timeoutMs?: number;
 }
 
 export class GroqRateLimitError extends Error {
@@ -45,6 +46,7 @@ async function callModel(options: GroqChatOptions, model: string, apiKey: string
       messages: [{ role: "user", content: buildContent(options) }],
       ...(options.json ? { response_format: { type: "json_object" } } : {}),
     }),
+    ...(options.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}),
   });
 
   if (response.status === 429) {

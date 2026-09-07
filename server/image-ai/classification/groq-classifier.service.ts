@@ -14,11 +14,13 @@ export class GroqClassifierService implements CraftClassifierService {
   private readonly keyPool: GroqKeyPool;
   private readonly model: string;
   private readonly fallbackModel: string;
+  private readonly timeoutMs: number;
 
-  constructor(keyPool: GroqKeyPool, model: string, fallbackModel: string) {
+  constructor(keyPool: GroqKeyPool, model: string, fallbackModel: string, timeoutMs: number) {
     this.keyPool = keyPool;
     this.model = model;
     this.fallbackModel = fallbackModel;
+    this.timeoutMs = timeoutMs;
   }
 
   async classify(image: Buffer, mimeType: string): Promise<CraftClassification> {
@@ -29,6 +31,7 @@ export class GroqClassifierService implements CraftClassifierService {
       prompt: buildClassificationPrompt(),
       imageDataUrl: `data:${mimeType};base64,${image.toString("base64")}`,
       json: true,
+      timeoutMs: this.timeoutMs,
     });
 
     const parsed = JSON.parse(raw) as { category?: unknown; confidence?: unknown; material?: unknown };

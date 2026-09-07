@@ -1,5 +1,6 @@
 .passport-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--color-secondary);
   padding: var(--space-6) var(--space-4) var(--space-12);
   display: flex;

@@ -78,6 +78,7 @@
   "category.suggested": "सुझाया गया",
   "category.detecting": "आपकी फ़ोटो जाँची जा रही है...",
   "category.suggestionHint": "यह हमने आपकी फ़ोटो से चुना है। बदलने के लिए किसी भी टाइल पर टैप करें।",
+  "category.suggestionHintLow": "हमें पूरा भरोसा नहीं है, कृपया जांच लें कि यह सही है।",
   "category.textiles": "वस्त्र",
   "category.pottery": "मिट्टी के बर्तन",
   "category.jewelry": "आभूषण",

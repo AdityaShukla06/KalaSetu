@@ -46,6 +46,7 @@ export function buildCraftClassifierChain(): CraftClassifierService[] {
           new GroqKeyPool(keys),
           env.GROQ_VISION_MODEL,
           env.GROQ_VISION_FALLBACK_MODEL,
+          env.CRAFT_CLASSIFIER_TIMEOUT_MS,
         ),
       );
       continue;

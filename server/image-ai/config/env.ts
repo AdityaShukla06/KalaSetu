@@ -7,10 +7,10 @@ const envSchema = z
     REMOVE_BG_API_KEY: z.string().optional(),
     BACKGROUND_REMOVAL_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
 
-    CRAFT_CLASSIFIER_PROVIDERS: z.string().default("gemini,groq,render"),
+    CRAFT_CLASSIFIER_PROVIDERS: z.string().default("groq,gemini,render"),
     CRAFT_CLASSIFIER_URL: z.string().url().default("https://kala-setu-image-classifier.onrender.com"),
-    CRAFT_CLASSIFIER_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
-    CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+    CRAFT_CLASSIFIER_TIMEOUT_MS: z.coerce.number().int().positive().default(6000),
+    CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
     GEMINI_VISION_MODEL: z.string().optional(),
     GROQ_VISION_MODEL: z.string().default("qwen/qwen3.6-27b"),
     GROQ_VISION_FALLBACK_MODEL: z.string().default("qwen/qwen3.8-27b"),

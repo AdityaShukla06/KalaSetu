@@ -78,6 +78,7 @@
   "category.suggested": "প্রস্তাবিত",
   "category.detecting": "আপনার ছবি পরীক্ষা করা হচ্ছে...",
   "category.suggestionHint": "আমরা এটি আপনার ছবি থেকে বেছে নিয়েছি। বদলাতে যেকোনো টাইলে ট্যাপ করুন।",
+  "category.suggestionHintLow": "আমরা পুরোপুরি নিশ্চিত নই, দয়া করে যাচাই করুন এটি সঠিক কিনা।",
   "category.textiles": "বস্ত্র",
   "category.pottery": "মৃৎশিল্প",
   "category.jewelry": "গহনা",

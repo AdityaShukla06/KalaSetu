@@ -78,6 +78,7 @@
   "category.suggested": "सुझाइएको",
   "category.detecting": "तपाईंको फोटो जाँच गर्दै...",
   "category.suggestionHint": "हामीले यो तपाईंको फोटोबाट छान्यौं। परिवर्तन गर्न कुनै पनि टाइलमा ट्याप गर्नुहोस्।",
+  "category.suggestionHintLow": "हामीलाई पूर्ण निश्चित छैन, कृपया यो सही छ कि जाँच गर्नुहोस्।",
   "category.textiles": "कपडा",
   "category.pottery": "माटोका बर्तन",
   "category.jewelry": "गहना",

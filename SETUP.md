@@ -62,13 +62,15 @@ Powers the "Remove background" button in the photo enhancement studio. Everythin
 
 After an artisan takes a photo, the app suggests which category it belongs to (textiles, pottery, jewelry, woodwork, bamboo & cane, or other) so the next screen opens with that tile already picked. It is always editable with one tap, and nothing here is required for the app to work: with no keys configured at all, the category screen behaves exactly as if this feature did not exist.
 
-Three providers are tried in order, each one only used if the one before it fails or is not configured:
+Three providers are tried in order, each one only used if the one before it fails or is not configured, and each one is time-boxed so a single slow tier cannot eat the whole request's time budget:
 
-1. **Gemini**, using the `GEMINI_API_KEY` from section 2 (Gemini vision calls have run 5-25 seconds in testing, so this step is fired in the background while the artisan is still reviewing their photo, never blocking anything).
-2. **Groq**, using the same key pool from section 2, on `qwen/qwen3.6-27b` (`GROQ_VISION_MODEL`) with `qwen/qwen3.8-27b` as its own model fallback. In testing this tier answered in a couple of seconds and correctly classified real product photos across every category.
-3. The **KalaSetu craft classifier**, a small model purpose-trained on these six categories, called through `CRAFT_CLASSIFIER_URL` (defaults to the hosted instance, no key needed). It free-tier hosts on Render and can take up to a minute to answer after 15 minutes idle, which is why the `/enhance` step already sends it a background warm-up ping the moment a photo is uploaded.
+1. **Groq**, using the same key pool from section 2, on `qwen/qwen3.6-27b` (`GROQ_VISION_MODEL`) with `qwen/qwen3.8-27b` as its own model fallback (`CRAFT_CLASSIFIER_TIMEOUT_MS`, default 6 seconds). In testing this tier answered in a couple of seconds and correctly classified real product photos across every category, which is why it goes first.
+2. **Gemini**, using the `GEMINI_API_KEY` from section 2, also bounded by `CRAFT_CLASSIFIER_TIMEOUT_MS`. Gemini's vision calls measured 5-25 seconds in testing, too slow to reliably win a 6-second window, so it is kept as a fallback rather than tried first, even though its JSON-schema-constrained output is the most reliable of the three when it does answer in time.
+3. The **KalaSetu craft classifier**, a small model purpose-trained on these six categories, called through `CRAFT_CLASSIFIER_URL` (defaults to the hosted instance, no key needed), bounded by `CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS` (default 20 seconds). It free-tier hosts on Render and can take up to a minute to answer after 15 minutes idle, which is why the `/enhance` step already sends it a background warm-up ping the moment a photo is uploaded, and why this is the last tier tried: by the time it's reached, the artisan has already spent several seconds on the earlier two tiers on top of however long they spent reviewing the photo, giving Render's cold start a real head start.
 
-To turn a tier off, remove it from the comma-separated `CRAFT_CLASSIFIER_PROVIDERS` (default `gemini,groq,render`). Setting it to an empty string disables the feature entirely.
+**Why the timeouts matter beyond just user-perceived speed:** the whole API runs as one Vercel serverless function with a 60-second budget (`vercel.json`'s `maxDuration`). If every configured tier ran to its absolute worst case one after another, an unbounded chain could exceed that budget and get killed by the platform with no response at all, which looks to the artisan exactly like the feature doing nothing. The three timeouts above (6s + 6s + 20s, worst case) are chosen to leave comfortable headroom under that ceiling even when every tier is tried.
+
+To turn a tier off, remove it from the comma-separated `CRAFT_CLASSIFIER_PROVIDERS` (default `groq,gemini,render`). Setting it to an empty string disables the feature entirely.
 
 ## 5. A session secret
 

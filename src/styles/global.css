@@ -103,6 +103,7 @@ a {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
   max-width: var(--shell-max-width, 390px);
   margin: 0 auto;
   background: var(--color-background);
@@ -111,6 +112,7 @@ a {
 
 .screen {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 0 var(--space-5) calc(var(--tab-bar-height) + var(--safe-area-bottom));
 }
 

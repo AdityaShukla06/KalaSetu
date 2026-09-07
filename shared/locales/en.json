@@ -78,6 +78,7 @@
   "category.suggested": "Suggested",
   "category.detecting": "Checking your photo...",
   "category.suggestionHint": "We picked this from your photo. Tap any tile to change it.",
+  "category.suggestionHintLow": "We're not fully sure, please check this is right.",
   "category.textiles": "Textiles",
   "category.pottery": "Pottery",
   "category.jewelry": "Jewelry",

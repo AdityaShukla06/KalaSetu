@@ -106,7 +106,6 @@ export function CategoryStep({
 
   useEffect(() => {
     if (!suggestion || touched || selected) return;
-    if (suggestion.confidence === "low") return;
 
     setSelected(suggestion.category);
     if (suggestion.material && materialsForCategory(suggestion.category).includes(suggestion.material)) {
@@ -122,7 +121,9 @@ export function CategoryStep({
     }
   }
 
-  const showSuggestionHint = Boolean(suggestion) && !touched && selected === suggestion?.category;
+  const suggestionIsShown = Boolean(suggestion) && !touched && selected === suggestion?.category;
+  const showLowConfidenceHint = suggestionIsShown && suggestion?.confidence === "low";
+  const showSuggestionHint = suggestionIsShown && suggestion?.confidence !== "low";
   const showDetecting = Boolean(suggestionPending) && !suggestion;
 
   return (
@@ -151,6 +152,9 @@ export function CategoryStep({
 
       {showDetecting && <p className="body-s category-suggestion-note">{t("category.detecting")}</p>}
       {showSuggestionHint && <p className="body-s category-suggestion-note">{t("category.suggestionHint")}</p>}
+      {showLowConfidenceHint && (
+        <p className="body-s category-suggestion-note">{t("category.suggestionHintLow")}</p>
+      )}
 
       {selected && (
         <div className="material-section">
