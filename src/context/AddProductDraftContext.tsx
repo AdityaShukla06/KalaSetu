@@ -1,9 +1,11 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import type { ProductInput } from "../services/api";
+import type { CategorySuggestion, ProductInput } from "../services/api";
 
 export type AddProductDraft = Partial<ProductInput> & {
   imageBlob?: Blob;
   audioBlob?: Blob;
+  categorySuggestion?: CategorySuggestion;
+  categorySuggestionPending?: boolean;
 };
 
 interface AddProductDraftContextValue {

@@ -38,6 +38,9 @@ export type {
   BackgroundFill,
   CropPreset,
   FinalizeResult,
+  ClassificationConfidence,
+  CategorySuggestion,
+  ClassifyResult,
 } from "./api/images";
 export type {
   ConsoleArtisan,
@@ -55,7 +58,7 @@ export type { AnalyticsDailyPoint, AnalyticsListingStat, AnalyticsSummary } from
 
 // importing utility apis
 export { sendOtp, verifyOtp, adminLogin, OTP_LENGTH } from "./api/auth";
-export { enhanceImage, removeImageBackground, finalizeImage } from "./api/images";
+export { enhanceImage, removeImageBackground, finalizeImage, classifyImage } from "./api/images";
 export { transcribeAndDescribe, translateText } from "./api/voice";
 export { suggestPrice } from "./api/pricing";
 export {

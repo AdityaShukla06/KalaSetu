@@ -6,6 +6,14 @@ const envSchema = z
     BACKGROUND_REMOVAL_PROVIDER: z.enum(["remove-bg", "none"]).default("none"),
     REMOVE_BG_API_KEY: z.string().optional(),
     BACKGROUND_REMOVAL_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+
+    CRAFT_CLASSIFIER_PROVIDERS: z.string().default("gemini,groq,render"),
+    CRAFT_CLASSIFIER_URL: z.string().url().default("https://kala-setu-image-classifier.onrender.com"),
+    CRAFT_CLASSIFIER_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+    CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+    GEMINI_VISION_MODEL: z.string().optional(),
+    GROQ_VISION_MODEL: z.string().default("qwen/qwen3.6-27b"),
+    GROQ_VISION_FALLBACK_MODEL: z.string().default("qwen/qwen3.8-27b"),
   })
   .superRefine((env, ctx) => {
     if (env.BACKGROUND_REMOVAL_PROVIDER === "remove-bg" && !env.REMOVE_BG_API_KEY) {

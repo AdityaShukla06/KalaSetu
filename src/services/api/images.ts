@@ -46,3 +46,23 @@ export function finalizeImage(sourceUrl: string, options: StudioOptions): Promis
     body: JSON.stringify({ sourceUrl, options }),
   });
 }
+
+export type ClassificationConfidence = "high" | "medium" | "low";
+
+export interface CategorySuggestion {
+  category: string;
+  confidence: ClassificationConfidence;
+  material?: string;
+  source: "gemini" | "groq" | "render";
+}
+
+export interface ClassifyResult {
+  suggestion: CategorySuggestion | null;
+}
+
+export function classifyImage(imageUrl: string): Promise<ClassifyResult> {
+  return apiFetch("/images/classify", {
+    method: "POST",
+    body: JSON.stringify({ imageUrl }),
+  });
+}

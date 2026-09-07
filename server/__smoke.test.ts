@@ -207,6 +207,28 @@ suite("full artisan journey", () => {
     expect(fetched.status).toBe(200);
     expect(fetched.headers.get("content-type")).toContain("image/jpeg");
 
+    const ownUidSegment = new URL(enhancedImageUrl).pathname.split("/").filter(Boolean).at(-3);
+    const foreignUrl = enhancedImageUrl.replace(`/${ownUidSegment}/`, "/someone-elses-uid/");
+    const classifyRejectRes = await fetch(`${base}/api/images/classify`, {
+      method: "POST",
+      headers: { ...auth(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl: foreignUrl }),
+    });
+    expect(classifyRejectRes.status).toBe(400);
+    expect(await json(classifyRejectRes)).toMatchObject({ error: "invalid_source_url" });
+
+    const classifyRes = await fetch(`${base}/api/images/classify`, {
+      method: "POST",
+      headers: { ...auth(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl: enhancedImageUrl }),
+    });
+    expect(classifyRes.status).toBe(200);
+    const { suggestion } = await json(classifyRes);
+    if (suggestion) {
+      expect(typeof suggestion.category).toBe("string");
+      expect(["high", "medium", "low"]).toContain(suggestion.confidence);
+    }
+
     const priceRes = await fetch(`${base}/api/pricing/suggest`, {
       method: "POST",
       headers: { ...auth(token), "Content-Type": "application/json" },
@@ -271,7 +293,7 @@ suite("full artisan journey", () => {
 
     const decremented = await json(await fetch(`${base}/api/users/me`, { headers: auth(token) }));
     expect(decremented.totalProducts).toBe(0);
-  });
+  }, 45000);
 });
 
 suite("ownership isolation", () => {

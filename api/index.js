@@ -1204,6 +1204,13 @@ var GroqRateLimitError = class extends Error {
     this.detail = detail;
   }
 };
+function buildContent(options) {
+  if (!options.imageDataUrl) return options.prompt;
+  return [
+    { type: "text", text: options.prompt },
+    { type: "image_url", image_url: { url: options.imageDataUrl } }
+  ];
+}
 async function callModel(options, model, apiKey) {
   const response = await fetch(GROQ_CHAT_URL, {
     method: "POST",
@@ -1214,7 +1221,7 @@ async function callModel(options, model, apiKey) {
     body: JSON.stringify({
       model,
       temperature: 0.2,
-      messages: [{ role: "user", content: options.prompt }],
+      messages: [{ role: "user", content: buildContent(options) }],
       ...options.json ? { response_format: { type: "json_object" } } : {}
     })
   });
@@ -2150,6 +2157,9 @@ var as_default = {
   "category.title": "\u0986\u09AA\u09C1\u09A8\u09BF \u0995\u09BF \u09AC\u09BF\u0995\u09CD\u09F0\u09C0 \u0995\u09F0\u09BF\u09AC?",
   "category.continue": "\u0986\u0997\u09AC\u09BE\u09A2\u09BC\u09BF \u09AF\u09BE\u0993\u0995",
   "category.materialQuestion": "\u0987\u099F\u09CB \u0995\u09BF \u09A6\u09BF\u09AF\u09BC\u09C7 \u09A4\u09C8\u09AF\u09BC\u09BE\u09F0? (\u0990\u099A\u09CD\u099B\u09BF\u0995)",
+  "category.suggested": "\u09AA\u09F0\u09BE\u09AE\u09F0\u09CD\u09B6\u09BF\u09A4",
+  "category.detecting": "\u0986\u09AA\u09CB\u09A8\u09BE\u09F0 \u09AB\u099F\u09CB \u09AA\u09F0\u09C0\u0995\u09CD\u09B7\u09BE \u0995\u09F0\u09BF \u09A5\u0995\u09BE \u09B9\u09C8\u099B\u09C7...",
+  "category.suggestionHint": "\u0986\u09AE\u09BF \u098F\u0987\u099F\u09CB \u0986\u09AA\u09CB\u09A8\u09BE\u09F0 \u09AB\u099F\u09CB\u09F0 \u09AA\u09F0\u09BE \u09AC\u09BE\u099B\u09BF \u09B2\u09C8\u099B\u09CB\u0981\u0964 \u09B8\u09B2\u09A8\u09BF \u0995\u09F0\u09BF\u09AC\u09B2\u09C8 \u09AF\u09BF\u0995\u09CB\u09A8\u09CB \u099F\u09BE\u0987\u09B2\u09A4 \u099F\u09BF\u09AA\u0995\u0964",
   "category.textiles": "\u09AC\u09B8\u09CD\u09A4\u09CD\u09F0",
   "category.pottery": "\u09AE\u09BE\u099F\u09BF\u09F0 \u09AC\u09BE\u099F\u09BF",
   "category.jewelry": "\u0997\u09B9\u09A8\u09BE",
@@ -2506,6 +2516,9 @@ var bn_default = {
   "category.title": "\u0986\u09AA\u09A8\u09BF \u0995\u09C0 \u09AC\u09BF\u0995\u09CD\u09B0\u09BF \u0995\u09B0\u099B\u09C7\u09A8?",
   "category.continue": "\u099A\u09BE\u09B2\u09BF\u09AF\u09BC\u09C7 \u09AF\u09BE\u09A8",
   "category.materialQuestion": "\u098F\u099F\u09BF \u0995\u09C0 \u09A6\u09BF\u09AF\u09BC\u09C7 \u09A4\u09C8\u09B0\u09BF? (\u0990\u099A\u09CD\u099B\u09BF\u0995)",
+  "category.suggested": "\u09AA\u09CD\u09B0\u09B8\u09CD\u09A4\u09BE\u09AC\u09BF\u09A4",
+  "category.detecting": "\u0986\u09AA\u09A8\u09BE\u09B0 \u099B\u09AC\u09BF \u09AA\u09B0\u09C0\u0995\u09CD\u09B7\u09BE \u0995\u09B0\u09BE \u09B9\u099A\u09CD\u099B\u09C7...",
+  "category.suggestionHint": "\u0986\u09AE\u09B0\u09BE \u098F\u099F\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u099B\u09AC\u09BF \u09A5\u09C7\u0995\u09C7 \u09AC\u09C7\u099B\u09C7 \u09A8\u09BF\u09AF\u09BC\u09C7\u099B\u09BF\u0964 \u09AC\u09A6\u09B2\u09BE\u09A4\u09C7 \u09AF\u09C7\u0995\u09CB\u09A8\u09CB \u099F\u09BE\u0987\u09B2\u09C7 \u099F\u09CD\u09AF\u09BE\u09AA \u0995\u09B0\u09C1\u09A8\u0964",
   "category.textiles": "\u09AC\u09B8\u09CD\u09A4\u09CD\u09B0",
   "category.pottery": "\u09AE\u09C3\u09CE\u09B6\u09BF\u09B2\u09CD\u09AA",
   "category.jewelry": "\u0997\u09B9\u09A8\u09BE",
@@ -2862,6 +2875,9 @@ var brx_default = {
   "category.title": "\u0924\u0941\u092E \u0915\u093F \u092C\u0947\u091A\u0947?",
   "category.continue": "\u0906\u0917\u093E \u0916\u0947",
   "category.materialQuestion": "\u092C\u093E\u092C\u093E \u0925\u093E\u0902\u0928\u093F? (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "category.suggested": "\u0938\u094B\u0902\u0926\u094B\u092C\u0928\u093E\u092F",
+  "category.detecting": "\u0928\u094B\u0902\u0925\u093E\u0902\u0928\u093F \u092B\u094B\u091F\u094B\u0916\u094C \u0928\u093E\u0907\u092C\u093F\u091C\u093F\u0930\u0917\u093E\u0938\u093F\u0928\u094B \u0926\u0902...",
+  "category.suggestionHint": "\u092C\u0947\u0916\u094C \u091C\u094B\u0902 \u0928\u094B\u0902\u0925\u093E\u0902\u0928\u093F \u092B\u094B\u091F\u094B\u0928\u093F\u092B\u094D\u0930\u093E\u092F \u0938\u093E\u092F\u0916\u092C\u093E\u092F\u0964 \u0938\u094B\u0932\u093E\u092F\u0928\u093E\u092F\u0928\u093F \u0925\u093E\u0916\u093E\u092F \u091C\u093E\u092F\u0916\u093F\u091C\u093E\u092F\u093E \u091F\u093E\u092F\u0932\u093E\u0935 \u091F\u0947\u092A \u0916\u093E\u0932\u093E\u092E\u0964",
   "category.textiles": "\u0915\u092A\u0921\u093C\u093E",
   "category.pottery": "\u092E\u093F\u091F\u094D\u091F\u0940 \u0915\u0947 \u092C\u0930\u094D\u0924\u0928",
   "category.jewelry": "\u0906\u092D\u0942\u0937\u0923",
@@ -3218,6 +3234,9 @@ var doi_default = {
   "category.title": "\u0924\u0941\u092E\u094D\u0939\u0947 \u0915\u094D\u092F\u093E \u092C\u0947\u091A\u0923 \u0939\u0948?",
   "category.continue": "\u091C\u093E\u0930\u0940 \u0930\u0916\u094B",
   "category.materialQuestion": "\u0907\u0939 \u0915\u093F\u0921\u093C\u093E \u092C\u0928\u093F\u092F\u093E? (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "category.suggested": "\u0938\u0941\u091D\u093E\u092F\u093E \u0917\u0947\u0926\u093E",
+  "category.detecting": "\u0924\u0941\u0902\u0926\u0940 \u092B\u094B\u091F\u094B \u091C\u093E\u0901\u091A\u0940 \u091C\u093E \u0926\u0940 \u0910...",
+  "category.suggestionHint": "\u090F\u0939\u094D \u0905\u0938\u0947\u0902 \u0924\u0941\u0902\u0926\u0940 \u092B\u094B\u091F\u094B \u0925\u092E\u093E\u0902 \u091A\u0941\u0928\u0947\u0906 \u0910\u0964 \u092C\u0926\u0932\u0928\u0947 \u0906\u0938\u094D\u0924\u0948 \u0915\u0941\u0938\u0948 \u092C\u0940 \u091F\u093E\u0907\u0932 \u092A\u0930 \u091F\u0948\u092A \u0915\u0930\u094B\u0964",
   "category.textiles": "\u0915\u092A\u0921\u093C\u093E",
   "category.pottery": "\u092E\u093F\u091F\u094D\u091F\u0940 \u0915\u0947 \u092C\u0930\u094D\u0924\u0928",
   "category.jewelry": "\u0917\u0939\u0928\u093E",
@@ -3574,6 +3593,9 @@ var en_default = {
   "category.title": "What are you selling?",
   "category.continue": "Continue",
   "category.materialQuestion": "What is it made of? (optional)",
+  "category.suggested": "Suggested",
+  "category.detecting": "Checking your photo...",
+  "category.suggestionHint": "We picked this from your photo. Tap any tile to change it.",
   "category.textiles": "Textiles",
   "category.pottery": "Pottery",
   "category.jewelry": "Jewelry",
@@ -3930,6 +3952,9 @@ var gu_default = {
   "category.title": "\u0AA4\u0AAE\u0AC7 \u0AB6\u0AC1\u0A82 \u0AB5\u0AC7\u0A9A\u0ACB \u0A9B\u0ACB?",
   "category.continue": "\u0A86\u0A97\u0AB3 \u0AB5\u0AA7\u0ACB",
   "category.materialQuestion": "\u0AA4\u0AC7 \u0A95\u0AAF\u0ABE \u0AB8\u0ABE\u0AAE\u0A97\u0ACD\u0AB0\u0AC0\u0AA8\u0AC1\u0A82 \u0A9B\u0AC7? (\u0AB5\u0AC8\u0A95\u0AB2\u0ACD\u0AAA\u0ABF\u0A95)",
+  "category.suggested": "\u0AB8\u0AC2\u0A9A\u0AB5\u0AC7\u0AB2",
+  "category.detecting": "\u0AA4\u0AAE\u0ABE\u0AB0\u0ACB \u0AAB\u0ACB\u0A9F\u0ACB \u0AA4\u0AAA\u0ABE\u0AB8\u0ABE\u0A88 \u0AB0\u0AB9\u0ACD\u0AAF\u0ACB \u0A9B\u0AC7...",
+  "category.suggestionHint": "\u0A85\u0AAE\u0AC7 \u0A86 \u0AA4\u0AAE\u0ABE\u0AB0\u0ABE \u0AAB\u0ACB\u0A9F\u0ABE\u0AAE\u0ABE\u0A82\u0AA5\u0AC0 \u0AAA\u0AB8\u0A82\u0AA6 \u0A95\u0AB0\u0ACD\u0AAF\u0AC1\u0A82 \u0A9B\u0AC7. \u0AAC\u0AA6\u0AB2\u0AB5\u0ABE \u0AAE\u0ABE\u0A9F\u0AC7 \u0A95\u0ACB\u0A88\u0AAA\u0AA3 \u0A9F\u0ABE\u0A87\u0AB2 \u0AAA\u0AB0 \u0A9F\u0AC5\u0AAA \u0A95\u0AB0\u0ACB.",
   "category.textiles": "\u0AB5\u0AB8\u0ACD\u0AA4\u0ACD\u0AB0\u0ACB",
   "category.pottery": "\u0AAE\u0ABE\u0A9F\u0AC0\u0AA8\u0AC1\u0A82 \u0A95\u0ABE\u0AAE",
   "category.jewelry": "\u0A98\u0AB0\u0AC7\u0AA3\u0ABE\u0A82",
@@ -4286,6 +4311,9 @@ var hi_default = {
   "category.title": "\u0906\u092A \u0915\u094D\u092F\u093E \u092C\u0947\u091A \u0930\u0939\u0947 \u0939\u0948\u0902?",
   "category.continue": "\u0906\u0917\u0947 \u092C\u0922\u093C\u0947\u0902",
   "category.materialQuestion": "\u092F\u0939 \u0915\u093F\u0938\u0938\u0947 \u092C\u0928\u093E \u0939\u0948? (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "category.suggested": "\u0938\u0941\u091D\u093E\u092F\u093E \u0917\u092F\u093E",
+  "category.detecting": "\u0906\u092A\u0915\u0940 \u092B\u093C\u094B\u091F\u094B \u091C\u093E\u0901\u091A\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948...",
+  "category.suggestionHint": "\u092F\u0939 \u0939\u092E\u0928\u0947 \u0906\u092A\u0915\u0940 \u092B\u093C\u094B\u091F\u094B \u0938\u0947 \u091A\u0941\u0928\u093E \u0939\u0948\u0964 \u092C\u0926\u0932\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u093F\u0938\u0940 \u092D\u0940 \u091F\u093E\u0907\u0932 \u092A\u0930 \u091F\u0948\u092A \u0915\u0930\u0947\u0902\u0964",
   "category.textiles": "\u0935\u0938\u094D\u0924\u094D\u0930",
   "category.pottery": "\u092E\u093F\u091F\u094D\u091F\u0940 \u0915\u0947 \u092C\u0930\u094D\u0924\u0928",
   "category.jewelry": "\u0906\u092D\u0942\u0937\u0923",
@@ -4642,6 +4670,9 @@ var kn_default = {
   "category.title": "\u0CA8\u0CC0\u0CB5\u0CC1 \u0C8F\u0CA8\u0CC1 \u0CAE\u0CBE\u0CB0\u0CBE\u0C9F \u0CAE\u0CBE\u0CA1\u0CC1\u0CA4\u0CCD\u0CA4\u0CBF\u0CA6\u0CCD\u0CA6\u0CC0\u0CB0\u0CBF?",
   "category.continue": "\u0CAE\u0CC1\u0C82\u0CA6\u0CC1\u0CB5\u0CB0\u0CBF\u0CB8\u0CBF",
   "category.materialQuestion": "\u0C87\u0CA6\u0CC1 \u0CAF\u0CBE\u0CB5 \u0CB5\u0CB8\u0CCD\u0CA4\u0CC1\u0CB5\u0CBF\u0CA8\u0CBF\u0C82\u0CA6? (\u0C90\u0C9A\u0CCD\u0C9B\u0CBF\u0C95)",
+  "category.suggested": "\u0CB8\u0CC2\u0C9A\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
+  "category.detecting": "\u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0CAB\u0CCB\u0C9F\u0CCB \u0CAA\u0CB0\u0CBF\u0CB6\u0CC0\u0CB2\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CC1\u0CA4\u0CCD\u0CA4\u0CBF\u0CA6\u0CC6...",
+  "category.suggestionHint": "\u0C87\u0CA6\u0CA8\u0CCD\u0CA8\u0CC1 \u0CA8\u0CBE\u0CB5\u0CC1 \u0CA8\u0CBF\u0CAE\u0CCD\u0CAE \u0CAB\u0CCB\u0C9F\u0CCB\u0CA6\u0CBF\u0C82\u0CA6 \u0C86\u0CAF\u0CCD\u0C95\u0CC6 \u0CAE\u0CBE\u0CA1\u0CBF\u0CA6\u0CCD\u0CA6\u0CC7\u0CB5\u0CC6. \u0CAC\u0CA6\u0CB2\u0CBE\u0CAF\u0CBF\u0CB8\u0CB2\u0CC1 \u0CAF\u0CBE\u0CB5\u0CC1\u0CA6\u0CC7 \u0C9F\u0CC8\u0CB2\u0CCD \u0C92\u0CA4\u0CCD\u0CA4\u0CBF\u0CB0\u0CBF.",
   "category.textiles": "\u0CAC\u0C9F\u0CCD\u0C9F\u0CC6\u0C97\u0CB3\u0CC1",
   "category.pottery": "\u0CAE\u0CA3\u0CCD\u0CA3\u0CBF\u0CA8 \u0CAA\u0CBE\u0CA4\u0CCD\u0CB0\u0CC6\u0C97\u0CB3\u0CC1",
   "category.jewelry": "\u0C86\u0CAD\u0CB0\u0CA3\u0C97\u0CB3\u0CC1",
@@ -4998,6 +5029,9 @@ var kok_default = {
   "category.title": "\u0924\u0941\u092E\u094D\u0939\u0940 \u0915\u093E\u092F \u0935\u093F\u0915\u0924 \u0906\u0939\u093E\u0924?",
   "category.continue": "\u092A\u0941\u0922\u0947",
   "category.materialQuestion": "\u0924\u0947 \u0915\u0936\u093E\u091A\u0947\u0902 \u092C\u0928\u0932\u094B? (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "category.suggested": "\u0938\u0941\u091A\u092F\u0932\u094D\u0932\u0947\u0902",
+  "category.detecting": "\u0924\u0941\u092E\u091A\u094B \u092B\u094B\u091F\u094B \u0924\u092A\u093E\u0938\u0924\u093E\u0924...",
+  "category.suggestionHint": "\u0939\u0947\u0902 \u0906\u092E\u0940 \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u092B\u094B\u091F\u094B\u0935\u092F\u0932\u094D\u092F\u093E\u0928 \u0935\u0947\u0902\u091A\u0932\u093E\u0902. \u092C\u0926\u0932\u092A\u093E\u0915 \u0916\u0902\u092F\u091A\u094D\u092F\u093E\u092F \u091F\u093E\u092F\u0932\u093E\u0930 \u091F\u0945\u092A \u0915\u0930\u093E\u0924.",
   "category.textiles": "\u0915\u093E\u092A\u0921",
   "category.pottery": "\u092E\u093E\u0924\u0940\u091A\u0940 \u092D\u093E\u0902\u0921\u0940",
   "category.jewelry": "\u0917\u0939\u0928\u093E",
@@ -5354,6 +5388,9 @@ var ks_default = {
   "category.title": "\u0622\u067E \u06A9\u06CC\u0627 \u0628\u06CC\u0686 \u0631\u06C1\u06D2 \u06C1\u06CC\u06BA\u061F",
   "category.continue": "\u062C\u0627\u0631\u06CC \u0631\u06A9\u06BE",
   "category.materialQuestion": "\u06CC\u06C1 \u0686\u06BE\u064F \u06A9\u0633 \u0686\u06CC\u0632 \u06C1\u0646\u062F \u0628\u0646\u0646\u061F (\u0627\u062E\u062A\u06CC\u0627\u0631\u06CC)",
+  "category.suggested": "\u0645\u0634\u0648\u0631\u0655 \u062F\u0650\u062A\u06BE",
+  "category.detecting": "\u062A\u0648\u06C1\u0655\u0646\u065B\u0632 \u0641\u0648\u0679\u0648 \u0686\u06BE\u0650 \u0686\u06CC\u06A9 \u06A9\u0631\u0627\u0646...",
+  "category.suggestionHint": "\u0623\u0633\u06C1\u0655 \u0686\u06BE\u064F \u06CC\u06C1 \u062A\u0648\u06C1\u0655\u0646\u065B\u062F\u0650 \u0641\u0648\u0679\u0648 \u067E\u0620\u0679\u06BE\u0655 \u0698\u0627\u0631\u0645\u064F\u062A\u06D4 \u0628\u062F\u0644\u0627\u0648\u0655 \u062E\u0672\u0637\u0631\u0655 \u06A9\u064F\u0646\u06C1\u0650 \u062A\u06C1\u0655 \u0679\u0627\u06CC\u0644\u0633 \u067E\u0620\u0679\u06BE \u0679\u06CC\u067E \u06A9\u0631\u06CC\u0648\u06D4",
   "category.textiles": "\u06A9\u067E\u0691",
   "category.pottery": "\u0645\u0679\u06CC",
   "category.jewelry": "\u06AF\u06C1\u0646\u0627",
@@ -5710,6 +5747,9 @@ var mai_default = {
   "category.title": "\u0915\u093F\u090F\u0915 \u092C\u0947\u091A \u0930\u0939\u0932 \u091B\u0940?",
   "category.continue": "\u091C\u093E\u0930\u0940 \u0930\u093E\u0916\u0942",
   "category.materialQuestion": "\u0908 \u0915' \u092C\u0928\u0932 \u0905\u091B\u093F? (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "category.suggested": "\u0938\u0941\u091D\u093E\u0913\u0932 \u0917\u0947\u0932",
+  "category.detecting": "\u0905\u0939\u093E\u0901\u0915 \u092B\u094B\u091F\u094B \u091C\u093E\u0901\u091A\u0932 \u091C\u093E \u0930\u0939\u0932 \u0905\u091B\u093F...",
+  "category.suggestionHint": "\u0908 \u0939\u092E \u0905\u0939\u093E\u0901\u0915 \u092B\u094B\u091F\u094B \u0938\u0901 \u091A\u0941\u0928\u0928\u0947 \u091B\u0940\u0964 \u092C\u0926\u0932\u092C\u093E\u0915 \u0932\u0947\u0932 \u0915\u094B\u0928\u094B \u091F\u093E\u0907\u0932 \u092A\u0930 \u091F\u0948\u092A \u0915\u0930\u0942\u0964",
   "category.textiles": "\u0915\u092A\u0921\u093C\u093E",
   "category.pottery": "\u092E\u093E\u091F\u0940",
   "category.jewelry": "\u0917\u0939\u0928\u093E",
@@ -6066,6 +6106,9 @@ var ml_default = {
   "category.title": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D7E \u0D0E\u0D28\u0D4D\u0D24\u0D3E\u0D23\u0D4D \u0D35\u0D3F\u0D31\u0D4D\u0D31\u0D34\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D24\u0D4D?",
   "category.continue": "\u0D24\u0D41\u0D1F\u0D30\u0D41\u0D15",
   "category.materialQuestion": "\u0D07\u0D24\u0D4D \u0D0E\u0D28\u0D4D\u0D24\u0D3E\u0D23\u0D4D \u0D28\u0D3F\u0D7C\u0D2E\u0D4D\u0D2E\u0D3F\u0D1A\u0D4D\u0D1A\u0D24\u0D4D? (\u0D10\u0D1A\u0D4D\u0D1B\u0D3F\u0D15\u0D02)",
+  "category.suggested": "\u0D28\u0D3F\u0D7C\u0D26\u0D4D\u0D26\u0D47\u0D36\u0D3F\u0D1A\u0D4D\u0D1A\u0D24\u0D4D",
+  "category.detecting": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D33\u0D41\u0D1F\u0D46 \u0D2B\u0D4B\u0D1F\u0D4D\u0D1F\u0D4B \u0D2A\u0D30\u0D3F\u0D36\u0D4B\u0D27\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D28\u0D4D\u0D28\u0D41...",
+  "category.suggestionHint": "\u0D07\u0D24\u0D4D \u0D1E\u0D19\u0D4D\u0D19\u0D7E \u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D33\u0D41\u0D1F\u0D46 \u0D2B\u0D4B\u0D1F\u0D4D\u0D1F\u0D4B\u0D2F\u0D3F\u0D7D \u0D28\u0D3F\u0D28\u0D4D\u0D28\u0D4D \u0D24\u0D3F\u0D30\u0D1E\u0D4D\u0D1E\u0D46\u0D1F\u0D41\u0D24\u0D4D\u0D24\u0D24\u0D3E\u0D23\u0D4D. \u0D2E\u0D3E\u0D31\u0D4D\u0D31\u0D3E\u0D7B \u0D0F\u0D24\u0D46\u0D19\u0D4D\u0D15\u0D3F\u0D32\u0D41\u0D02 \u0D1F\u0D48\u0D32\u0D3F\u0D7D \u0D1F\u0D3E\u0D2A\u0D4D\u0D2A\u0D4D \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D41\u0D15.",
   "category.textiles": "\u0D35\u0D38\u0D4D\u0D24\u0D4D\u0D30\u0D19\u0D4D\u0D19\u0D7E",
   "category.pottery": "\u0D2E\u0D23\u0D4D\u0D23\u0D41\u0D2A\u0D3E\u0D24\u0D4D\u0D30\u0D02",
   "category.jewelry": "\u0D06\u0D2D\u0D30\u0D23\u0D19\u0D4D\u0D19\u0D7E",
@@ -6422,6 +6465,9 @@ var mni_default = {
   "category.title": "\u0986\u09AA\u09A8\u09BF \u0995\u09BF \u09AC\u09BF\u0995\u09CD\u09B0\u09BF \u0995\u09B0\u09AC\u09BE?",
   "category.continue": "\u099A\u09B2\u09C1\u09AC\u09BE",
   "category.materialQuestion": "\uABC3\uABC1\uABE4 \uABCA\uABE7\uABD5\uABE4 \uABCD\uABDF\uABD5\uABE4? (\uABD1\uABE3\uABDE\uABC1\uABE4\uABDF)",
+  "category.suggested": "\u09B6\u09C0\u0982\u09A8\u09AC\u09BE",
+  "category.detecting": "\u09A8\u09B9\u09BE\u0995\u09CD\u0995\u09C0 \u09AB\u09CB\u09A4\u09CB \u09AF\u09BC\u09C7\u0982\u09B2\u09BF...",
+  "category.suggestionHint": "\u09AE\u09B8\u09BF \u0990\u0996\u09CB\u09AF\u09BC\u09A8\u09BE \u09A8\u09B9\u09BE\u0995\u09CD\u0995\u09C0 \u09AB\u09CB\u09A4\u09CB\u09A6\u0997\u09C0 \u0996\u09B2\u09CD\u09B2\u09AC\u09A8\u09BF\u0964 \u09B9\u09CB\u0982\u09A6\u09CB\u0995\u09A8\u09AC\u09BE \u0995\u09B0\u09BF\u0997\u09C1\u09AE\u09CD\u09AC\u09BE \u099F\u09BE\u0987\u09B2 \u0985\u09AE\u09A6\u09BE \u09A4\u09BE\u09AA \u09A4\u09CC\u09B0\u09CB\u0964",
   "category.textiles": "\uABC8\uABE8\uABDD\uABC5\uABE3\uABDF",
   "category.pottery": "\uABD1\uABC7\uABE6\uABDC",
   "category.jewelry": "\uABC3\uABC7\uABDD",
@@ -6778,6 +6824,9 @@ var mr_default = {
   "category.title": "\u0924\u0941\u092E\u094D\u0939\u0940 \u0915\u093E\u092F \u0935\u093F\u0915\u0924 \u0906\u0939\u093E\u0924?",
   "category.continue": "\u092A\u0941\u0922\u0947",
   "category.materialQuestion": "\u0939\u0947 \u0915\u0936\u093E\u092A\u093E\u0938\u0942\u0928 \u092C\u0928\u0932\u0947\u0932\u0947 \u0906\u0939\u0947? (\u092A\u0930\u094D\u092F\u093E\u092F\u0940)",
+  "category.suggested": "\u0938\u0941\u091A\u0935\u0932\u0947\u0932\u0947",
+  "category.detecting": "\u0924\u0941\u092E\u091A\u093E \u092B\u094B\u091F\u094B \u0924\u092A\u093E\u0938\u0932\u093E \u091C\u093E\u0924 \u0906\u0939\u0947...",
+  "category.suggestionHint": "\u0939\u0947 \u0906\u092E\u094D\u0939\u0940 \u0924\u0941\u092E\u091A\u094D\u092F\u093E \u092B\u094B\u091F\u094B\u0935\u0930\u0942\u0928 \u0928\u093F\u0935\u0921\u0932\u0947 \u0906\u0939\u0947. \u092C\u0926\u0932\u0923\u094D\u092F\u093E\u0938\u093E\u0920\u0940 \u0915\u094B\u0923\u0924\u094D\u092F\u093E\u0939\u0940 \u091F\u093E\u0907\u0932\u0935\u0930 \u091F\u0945\u092A \u0915\u0930\u093E.",
   "category.textiles": "\u0915\u093E\u092A\u0921",
   "category.pottery": "\u092E\u093E\u0924\u0940\u091A\u0947 \u092D\u093E\u0902\u0921\u0940",
   "category.jewelry": "\u0926\u093E\u0917\u093F\u0928\u0947",
@@ -7134,6 +7183,9 @@ var ne_default = {
   "category.title": "\u0924\u092A\u093E\u0908\u0902 \u0915\u0947 \u092C\u0947\u091A\u094D\u0926\u0948 \u0939\u0941\u0928\u0941\u0939\u0941\u0928\u094D\u091B?",
   "category.continue": "\u091C\u093E\u0930\u0940 \u0930\u093E\u0916\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
   "category.materialQuestion": "\u092F\u094B \u0915\u0947\u092C\u093E\u091F \u092C\u0928\u093E\u0907\u090F\u0915\u094B \u0939\u094B? (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "category.suggested": "\u0938\u0941\u091D\u093E\u0907\u090F\u0915\u094B",
+  "category.detecting": "\u0924\u092A\u093E\u0908\u0902\u0915\u094B \u092B\u094B\u091F\u094B \u091C\u093E\u0901\u091A \u0917\u0930\u094D\u0926\u0948...",
+  "category.suggestionHint": "\u0939\u093E\u092E\u0940\u0932\u0947 \u092F\u094B \u0924\u092A\u093E\u0908\u0902\u0915\u094B \u092B\u094B\u091F\u094B\u092C\u093E\u091F \u091B\u093E\u0928\u094D\u092F\u094C\u0902\u0964 \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u0917\u0930\u094D\u0928 \u0915\u0941\u0928\u0948 \u092A\u0928\u093F \u091F\u093E\u0907\u0932\u092E\u093E \u091F\u094D\u092F\u093E\u092A \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D\u0964",
   "category.textiles": "\u0915\u092A\u0921\u093E",
   "category.pottery": "\u092E\u093E\u091F\u094B\u0915\u093E \u092C\u0930\u094D\u0924\u0928",
   "category.jewelry": "\u0917\u0939\u0928\u093E",
@@ -7490,6 +7542,9 @@ var or_default = {
   "category.title": "\u0B06\u0B2A\u0B23 \u0B15\u0B23 \u0B2C\u0B3F\u0B15\u0B4D\u0B30\u0B3F \u0B15\u0B30\u0B41\u0B1B\u0B28\u0B4D\u0B24\u0B3F?",
   "category.continue": "\u0B05\u0B17\u0B4D\u0B30\u0B17\u0B24\u0B3F",
   "category.materialQuestion": "\u0B0F\u0B39\u0B3E \u0B15'\u0B23 \u0B26\u0B4D\u0B71\u0B3E\u0B30\u0B3E \u0B24\u0B3F\u0B06\u0B30\u0B3F? (\u0B07\u0B1A\u0B4D\u0B1B\u0B3E\u0B2E\u0B24)",
+  "category.suggested": "\u0B2A\u0B4D\u0B30\u0B38\u0B4D\u0B24\u0B3E\u0B2C\u0B3F\u0B24",
+  "category.detecting": "\u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15 \u0B2B\u0B1F\u0B4B \u0B2F\u0B3E\u0B1E\u0B4D\u0B1A \u0B15\u0B30\u0B3E\u0B2F\u0B3E\u0B09\u0B1B\u0B3F...",
+  "category.suggestionHint": "\u0B06\u0B2E\u0B47 \u0B0F\u0B39\u0B3E \u0B06\u0B2A\u0B23\u0B19\u0B4D\u0B15 \u0B2B\u0B1F\u0B4B\u0B30\u0B41 \u0B2C\u0B3E\u0B1B\u0B3F\u0B1B\u0B41\u0964 \u0B2C\u0B26\u0B33\u0B3E\u0B07\u0B2C\u0B3E\u0B15\u0B41 \u0B2F\u0B47\u0B15\u0B4C\u0B23\u0B38\u0B3F \u0B1F\u0B3E\u0B07\u0B32\u0B4D \u0B1F\u0B4D\u0B5F\u0B3E\u0B2A\u0B4D \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41\u0964",
   "category.textiles": "\u0B2C\u0B38\u0B4D\u0B24\u0B4D\u0B30",
   "category.pottery": "\u0B2E\u0B1F\u0B3F",
   "category.jewelry": "\u0B17\u0B39\u0B23\u0B3E",
@@ -7846,6 +7901,9 @@ var pa_default = {
   "category.title": "\u0A24\u0A41\u0A38\u0A40\u0A02 \u0A15\u0A40 \u0A35\u0A47\u0A1A \u0A30\u0A39\u0A47 \u0A39\u0A4B?",
   "category.continue": "\u0A1C\u0A3E\u0A30\u0A40 \u0A30\u0A71\u0A16\u0A4B",
   "category.materialQuestion": "\u0A07\u0A39 \u0A15\u0A3F\u0A38 \u0A38\u0A2E\u0A71\u0A17\u0A30\u0A40 \u0A24\u0A4B\u0A02 \u0A2C\u0A23\u0A3F\u0A06 \u0A39\u0A48? (\u0A35\u0A3F\u0A15\u0A32\u0A2A\u0A3F\u0A15)",
+  "category.suggested": "\u0A38\u0A41\u0A1D\u0A3E\u0A07\u0A06 \u0A17\u0A3F\u0A06",
+  "category.detecting": "\u0A24\u0A41\u0A39\u0A3E\u0A21\u0A40 \u0A2B\u0A3C\u0A4B\u0A1F\u0A4B \u0A1C\u0A3E\u0A02\u0A1A\u0A40 \u0A1C\u0A3E \u0A30\u0A39\u0A40 \u0A39\u0A48...",
+  "category.suggestionHint": "\u0A05\u0A38\u0A40\u0A02 \u0A07\u0A39 \u0A24\u0A41\u0A39\u0A3E\u0A21\u0A40 \u0A2B\u0A3C\u0A4B\u0A1F\u0A4B \u0A24\u0A4B\u0A02 \u0A1A\u0A41\u0A23\u0A3F\u0A06 \u0A39\u0A48\u0964 \u0A2C\u0A26\u0A32\u0A23 \u0A32\u0A08 \u0A15\u0A3F\u0A38\u0A47 \u0A35\u0A40 \u0A1F\u0A3E\u0A08\u0A32 '\u0A24\u0A47 \u0A1F\u0A48\u0A2A \u0A15\u0A30\u0A4B\u0964",
   "category.textiles": "\u0A15\u0A2A\u0A5C\u0A47",
   "category.pottery": "\u0A2E\u0A3F\u0A71\u0A1F\u0A40 \u0A26\u0A47 \u0A2C\u0A30\u0A24\u0A28",
   "category.jewelry": "\u0A17\u0A39\u0A3F\u0A23\u0A47",
@@ -8202,6 +8260,9 @@ var sa_default = {
   "category.title": "\u0915\u093F\u0902 \u0935\u093F\u0915\u094D\u0930\u092F\u0924\u093F?",
   "category.continue": "\u0905\u0917\u094D\u0930\u0917\u0924\u093F",
   "category.materialQuestion": "\u090F\u0924\u0924\u094D \u0915\u093F\u092E\u094D \u0928\u093F\u0930\u094D\u092E\u093F\u0924\u092E\u094D? (\u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915)",
+  "category.suggested": "\u0938\u0942\u091A\u093F\u0924\u092E\u094D",
+  "category.detecting": "\u092D\u0935\u0924\u0903 \u091A\u093F\u0924\u094D\u0930\u0902 \u092A\u0930\u0940\u0915\u094D\u0937\u094D\u092F\u0924\u0947...",
+  "category.suggestionHint": "\u090F\u0924\u0924\u094D \u0935\u092F\u0902 \u092D\u0935\u0924\u0903 \u091A\u093F\u0924\u094D\u0930\u093E\u0924\u094D \u091A\u093F\u0924\u0935\u0928\u094D\u0924\u0903\u0964 \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928\u093E\u0930\u094D\u0925\u0902 \u0915\u0938\u094D\u092E\u093F\u0928\u094D \u0905\u092A\u093F \u0916\u0923\u094D\u0921\u0947 \u0938\u094D\u092A\u0943\u0936\u0924\u0941\u0964",
   "category.textiles": "\u0935\u0938\u094D\u0924\u094D\u0930",
   "category.pottery": "\u092E\u0943\u0926\u094D\u092D\u0942\u0924",
   "category.jewelry": "\u0917\u0939\u0928\u093E",
@@ -8558,6 +8619,9 @@ var sat_default = {
   "category.title": "\u1C71\u1C5A\u1C76\u1C5F \u1C5E\u1C5F\u1C79\u1C5C\u1C64\u1C6B \u1C6F\u1C5F\u1C68\u1C65\u1C5F\u1C62 \u1C60\u1C5F\u1C79\u1C62\u1C64?",
   "category.continue": "\u1C6E\u1C5E\u1C5F\u1C62 \u1C62\u1C6E",
   "category.materialQuestion": "What is it made of? (optional)",
+  "category.suggested": "\u1C75\u1C5F\u1C5B\u1C5F\u1C63\u1C6E\u1C71",
+  "category.detecting": "\u1C5F\u1C62\u1C5F\u1C5C \u1C6A\u1C64\u1C5B\u1C5F\u1C79\u1C68 \u1C67\u1C6E\u1C5E \u1C60\u1C5F\u1C71\u1C5F...",
+  "category.suggestionHint": "\u1C5F\u1C5E\u1C6E \u1C71\u1C5A\u1C76\u1C5F \u1C5F\u1C62\u1C5F\u1C5C \u1C6A\u1C64\u1C5B\u1C5F\u1C79\u1C68 \u1C60\u1C77\u1C5A\u1C71 \u1C75\u1C5F\u1C6A\u1C77\u1C5F\u1C63 \u1C60\u1C6E\u1C6B\u1C5F\u1C5E\u1C6E \u1C7E \u1C75\u1C5A\u1C6B\u1C5A\u1C5E \u1C5E\u1C5F\u1C79\u1C5C\u1C64\u1C6B \u1C61\u1C5F\u1C66\u1C5F\u1C78 \u1C74\u1C5F\u1C6D\u1C64\u1C5E \u1C68\u1C6E \u1C74\u1C6E\u1C6F \u1C62\u1C6E \u1C7E",
   "category.textiles": "\u1C6F\u1C5F\u1C79\u1C6B\u1C5F\u1C79",
   "category.pottery": "\u1C6F\u1C5F\u1C79\u1C6B\u1C5F\u1C79 \u1C60\u1C5F\u1C79\u1C62\u1C64",
   "category.jewelry": "\u1C6F\u1C5F\u1C79\u1C6B\u1C5F\u1C79 \u1C60\u1C5F\u1C79\u1C62\u1C64",
@@ -8914,6 +8978,9 @@ var sd_default = {
   "category.title": "\u062A\u0648\u0647\u0627\u0646 \u0687\u0627 \u0648\u06AA\u0631\u0648 \u06AA\u0631\u064A \u0631\u0647\u064A\u0627 \u0622\u0647\u064A\u0648\u061F",
   "category.continue": "\u062C\u0627\u0631\u064A \u0631\u06A9\u0648",
   "category.materialQuestion": "\u0627\u06BE\u0648 \u06AA\u06BE\u0699\u064A \u0634\u064A\u0621\u0650 \u0645\u0627\u0646 \u067A\u0647\u064A\u0644 \u0622\u06BE\u064A\u061F (\u0627\u062E\u062A\u064A\u0627\u0631\u064A)",
+  "category.suggested": "\u062A\u062C\u0648\u064A\u0632 \u06AA\u064A\u0644",
+  "category.detecting": "\u062A\u0648\u0647\u0627\u0646\u062C\u064A \u062A\u0635\u0648\u064A\u0631 \u062C\u0627\u0646\u0686\u064A \u067E\u0626\u064A \u0648\u0683\u064A...",
+  "category.suggestionHint": "\u0627\u0633\u0627\u0646 \u0627\u0647\u0648 \u062A\u0648\u0647\u0627\u0646\u062C\u064A \u062A\u0635\u0648\u064A\u0631 \u0645\u0627\u0646 \u0686\u0648\u0646\u068A\u064A\u0648 \u0622\u0647\u064A. \u062A\u0628\u062F\u064A\u0644 \u06AA\u0631\u06BB \u0644\u0627\u0621\u0650 \u06AA\u0646\u0647\u0646 \u0628\u0647 \u067D\u0627\u0626\u0644 \u062A\u064A \u067D\u064A\u067E \u06AA\u0631\u064A\u0648.",
   "category.textiles": "\u06AA\u067E\u0699\u0627",
   "category.pottery": "\u0645\u067D\u064A\u0621\u064E \u062C\u0627 \u0628\u0631\u062A\u0646",
   "category.jewelry": "\u062C\u0648\u0627\u0647\u0631\u0627\u062A",
@@ -9270,6 +9337,9 @@ var ta_default = {
   "category.title": "\u0BA8\u0BC0\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0B8E\u0BA9\u0BCD\u0BA9 \u0BB5\u0BBF\u0BB1\u0BCD\u0B95\u0BBF\u0BB1\u0BC0\u0BB0\u0BCD\u0B95\u0BB3\u0BCD?",
   "category.continue": "\u0BA4\u0BCA\u0B9F\u0BB0\u0BCD\u0B95",
   "category.materialQuestion": "\u0B87\u0BA4\u0BC1 \u0B8E\u0BA4\u0BA9\u0BBE\u0BB2\u0BCD \u0B9A\u0BC6\u0BAF\u0BCD\u0BAF\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1? (\u0BB5\u0BBF\u0BB0\u0BC1\u0BAA\u0BCD\u0BAA\u0BAE\u0BCD)",
+  "category.suggested": "\u0BAA\u0BB0\u0BBF\u0BA8\u0BCD\u0BA4\u0BC1\u0BB0\u0BC8\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
+  "category.detecting": "\u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BAA\u0BC1\u0B95\u0BC8\u0BAA\u0BCD\u0BAA\u0B9F\u0BAE\u0BCD \u0B9A\u0BB0\u0BBF\u0BAA\u0BBE\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BC1\u0B95\u0BBF\u0BB1\u0BA4\u0BC1...",
+  "category.suggestionHint": "\u0B87\u0BA4\u0BC8 \u0B89\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BAA\u0BC1\u0B95\u0BC8\u0BAA\u0BCD\u0BAA\u0B9F\u0BA4\u0BCD\u0BA4\u0BBF\u0BB2\u0BBF\u0BB0\u0BC1\u0BA8\u0BCD\u0BA4\u0BC1 \u0BA8\u0BBE\u0B99\u0BCD\u0B95\u0BB3\u0BCD \u0BA4\u0BC7\u0BB0\u0BCD\u0BA8\u0BCD\u0BA4\u0BC6\u0B9F\u0BC1\u0BA4\u0BCD\u0BA4\u0BCB\u0BAE\u0BCD. \u0BAE\u0BBE\u0BB1\u0BCD\u0BB1 \u0B8E\u0BA8\u0BCD\u0BA4\u0B95\u0BCD \u0B95\u0B9F\u0BCD\u0B9F\u0BA4\u0BCD\u0BA4\u0BC8\u0BAF\u0BC1\u0BAE\u0BCD \u0BA4\u0B9F\u0BCD\u0B9F\u0BB5\u0BC1\u0BAE\u0BCD.",
   "category.textiles": "\u0BA8\u0BC6\u0BAF\u0BCD\u0BA4\u0BBF\u0B95\u0BB3\u0BCD",
   "category.pottery": "\u0BAE\u0B9F\u0BCD\u0BAA\u0BBE\u0BA3\u0BCD\u0B9F\u0BAE\u0BCD",
   "category.jewelry": "\u0BA8\u0B95\u0BC8\u0B95\u0BB3\u0BCD",
@@ -9626,6 +9696,9 @@ var te_default = {
   "category.title": "\u0C2E\u0C40\u0C30\u0C41 \u0C0F\u0C2E\u0C3F \u0C05\u0C2E\u0C4D\u0C2E\u0C41\u0C24\u0C41\u0C28\u0C4D\u0C28\u0C3E\u0C30\u0C41?",
   "category.continue": "\u0C15\u0C4A\u0C28\u0C38\u0C3E\u0C17\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F",
   "category.materialQuestion": "\u0C07\u0C26\u0C3F \u0C0F \u0C2A\u0C26\u0C3E\u0C30\u0C4D\u0C25\u0C02\u0C24\u0C4B? (\u0C10\u0C1A\u0C4D\u0C1A\u0C3F\u0C15\u0C02)",
+  "category.suggested": "\u0C38\u0C42\u0C1A\u0C3F\u0C02\u0C1A\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F",
+  "category.detecting": "\u0C2E\u0C40 \u0C2B\u0C4B\u0C1F\u0C4B\u0C28\u0C41 \u0C24\u0C28\u0C3F\u0C16\u0C40 \u0C1A\u0C47\u0C38\u0C4D\u0C24\u0C4B\u0C02\u0C26\u0C3F...",
+  "category.suggestionHint": "\u0C26\u0C40\u0C28\u0C4D\u0C28\u0C3F \u0C2E\u0C47\u0C2E\u0C41 \u0C2E\u0C40 \u0C2B\u0C4B\u0C1F\u0C4B \u0C28\u0C41\u0C02\u0C21\u0C3F \u0C0E\u0C02\u0C1A\u0C41\u0C15\u0C41\u0C28\u0C4D\u0C28\u0C3E\u0C2E\u0C41. \u0C2E\u0C3E\u0C30\u0C4D\u0C1A\u0C21\u0C3E\u0C28\u0C3F\u0C15\u0C3F \u0C0F\u0C26\u0C48\u0C28\u0C3E \u0C1F\u0C48\u0C32\u0C4D\u200C\u0C28\u0C41 \u0C28\u0C4A\u0C15\u0C4D\u0C15\u0C02\u0C21\u0C3F.",
   "category.textiles": "\u0C2C\u0C1F\u0C4D\u0C1F\u0C32\u0C41",
   "category.pottery": "\u0C2E\u0C1F\u0C4D\u0C1F\u0C3F\u0C2A\u0C3E\u0C24\u0C4D\u0C30\u0C32\u0C41",
   "category.jewelry": "\u0C06\u0C2D\u0C30\u0C23\u0C3E\u0C32\u0C41",
@@ -9982,6 +10055,9 @@ var ur_default = {
   "category.title": "\u0622\u067E \u06A9\u06CC\u0627 \u0628\u06CC\u0686 \u0631\u06C1\u06D2 \u06C1\u06CC\u06BA\u061F",
   "category.continue": "\u062C\u0627\u0631\u06CC \u0631\u06A9\u06BE\u06CC\u06BA",
   "category.materialQuestion": "\u06CC\u06C1 \u06A9\u0633 \u0686\u06CC\u0632 \u0633\u06D2 \u0628\u0646\u0627 \u06C1\u06D2\u061F (\u0627\u062E\u062A\u06CC\u0627\u0631\u06CC)",
+  "category.suggested": "\u062A\u062C\u0648\u06CC\u0632 \u06A9\u0631\u062F\u06C1",
+  "category.detecting": "\u0622\u067E \u06A9\u06CC \u062A\u0635\u0648\u06CC\u0631 \u062C\u0627\u0646\u0686\u06CC \u062C\u0627 \u0631\u06C1\u06CC \u06C1\u06D2...",
+  "category.suggestionHint": "\u06C1\u0645 \u0646\u06D2 \u06CC\u06C1 \u0622\u067E \u06A9\u06CC \u062A\u0635\u0648\u06CC\u0631 \u0633\u06D2 \u0645\u0646\u062A\u062E\u0628 \u06A9\u06CC\u0627 \u06C1\u06D2\u06D4 \u062A\u0628\u062F\u06CC\u0644 \u06A9\u0631\u0646\u06D2 \u06A9\u06D2 \u0644\u06CC\u06D2 \u06A9\u0633\u06CC \u0628\u06BE\u06CC \u0679\u0627\u0626\u0644 \u067E\u0631 \u0679\u06CC\u067E \u06A9\u0631\u06CC\u06BA\u06D4",
   "category.textiles": "\u06A9\u067E\u0691\u06D2",
   "category.pottery": "\u0645\u0679\u06CC \u06A9\u06D2 \u0628\u0631\u062A\u0646",
   "category.jewelry": "\u0632\u06CC\u0648\u0631\u0627\u062A",
@@ -10313,6 +10389,22 @@ var PRODUCT_MATERIALS = [
 var MATERIAL_SET = new Set(PRODUCT_MATERIALS);
 function isProductMaterial(value) {
   return MATERIAL_SET.has(value);
+}
+var CATEGORY_MATERIALS = {
+  textiles: ["Cotton", "Silk", "Wool", "Jute", "Linen", "Other"],
+  pottery: ["Clay", "Terracotta", "Stone", "Other"],
+  jewelry: ["Silver", "Brass", "Copper", "Bronze", "Stone", "Glass", "Other"],
+  woodwork: ["Wood", "Bamboo", "Cane", "Other"],
+  "bamboo-cane": ["Bamboo", "Cane", "Wood", "Other"],
+  other: PRODUCT_MATERIALS
+};
+function materialsForCategory(category) {
+  return CATEGORY_MATERIALS[category] ?? PRODUCT_MATERIALS;
+}
+var CRAFT_CATEGORY_IDS = Object.keys(CATEGORY_MATERIALS);
+var CRAFT_CATEGORY_SET = new Set(CRAFT_CATEGORY_IDS);
+function isCraftCategory(value) {
+  return CRAFT_CATEGORY_SET.has(value);
 }
 
 // server/routes/products.ts
@@ -10854,7 +10946,14 @@ import { z as z6 } from "zod";
 var envSchema3 = z6.object({
   BACKGROUND_REMOVAL_PROVIDER: z6.enum(["remove-bg", "none"]).default("none"),
   REMOVE_BG_API_KEY: z6.string().optional(),
-  BACKGROUND_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(8e3)
+  BACKGROUND_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(8e3),
+  CRAFT_CLASSIFIER_PROVIDERS: z6.string().default("gemini,groq,render"),
+  CRAFT_CLASSIFIER_URL: z6.string().url().default("https://kala-setu-image-classifier.onrender.com"),
+  CRAFT_CLASSIFIER_TIMEOUT_MS: z6.coerce.number().int().positive().default(8e3),
+  CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS: z6.coerce.number().int().positive().default(6e4),
+  GEMINI_VISION_MODEL: z6.string().optional(),
+  GROQ_VISION_MODEL: z6.string().default("qwen/qwen3.6-27b"),
+  GROQ_VISION_FALLBACK_MODEL: z6.string().default("qwen/qwen3.8-27b")
 }).superRefine((env, ctx) => {
   if (env.BACKGROUND_REMOVAL_PROVIDER === "remove-bg" && !env.REMOVE_BG_API_KEY) {
     ctx.addIssue({
@@ -11102,9 +11201,283 @@ async function applyStudioAdjustments(source, options) {
   }
 }
 
+// server/services/classifierInput.ts
+import sharp3 from "sharp";
+var CLASSIFIER_EDGE_PX = 512;
+async function prepareForClassification(input) {
+  try {
+    const buffer = await sharp3(input).rotate().resize({ width: CLASSIFIER_EDGE_PX, height: CLASSIFIER_EDGE_PX, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+    return { buffer, mimeType: "image/jpeg" };
+  } catch (err) {
+    throw new UnsupportedImageError(err);
+  }
+}
+
+// server/image-ai/classification/gemini-classifier.service.ts
+import { GoogleGenAI as GoogleGenAI4 } from "@google/genai";
+
+// server/image-ai/classification/prompt.ts
+var CLASSIFICATION_CONFIDENCES = ["high", "medium", "low"];
+function buildClassificationPrompt() {
+  return `You are looking at a photograph of a handmade product by an Indian artisan, taken so it can be listed for sale.
+
+Pick the single category that best describes the product in the photo, from exactly this list:
+${CRAFT_CATEGORY_IDS.join(", ")}
+
+Rules:
+1. Judge only what is visible in the photo. Do not guess at anything outside the frame.
+2. Use "other" when the product genuinely fits none of the named categories, not as a way to avoid deciding.
+3. Report confidence as "high" when the craft is unmistakable, "medium" when the photo is workable but the craft is partly ambiguous, and "low" when the photo is blurred, dark, cluttered, or shows several unrelated items.
+4. Optionally name the dominant material, from exactly this list: ${PRODUCT_MATERIALS.join(", ")}. Omit the material entirely rather than guessing at one.
+
+Respond with a JSON object of the form {"category": "...", "confidence": "...", "material": "..."}.`;
+}
+
+// server/image-ai/classification/normalise.ts
+var RENDER_LABEL_TO_CATEGORY = {
+  "bamboo & cane": "bamboo-cane",
+  "bamboo and cane": "bamboo-cane",
+  "bamboo-cane": "bamboo-cane",
+  jewelry: "jewelry",
+  jewellery: "jewelry",
+  pottery: "pottery",
+  textiles: "textiles",
+  woodwork: "woodwork",
+  other: "other"
+};
+function normaliseCategory(raw) {
+  if (typeof raw !== "string") return void 0;
+  const trimmed = raw.trim();
+  if (trimmed === "") return void 0;
+  const mapped = RENDER_LABEL_TO_CATEGORY[trimmed.toLowerCase()];
+  if (mapped) return mapped;
+  return isCraftCategory(trimmed) ? trimmed : void 0;
+}
+function normaliseMaterial(category, raw) {
+  const candidates = Array.isArray(raw) ? raw : [raw];
+  const allowed = materialsForCategory(category);
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const needle = candidate.trim().toLowerCase();
+    if (needle === "" || needle === "other") continue;
+    const match = allowed.find((entry) => entry.toLowerCase() === needle);
+    if (match && match !== "Other") return match;
+  }
+  return void 0;
+}
+
+// server/image-ai/classification/gemini-classifier.service.ts
+var GeminiClassifierService = class {
+  source = "gemini";
+  client;
+  model;
+  timeoutMs;
+  constructor(apiKey, model, timeoutMs) {
+    this.client = new GoogleGenAI4({ apiKey });
+    this.model = model;
+    this.timeoutMs = timeoutMs;
+  }
+  async classify(image, mimeType) {
+    const response = await this.client.models.generateContent({
+      model: this.model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { data: image.toString("base64"), mimeType } },
+            { text: buildClassificationPrompt() }
+          ]
+        }
+      ],
+      config: {
+        temperature: 0,
+        abortSignal: AbortSignal.timeout(this.timeoutMs),
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            category: { type: "STRING", enum: CRAFT_CATEGORY_IDS },
+            confidence: { type: "STRING", enum: [...CLASSIFICATION_CONFIDENCES] },
+            material: { type: "STRING", enum: PRODUCT_MATERIALS }
+          },
+          required: ["category", "confidence"]
+        }
+      }
+    });
+    const raw = response.text;
+    if (!raw) {
+      throw new Error("Gemini returned an empty classification response");
+    }
+    const parsed = JSON.parse(raw);
+    const category = normaliseCategory(parsed.category);
+    if (!category) {
+      throw new Error(`Gemini returned an unknown category: ${String(parsed.category)}`);
+    }
+    const confidence = CLASSIFICATION_CONFIDENCES.find((entry) => entry === parsed.confidence) ?? "low";
+    return {
+      category,
+      confidence,
+      material: normaliseMaterial(category, parsed.material),
+      source: this.source
+    };
+  }
+};
+
+// server/image-ai/classification/groq-classifier.service.ts
+var GroqClassifierService = class {
+  source = "groq";
+  keyPool;
+  model;
+  fallbackModel;
+  constructor(keyPool, model, fallbackModel) {
+    this.keyPool = keyPool;
+    this.model = model;
+    this.fallbackModel = fallbackModel;
+  }
+  async classify(image, mimeType) {
+    const raw = await groqChat({
+      keyPool: this.keyPool,
+      model: this.model,
+      fallbackModel: this.fallbackModel,
+      prompt: buildClassificationPrompt(),
+      imageDataUrl: `data:${mimeType};base64,${image.toString("base64")}`,
+      json: true
+    });
+    const parsed = JSON.parse(raw);
+    const category = normaliseCategory(parsed.category);
+    if (!category) {
+      throw new Error(`Groq returned an unknown category: ${String(parsed.category)}`);
+    }
+    const confidence = CLASSIFICATION_CONFIDENCES.find((entry) => entry === parsed.confidence) ?? "low";
+    return {
+      category,
+      confidence,
+      material: normaliseMaterial(category, parsed.material),
+      source: this.source
+    };
+  }
+};
+
+// server/image-ai/classification/render-classifier.service.ts
+var RenderClassifierService = class {
+  source = "render";
+  baseUrl;
+  timeoutMs;
+  constructor(baseUrl, timeoutMs) {
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.timeoutMs = timeoutMs;
+  }
+  async warmUp() {
+    await fetch(`${this.baseUrl}/`, { signal: AbortSignal.timeout(this.timeoutMs) });
+  }
+  async classify(image, mimeType) {
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(image)], { type: mimeType }), "photo.jpg");
+    const response = await fetch(`${this.baseUrl}/predict`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(this.timeoutMs)
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Craft classifier returned ${response.status}: ${detail.slice(0, 300)}`);
+    }
+    const payload = await response.json();
+    const category = normaliseCategory(payload.predicted_category);
+    if (!category) {
+      throw new Error(`Craft classifier returned an unknown category: ${String(payload.predicted_category)}`);
+    }
+    return {
+      category,
+      confidence: confidenceFrom(payload),
+      material: normaliseMaterial(category, payload.artisan_metadata?.materials),
+      source: this.source
+    };
+  }
+};
+function confidenceFrom(payload) {
+  if (payload.requires_review === true) return "low";
+  const score = typeof payload.confidence_score === "number" ? payload.confidence_score : void 0;
+  if (score === void 0) return payload.requires_review === false ? "high" : "low";
+  if (score >= 0.75) return "high";
+  if (score >= 0.5) return "medium";
+  return "low";
+}
+
+// server/image-ai/classification/factory.ts
+var DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+var cachedChain;
+var cachedRender;
+function buildRenderService() {
+  const env = loadImageAiEnv();
+  if (!env.CRAFT_CLASSIFIER_PROVIDERS.split(",").some((entry) => entry.trim() === "render")) {
+    return null;
+  }
+  return new RenderClassifierService(env.CRAFT_CLASSIFIER_URL, env.CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS);
+}
+function buildCraftClassifierChain() {
+  if (cachedChain) return cachedChain;
+  const env = loadImageAiEnv();
+  const requested = env.CRAFT_CLASSIFIER_PROVIDERS.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  const chain = [];
+  for (const provider of requested) {
+    if (provider === "gemini") {
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
+      if (!apiKey) continue;
+      const flashModel = process.env.GEMINI_FLASH_MODEL?.trim();
+      const model = env.GEMINI_VISION_MODEL || flashModel || DEFAULT_GEMINI_MODEL;
+      chain.push(new GeminiClassifierService(apiKey, model, env.CRAFT_CLASSIFIER_TIMEOUT_MS));
+      continue;
+    }
+    if (provider === "groq") {
+      const keys = collectGroqApiKeys(process.env);
+      if (keys.length === 0) continue;
+      chain.push(
+        new GroqClassifierService(
+          new GroqKeyPool(keys),
+          env.GROQ_VISION_MODEL,
+          env.GROQ_VISION_FALLBACK_MODEL
+        )
+      );
+      continue;
+    }
+    if (provider === "render") {
+      const render = getRenderClassifier();
+      if (render) chain.push(render);
+    }
+  }
+  cachedChain = chain;
+  return chain;
+}
+function getRenderClassifier() {
+  if (cachedRender === void 0) cachedRender = buildRenderService();
+  return cachedRender;
+}
+
+// server/image-ai/classification/chain.ts
+async function classifyWithChain(providers, image, mimeType) {
+  for (const provider of providers) {
+    try {
+      return await provider.classify(image, mimeType);
+    } catch (err) {
+      console.warn("[image-ai] craft classifier tier failed, trying the next one", {
+        source: provider.source,
+        detail: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200)
+      });
+    }
+  }
+  return null;
+}
+
 // server/routes/images.ts
 var router5 = Router5();
 var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+function warmCraftClassifier() {
+  const render = getRenderClassifier();
+  if (!render) return;
+  render.warmUp().catch(() => {
+  });
+}
 async function storeImage(buffer, path, contentType) {
   const supabase = getSupabase();
   const bucket = getStorageBucket();
@@ -11134,6 +11507,7 @@ router5.post(
   requireRole("artisan"),
   asyncRoute(async (req, res) => {
     try {
+      warmCraftClassifier();
       const raw = await readRawBody(req, MAX_IMAGE_BYTES);
       if (raw.length === 0) {
         res.status(400).json({ error: "No image data provided" });
@@ -11233,6 +11607,51 @@ router5.post(
       if (handleImageError(err, res)) return;
       throw err;
     }
+  })
+);
+var ClassifySchema = z7.object({
+  imageUrl: z7.string().url()
+});
+router5.post(
+  "/classify",
+  requireAuth,
+  requireRole("artisan"),
+  asyncRoute(async (req, res) => {
+    const parsed = ClassifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    let sourceUrl;
+    try {
+      sourceUrl = resolveOwnStorageUrl(parsed.data.imageUrl, getStorageBucket(), req.uid);
+    } catch (err) {
+      if (err instanceof InvalidStorageUrlError) {
+        res.status(400).json({ error: "invalid_source_url" });
+        return;
+      }
+      throw err;
+    }
+    const chain = buildCraftClassifierChain();
+    if (chain.length === 0) {
+      res.json({ suggestion: null });
+      return;
+    }
+    const sourceRes = await fetch(sourceUrl);
+    if (!sourceRes.ok) {
+      res.status(404).json({ error: "source_not_found" });
+      return;
+    }
+    const source = Buffer.from(await sourceRes.arrayBuffer());
+    let prepared;
+    try {
+      prepared = await prepareForClassification(source);
+    } catch (err) {
+      if (handleImageError(err, res)) return;
+      throw err;
+    }
+    const suggestion = await classifyWithChain(chain, prepared.buffer, prepared.mimeType);
+    res.json({ suggestion });
   })
 );
 var images_default = router5;

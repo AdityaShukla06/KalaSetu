@@ -58,7 +58,19 @@ Powers the "Remove background" button in the photo enhancement studio. Everythin
 
 **You can skip this entirely.** Leave `BACKGROUND_REMOVAL_PROVIDER=none` (the default) and the button reports background removal as unavailable; the rest of the photo pipeline, and the rest of the app, is unaffected.
 
-## 4. A session secret
+## 4. Craft category suggestion (optional)
+
+After an artisan takes a photo, the app suggests which category it belongs to (textiles, pottery, jewelry, woodwork, bamboo & cane, or other) so the next screen opens with that tile already picked. It is always editable with one tap, and nothing here is required for the app to work: with no keys configured at all, the category screen behaves exactly as if this feature did not exist.
+
+Three providers are tried in order, each one only used if the one before it fails or is not configured:
+
+1. **Gemini**, using the `GEMINI_API_KEY` from section 2 (Gemini vision calls have run 5-25 seconds in testing, so this step is fired in the background while the artisan is still reviewing their photo, never blocking anything).
+2. **Groq**, using the same key pool from section 2, on `qwen/qwen3.6-27b` (`GROQ_VISION_MODEL`) with `qwen/qwen3.8-27b` as its own model fallback. In testing this tier answered in a couple of seconds and correctly classified real product photos across every category.
+3. The **KalaSetu craft classifier**, a small model purpose-trained on these six categories, called through `CRAFT_CLASSIFIER_URL` (defaults to the hosted instance, no key needed). It free-tier hosts on Render and can take up to a minute to answer after 15 minutes idle, which is why the `/enhance` step already sends it a background warm-up ping the moment a photo is uploaded.
+
+To turn a tier off, remove it from the comma-separated `CRAFT_CLASSIFIER_PROVIDERS` (default `gemini,groq,render`). Setting it to an empty string disables the feature entirely.
+
+## 5. A session secret
 
 Generate any long random string for `JWT_SECRET`:
 
@@ -68,7 +80,7 @@ openssl rand -base64 32
 
 If you change this later, everyone is signed out. That is the intended way to revoke all sessions.
 
-## 5. Email delivery (optional)
+## 6. Email delivery (optional)
 
 Sign in codes are emailed through [Resend](https://resend.com). Free tier, no card, 3000 emails a month.
 
@@ -79,7 +91,7 @@ Sign in codes are emailed through [Resend](https://resend.com). Free tier, no ca
 
 The same Resend setup also emails an artisan when a buyer sends an inquiry. Set `PUBLIC_APP_URL` to your deployed URL (defaults to `http://localhost:5173`) so that email's "view and respond" link points somewhere real.
 
-## 6. Run it locally
+## 7. Run it locally
 
 ```bash
 npm install
@@ -93,7 +105,7 @@ Open `http://localhost:5173`. Sign in with any email address and the code `5741`
 
 To check the API is alive: `http://localhost:5173/api/health` should return `{"status":"ok", ...}`. If it instead returns the app's HTML, the `[api]` process didn't start, most likely because a required `.env` value is missing; check the `[api]` process's own terminal output for the actual error.
 
-## 7. Deploy to Vercel
+## 8. Deploy to Vercel
 
 1. Push your branch to GitHub.
 2. Go to [vercel.com](https://vercel.com), sign in with GitHub, **Add New -> Project**, import the repository.
@@ -104,7 +116,8 @@ To check the API is alive: `http://localhost:5173/api/health` should return `{"s
    - `JWT_SECRET`
    - `GROQ_API_KEY`
    - `BACKGROUND_REMOVAL_PROVIDER` and `REMOVE_BG_API_KEY` (only if you did step 3)
-   - `RESEND_API_KEY` (only if you did step 5)
+   - `GEMINI_API_KEY` (only if you want the craft category suggestion's first tier, step 4)
+   - `RESEND_API_KEY` (only if you did step 6)
    - `PUBLIC_APP_URL` (your deployed URL, so inquiry notification emails link back correctly)
    - `DEMO_FALLBACK_OTP_ENABLED`
 5. **Deploy.**
@@ -113,7 +126,7 @@ Vercel gives you an HTTPS URL. That matters: the camera and microphone only work
 
 `VITE_API_BASE_URL` should stay empty in production. The API is served from the same origin at `/api`.
 
-## 8. Verify the deployment
+## 9. Verify the deployment
 
 - [ ] `https://<your-app>.vercel.app/api/health` returns `{"status":"ok","version":"1.0.0"}`. **Check this first.** If it fails, everything else will fail in ways that look unrelated.
 - [ ] The app loads at the root URL.
@@ -152,6 +165,7 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 | Voice or translation stops working partway through a busy day | Groq's daily token quota is spent | Expected on the free tier. Fill `GROQ_API_KEY_2` / `GROQ_API_KEY_3` with keys from separate Groq accounts (see section 2), or wait for the quota to reset. Extra keys from the same account do not help. |
 | Added more keys but it still runs out | All the keys belong to one Groq account | The daily quota is per account, not per key. Check `/api/health`'s `config.groqKeys` to confirm they were picked up, then confirm each key really is from a different account. |
 | Images 404 after upload | Storage bucket missing or private | Re-run `supabase/schema.sql`, then confirm `product-images` exists and is public. |
+| Category is never pre-selected after a photo | All three classifier tiers are unconfigured, disabled, or failed | Expected with no keys set at all, see section 4. Otherwise check the server logs for `craft classifier tier failed` to see which tiers were tried and why. |
 | "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, or the key is missing/wrong, or your remove.bg credits ran out | Check section 3, and your remove.bg dashboard for remaining credits. Everything else in the studio still works either way. |
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |
 | Sign in returns 403 `account_deactivated` | An admin deactivated that artisan in the console | Reactivate them from `/internal/console/artisans`, or it's expected if that was intentional. |

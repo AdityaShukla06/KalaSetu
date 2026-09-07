@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from "react";
 import { Button } from "../../components/Button";
-import { enhanceImage } from "../../services/api";
+import { classifyImage, enhanceImage } from "../../services/api";
 import { BeforeAfterCompare } from "./BeforeAfterCompare";
 import { PhotoStudio } from "./PhotoStudio";
 import { useAddProductDraft } from "../../context/AddProductDraftContext";
@@ -65,8 +65,19 @@ export function PhotoReviewFlow({ blob, onRetake, onDone }: PhotoReviewFlowProps
     try {
       const { enhancedImageUrl } = await enhanceImage(blob);
       setEnhancedUrl(enhancedImageUrl);
-      updateDraft({ imageBlob: blob, imageUrl: enhancedImageUrl });
+      updateDraft({ imageBlob: blob, imageUrl: enhancedImageUrl, categorySuggestionPending: true });
       setStep("compare");
+
+      void classifyImage(enhancedImageUrl)
+        .then(({ suggestion }) => {
+          updateDraft({
+            categorySuggestion: suggestion ?? undefined,
+            categorySuggestionPending: false,
+          });
+        })
+        .catch(() => {
+          updateDraft({ categorySuggestionPending: false });
+        });
     } catch {
       setStep("enhance-error");
     }

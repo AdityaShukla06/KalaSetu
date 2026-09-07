@@ -84,6 +84,8 @@ export function VoiceDescribeScreen() {
       <CategoryStep
         initialCategory={category}
         initialMaterial={draft.material}
+        suggestion={draft.categorySuggestion}
+        suggestionPending={draft.categorySuggestionPending}
         onContinue={handleCategoryContinue}
       />
     );

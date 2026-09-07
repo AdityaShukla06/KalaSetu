@@ -39,3 +39,11 @@ export const CATEGORY_MATERIALS: Record<string, string[]> = {
 export function materialsForCategory(category: string): string[] {
   return CATEGORY_MATERIALS[category] ?? PRODUCT_MATERIALS;
 }
+
+export const CRAFT_CATEGORY_IDS: string[] = Object.keys(CATEGORY_MATERIALS);
+
+const CRAFT_CATEGORY_SET = new Set(CRAFT_CATEGORY_IDS);
+
+export function isCraftCategory(value: string): boolean {
+  return CRAFT_CATEGORY_SET.has(value);
+}

@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { materialsForCategory } from "../../../shared/materials";
+import type { CategorySuggestion } from "../../services/api";
 import { useLanguage } from "../../context/LanguageContext";
 import "./VoiceDescribe.css";
 
 interface CategoryStepProps {
   initialCategory: string | null;
   initialMaterial?: string | null;
+  suggestion?: CategorySuggestion;
+  suggestionPending?: boolean;
   onContinue: (category: string, material?: string) => void;
 }
 
@@ -88,18 +91,39 @@ export const CATEGORIES = [
   { id: "other", labelKey: "category.other", Icon: OtherIcon },
 ];
 
-export function CategoryStep({ initialCategory, initialMaterial, onContinue }: CategoryStepProps) {
+export function CategoryStep({
+  initialCategory,
+  initialMaterial,
+  suggestion,
+  suggestionPending,
+  onContinue,
+}: CategoryStepProps) {
   const { t } = useLanguage();
   const [selected, setSelected] = useState<string | null>(initialCategory);
   const [material, setMaterial] = useState<string | null>(initialMaterial ?? null);
+  const [touched, setTouched] = useState(false);
   const availableMaterials = selected ? materialsForCategory(selected) : [];
 
+  useEffect(() => {
+    if (!suggestion || touched || selected) return;
+    if (suggestion.confidence === "low") return;
+
+    setSelected(suggestion.category);
+    if (suggestion.material && materialsForCategory(suggestion.category).includes(suggestion.material)) {
+      setMaterial(suggestion.material);
+    }
+  }, [suggestion, touched, selected]);
+
   function handleSelectCategory(id: string) {
+    setTouched(true);
     setSelected(id);
     if (material && !materialsForCategory(id).includes(material)) {
       setMaterial(null);
     }
   }
+
+  const showSuggestionHint = Boolean(suggestion) && !touched && selected === suggestion?.category;
+  const showDetecting = Boolean(suggestionPending) && !suggestion;
 
   return (
     <div className="describe-screen">
@@ -114,6 +138,9 @@ export function CategoryStep({ initialCategory, initialMaterial, onContinue }: C
             onClick={() => handleSelectCategory(id)}
             aria-pressed={selected === id}
           >
+            {suggestion?.category === id && !touched && (
+              <span className="category-tile-badge">{t("category.suggested")}</span>
+            )}
             <span className="category-tile-icon">
               <Icon />
             </span>
@@ -121,6 +148,9 @@ export function CategoryStep({ initialCategory, initialMaterial, onContinue }: C
           </button>
         ))}
       </div>
+
+      {showDetecting && <p className="body-s category-suggestion-note">{t("category.detecting")}</p>}
+      {showSuggestionHint && <p className="body-s category-suggestion-note">{t("category.suggestionHint")}</p>}
 
       {selected && (
         <div className="material-section">

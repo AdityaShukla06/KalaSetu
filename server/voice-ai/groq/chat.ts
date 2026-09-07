@@ -7,6 +7,7 @@ export interface GroqChatOptions {
   model: string;
   fallbackModel?: string;
   prompt: string;
+  imageDataUrl?: string;
   json: boolean;
 }
 
@@ -20,6 +21,17 @@ export class GroqRateLimitError extends Error {
   }
 }
 
+type GroqContent = string | Array<Record<string, unknown>>;
+
+function buildContent(options: GroqChatOptions): GroqContent {
+  if (!options.imageDataUrl) return options.prompt;
+
+  return [
+    { type: "text", text: options.prompt },
+    { type: "image_url", image_url: { url: options.imageDataUrl } },
+  ];
+}
+
 async function callModel(options: GroqChatOptions, model: string, apiKey: string): Promise<string> {
   const response = await fetch(GROQ_CHAT_URL, {
     method: "POST",
@@ -30,7 +42,7 @@ async function callModel(options: GroqChatOptions, model: string, apiKey: string
     body: JSON.stringify({
       model,
       temperature: 0.2,
-      messages: [{ role: "user", content: options.prompt }],
+      messages: [{ role: "user", content: buildContent(options) }],
       ...(options.json ? { response_format: { type: "json_object" } } : {}),
     }),
   });

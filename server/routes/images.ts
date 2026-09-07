@@ -9,9 +9,18 @@ import { getSupabase, getStorageBucket } from "../lib/supabase";
 import { resolveOwnStorageUrl, InvalidStorageUrlError } from "../lib/ownStorageUrl";
 import { enhanceProductImage, UnsupportedImageError } from "../services/imageEnhancer";
 import { applyStudioAdjustments, StudioOptions } from "../services/imageStudio";
+import { prepareForClassification } from "../services/classifierInput";
+import { buildCraftClassifierChain, getRenderClassifier } from "../image-ai/classification/factory";
+import { classifyWithChain } from "../image-ai/classification/chain";
 
 const router = Router();
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function warmCraftClassifier(): void {
+  const render = getRenderClassifier();
+  if (!render) return;
+  render.warmUp().catch(() => {});
+}
 
 async function storeImage(buffer: Buffer, path: string, contentType: string): Promise<string> {
   const supabase = getSupabase();
@@ -47,6 +56,8 @@ router.post(
   requireRole("artisan"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
     try {
+      warmCraftClassifier();
+
       const raw = await readRawBody(req, MAX_IMAGE_BYTES);
       if (raw.length === 0) {
         res.status(400).json({ error: "No image data provided" });
@@ -162,6 +173,58 @@ router.post(
       if (handleImageError(err, res)) return;
       throw err;
     }
+  }),
+);
+
+const ClassifySchema = z.object({
+  imageUrl: z.string().url(),
+});
+
+router.post(
+  "/classify",
+  requireAuth,
+  requireRole("artisan"),
+  asyncRoute(async (req: Request, res: Response): Promise<void> => {
+    const parsed = ClassifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    let sourceUrl: string;
+    try {
+      sourceUrl = resolveOwnStorageUrl(parsed.data.imageUrl, getStorageBucket(), req.uid);
+    } catch (err) {
+      if (err instanceof InvalidStorageUrlError) {
+        res.status(400).json({ error: "invalid_source_url" });
+        return;
+      }
+      throw err;
+    }
+
+    const chain = buildCraftClassifierChain();
+    if (chain.length === 0) {
+      res.json({ suggestion: null });
+      return;
+    }
+
+    const sourceRes = await fetch(sourceUrl);
+    if (!sourceRes.ok) {
+      res.status(404).json({ error: "source_not_found" });
+      return;
+    }
+    const source = Buffer.from(await sourceRes.arrayBuffer());
+
+    let prepared;
+    try {
+      prepared = await prepareForClassification(source);
+    } catch (err) {
+      if (handleImageError(err, res)) return;
+      throw err;
+    }
+
+    const suggestion = await classifyWithChain(chain, prepared.buffer, prepared.mimeType);
+    res.json({ suggestion });
   }),
 );
 
