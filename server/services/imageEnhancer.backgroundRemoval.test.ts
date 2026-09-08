@@ -60,19 +60,6 @@ describe("enhanceProductImage background removal", () => {
     expect(meta.format).toBe("jpeg");
   });
 
-  it("falls back cleanly when rate limited", async () => {
-    const input = await makePng(400, 300);
-    const rateLimitError = new BackgroundRemovalError("rate_limited", "quota exhausted");
-
-    const result = await enhanceProductImage(input, {
-      removeBackground: true,
-      backgroundRemoval: new AlwaysFailsService(rateLimitError),
-    });
-
-    expect(result.backgroundRemoved).toBe(false);
-    expect(result.notice).toBe("background_removal_quota_reached");
-  });
-
   it("returns a usable cutout buffer when the provider succeeds", async () => {
     const input = await makePng(400, 300);
 

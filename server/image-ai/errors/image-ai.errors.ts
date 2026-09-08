@@ -1,4 +1,4 @@
-export type BackgroundRemovalFailureReason = "not_configured" | "timeout" | "rate_limited" | "provider_error";
+export type BackgroundRemovalFailureReason = "not_configured" | "timeout" | "provider_error";
 
 export class BackgroundRemovalError extends Error {
   public readonly reason: BackgroundRemovalFailureReason;

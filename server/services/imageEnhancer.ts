@@ -43,8 +43,6 @@ function toBackgroundRemovalNotice(err: unknown): string {
         return "background_removal_unavailable";
       case "timeout":
         return "background_removal_timed_out";
-      case "rate_limited":
-        return "background_removal_quota_reached";
       default:
         return "background_removal_failed";
     }

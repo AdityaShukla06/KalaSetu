@@ -10968,10 +10968,8 @@ var BackgroundRemovalError = class extends Error {
 import "dotenv/config";
 import { z as z6 } from "zod";
 var envSchema3 = z6.object({
-  BACKGROUND_REMOVAL_PROVIDER: z6.string().default("none"),
-  REMOVE_BG_API_KEY: z6.string().optional(),
+  BACKGROUND_REMOVAL_PROVIDER: z6.enum(["self-hosted", "none"]).default("none"),
   SELF_HOSTED_BG_REMOVAL_URL: z6.string().url().optional(),
-  BACKGROUND_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(8e3),
   SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(3e4),
   CRAFT_CLASSIFIER_PROVIDERS: z6.string().default("groq,gemini,render"),
   CRAFT_CLASSIFIER_URL: z6.string().url().default("https://kala-setu-image-classifier.onrender.com"),
@@ -10981,19 +10979,11 @@ var envSchema3 = z6.object({
   GROQ_VISION_MODEL: z6.string().default("qwen/qwen3.6-27b"),
   GROQ_VISION_FALLBACK_MODEL: z6.string().default("qwen/qwen3.8-27b")
 }).superRefine((env, ctx) => {
-  const providers = env.BACKGROUND_REMOVAL_PROVIDER.split(",").map((entry) => entry.trim());
-  if (providers.includes("remove-bg") && !env.REMOVE_BG_API_KEY) {
-    ctx.addIssue({
-      code: z6.ZodIssueCode.custom,
-      path: ["REMOVE_BG_API_KEY"],
-      message: "REMOVE_BG_API_KEY is required when BACKGROUND_REMOVAL_PROVIDER includes remove-bg"
-    });
-  }
-  if (providers.includes("self-hosted") && !env.SELF_HOSTED_BG_REMOVAL_URL) {
+  if (env.BACKGROUND_REMOVAL_PROVIDER === "self-hosted" && !env.SELF_HOSTED_BG_REMOVAL_URL) {
     ctx.addIssue({
       code: z6.ZodIssueCode.custom,
       path: ["SELF_HOSTED_BG_REMOVAL_URL"],
-      message: "SELF_HOSTED_BG_REMOVAL_URL is required when BACKGROUND_REMOVAL_PROVIDER includes self-hosted"
+      message: "SELF_HOSTED_BG_REMOVAL_URL is required when BACKGROUND_REMOVAL_PROVIDER is self-hosted"
     });
   }
 });
@@ -11015,53 +11005,6 @@ function loadImageAiEnv() {
   cached4 = parsed.data;
   return cached4;
 }
-
-// server/image-ai/providers/remove-bg.service.ts
-var REMOVE_BG_URL = "https://api.remove.bg/v1.0/removebg";
-var RemoveBgService = class {
-  apiKey;
-  timeoutMs;
-  constructor(apiKey, timeoutMs) {
-    this.apiKey = apiKey;
-    this.timeoutMs = timeoutMs;
-  }
-  async removeBackground(input, mimeType) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const form = new FormData();
-      form.append("image_file", new Blob([new Uint8Array(input)], { type: mimeType }), "photo");
-      form.append("size", "auto");
-      const response = await fetch(REMOVE_BG_URL, {
-        method: "POST",
-        headers: { "X-Api-Key": this.apiKey },
-        body: form,
-        signal: controller.signal
-      });
-      if (response.status === 429) {
-        throw new BackgroundRemovalError("rate_limited", "remove.bg rate limit or quota reached");
-      }
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new BackgroundRemovalError(
-          "provider_error",
-          `remove.bg returned ${response.status}`,
-          detail.slice(0, 500)
-        );
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    } catch (err) {
-      if (err instanceof BackgroundRemovalError) throw err;
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new BackgroundRemovalError("timeout", `remove.bg did not respond within ${this.timeoutMs}ms`, err);
-      }
-      throw new BackgroundRemovalError("provider_error", "remove.bg request failed", err);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-};
 
 // server/image-ai/providers/self-hosted-bg-removal.service.ts
 var SelfHostedBgRemovalService = class {
@@ -11111,29 +11054,6 @@ var SelfHostedBgRemovalService = class {
   }
 };
 
-// server/image-ai/providers/chained-bg-removal.service.ts
-var ChainedBackgroundRemovalService = class {
-  providers;
-  constructor(providers) {
-    this.providers = providers;
-  }
-  async removeBackground(input, mimeType) {
-    let lastError;
-    for (const provider of this.providers) {
-      try {
-        return await provider.removeBackground(input, mimeType);
-      } catch (err) {
-        lastError = err;
-        console.warn("[image-ai] background removal tier failed, trying the next one", {
-          detail: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200)
-        });
-      }
-    }
-    if (lastError instanceof BackgroundRemovalError) throw lastError;
-    throw new BackgroundRemovalError("provider_error", "All background removal providers failed", lastError);
-  }
-};
-
 // server/image-ai/providers/disabled.service.ts
 var DisabledBackgroundRemovalService = class {
   async removeBackground() {
@@ -11154,22 +11074,11 @@ function getSelfHostedBgRemoval() {
 }
 function buildBackgroundRemovalService() {
   const env = loadImageAiEnv();
-  const requested = env.BACKGROUND_REMOVAL_PROVIDER.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
-  const services = [];
-  for (const provider of requested) {
-    if (provider === "remove-bg") {
-      if (!env.REMOVE_BG_API_KEY) continue;
-      services.push(new RemoveBgService(env.REMOVE_BG_API_KEY, env.BACKGROUND_REMOVAL_TIMEOUT_MS));
-      continue;
-    }
-    if (provider === "self-hosted") {
-      const service = getSelfHostedBgRemoval();
-      if (service) services.push(service);
-    }
+  if (env.BACKGROUND_REMOVAL_PROVIDER === "self-hosted") {
+    const service = getSelfHostedBgRemoval();
+    if (service) return service;
   }
-  if (services.length === 0) return new DisabledBackgroundRemovalService();
-  if (services.length === 1) return services[0];
-  return new ChainedBackgroundRemovalService(services);
+  return new DisabledBackgroundRemovalService();
 }
 
 // server/services/imageEnhancer.ts
@@ -11195,8 +11104,6 @@ function toBackgroundRemovalNotice(err) {
         return "background_removal_unavailable";
       case "timeout":
         return "background_removal_timed_out";
-      case "rate_limited":
-        return "background_removal_quota_reached";
       default:
         return "background_removal_failed";
     }

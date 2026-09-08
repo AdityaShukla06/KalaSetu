@@ -1,7 +1,5 @@
 import { BackgroundRemovalService } from "./types/background-removal.types";
-import { RemoveBgService } from "./providers/remove-bg.service";
 import { SelfHostedBgRemovalService } from "./providers/self-hosted-bg-removal.service";
-import { ChainedBackgroundRemovalService } from "./providers/chained-bg-removal.service";
 import { DisabledBackgroundRemovalService } from "./providers/disabled.service";
 import { loadImageAiEnv } from "./config/env";
 
@@ -20,28 +18,13 @@ export function getSelfHostedBgRemoval(): SelfHostedBgRemovalService | null {
 
 export function buildBackgroundRemovalService(): BackgroundRemovalService {
   const env = loadImageAiEnv();
-  const requested = env.BACKGROUND_REMOVAL_PROVIDER.split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== "");
 
-  const services: BackgroundRemovalService[] = [];
-
-  for (const provider of requested) {
-    if (provider === "remove-bg") {
-      if (!env.REMOVE_BG_API_KEY) continue;
-      services.push(new RemoveBgService(env.REMOVE_BG_API_KEY, env.BACKGROUND_REMOVAL_TIMEOUT_MS));
-      continue;
-    }
-
-    if (provider === "self-hosted") {
-      const service = getSelfHostedBgRemoval();
-      if (service) services.push(service);
-    }
+  if (env.BACKGROUND_REMOVAL_PROVIDER === "self-hosted") {
+    const service = getSelfHostedBgRemoval();
+    if (service) return service;
   }
 
-  if (services.length === 0) return new DisabledBackgroundRemovalService();
-  if (services.length === 1) return services[0];
-  return new ChainedBackgroundRemovalService(services);
+  return new DisabledBackgroundRemovalService();
 }
 
 export function resetBackgroundRemovalCache(): void {

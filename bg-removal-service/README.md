@@ -1,6 +1,6 @@
 # KalaSetu background removal service
 
-A small self-hosted alternative to remove.bg. Wraps `u2netp` (Apache-2.0, 4.7MB, part of the same model family as the original U-2-Net project) behind one HTTP endpoint using `onnxruntime`, deliberately without pulling in the full `rembg` package (which bundles 16 model backends and has a known memory leak in its own server mode under sustained load).
+The background removal used by the main KalaSetu app, running entirely on infrastructure you own rather than a paid third-party API. Wraps `u2netp` (Apache-2.0, 4.7MB, part of the same model family as the original U-2-Net project) behind one HTTP endpoint using `onnxruntime`, deliberately without pulling in the full `rembg` package (which bundles 16 model backends and has a known memory leak in its own server mode under sustained load).
 
 ## Endpoints
 
@@ -14,9 +14,9 @@ This folder is meant to be deployed as its own Render web service, independent o
 1. On [render.com](https://render.com), **New -> Web Service**, connect this GitHub repository.
 2. Set **Root Directory** to `bg-removal-service` so Render only builds this folder.
 3. Runtime: **Docker** (Render detects the `Dockerfile` automatically).
-4. Instance type: start on the **Free** tier (512MB RAM, 0.1 CPU). `u2netp` was chosen specifically because it is small enough to plausibly fit; watch the Render dashboard's memory graph under a few real requests before trusting this in production. If it proves too tight, move to the cheapest paid instance; this service still has no per-call cost either way, unlike remove.bg's quota.
-5. Free services spin down after 15 minutes idle and take 30-60 seconds to cold start. The main KalaSetu app already pings this service's `/` route in the background the moment an artisan uploads a photo (see `server/routes/images.ts`), the same pattern already used for the craft classifier, to absorb that cold start before the artisan reaches the background removal button. Separately from cold start, actual inference on Render's free CPU tier measured 14-20 seconds per photo against the real deployed instance (vs under a second measured locally), which is why the main app's `SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS` defaults to 30 seconds rather than sharing remove.bg's much shorter timeout; the first deploy of this fallback shipped with a shared 8-second timeout, which silently failed on every real request until this was caught by testing against the live deployment.
-6. Copy the resulting `https://<service>.onrender.com` URL into the main app's `SELF_HOSTED_BG_REMOVAL_URL`, and set `BACKGROUND_REMOVAL_PROVIDER=remove-bg,self-hosted` so remove.bg is tried first and this service only runs when remove.bg fails or its quota is exhausted.
+4. Instance type: start on the **Free** tier (512MB RAM, 0.1 CPU). `u2netp` was chosen specifically because it is small enough to plausibly fit; watch the Render dashboard's memory graph under a few real requests before trusting this in production. If it proves too tight, move to the cheapest paid instance; this service still has no per-call cost either way, unlike a paid third-party API's quota.
+5. Free services spin down after 15 minutes idle and take 30-60 seconds to cold start. The main KalaSetu app already pings this service's `/` route in the background the moment an artisan uploads a photo (see `server/routes/images.ts`), the same pattern already used for the craft classifier, to absorb that cold start before the artisan reaches the background removal button. Separately from cold start, actual inference on Render's free CPU tier measured 14-20 seconds per photo against the real deployed instance (vs under a second measured locally), which is why the main app's `SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS` defaults to 30 seconds; a first deploy shipped with a much shorter shared timeout, which silently failed on every real request until this was caught by testing against the live deployment.
+6. Copy the resulting `https://<service>.onrender.com` URL into the main app's `SELF_HOSTED_BG_REMOVAL_URL`, and set `BACKGROUND_REMOVAL_PROVIDER=self-hosted`.
 
 ## Running locally
 
@@ -42,7 +42,7 @@ Three open models were actually tested against real product photos (jewelry, woo
 | `isnet-general-use` | 938MB | 0.43s | Noticeably better (e.g. cleanly removed a hand in frame that `u2netp` left in); still fails on the same patterned backdrop |
 | BEN2 (`PramaLLC/BEN2`, fp16) | 2.72GB | 25.4s | Best watermark removal of the three; same patterned-backdrop failure |
 
-Render's free tier gives 512MB RAM. `u2netp` is the only one of the three that actually fits it as measured, which is why it's the default here. `isnet-general-use` would need roughly 1GB+, meaning a small paid Render instance, not the free tier. BEN2 is ruled out entirely regardless of budget: 25+ seconds per photo on a fast desktop CPU means considerably worse on Render's throttled free/starter CPU allocations, too slow to be a usable synchronous fallback.
+Render's free tier gives 512MB RAM. `u2netp` is the only one of the three that actually fits it as measured, which is why it's the default here. `isnet-general-use` would need roughly 1GB+, meaning a small paid Render instance, not the free tier. BEN2 is ruled out entirely regardless of budget: 25+ seconds per photo on a fast desktop CPU means considerably worse on Render's throttled free/starter CPU allocations, too slow to be usable synchronously.
 
 If `u2netp`'s quality proves insufficient and a paid tier is acceptable, `isnet-general-use` is Apache-2.0 licensed and loads through the exact same code path (`rembg`-family models share the same input/output tensor shape); download it, point `MODEL_PATH` at it, and size the Render instance to comfortably clear the measured 938MB peak.
 
