@@ -126,6 +126,135 @@ var GroqKeyPool = class {
   }
 };
 
+// server/image-ai/errors/image-ai.errors.ts
+var BackgroundRemovalError = class extends Error {
+  reason;
+  cause;
+  constructor(reason, message, cause) {
+    super(message);
+    this.name = "BackgroundRemovalError";
+    this.reason = reason;
+    this.cause = cause;
+  }
+};
+
+// server/image-ai/config/env.ts
+import "dotenv/config";
+import { z as z2 } from "zod";
+var envSchema2 = z2.object({
+  BACKGROUND_REMOVAL_PROVIDER: z2.enum(["self-hosted", "none"]).default("none"),
+  SELF_HOSTED_BG_REMOVAL_URL: z2.string().url().optional(),
+  SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS: z2.coerce.number().int().positive().default(3e4),
+  CRAFT_CLASSIFIER_PROVIDERS: z2.string().default("groq,gemini,render"),
+  CRAFT_CLASSIFIER_URL: z2.string().url().default("https://kala-setu-image-classifier.onrender.com"),
+  CRAFT_CLASSIFIER_TIMEOUT_MS: z2.coerce.number().int().positive().default(6e3),
+  CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS: z2.coerce.number().int().positive().default(2e4),
+  GEMINI_VISION_MODEL: z2.string().optional(),
+  GROQ_VISION_MODEL: z2.string().default("qwen/qwen3.6-27b"),
+  GROQ_VISION_FALLBACK_MODEL: z2.string().default("qwen/qwen3.8-27b")
+}).superRefine((env, ctx) => {
+  if (env.BACKGROUND_REMOVAL_PROVIDER === "self-hosted" && !env.SELF_HOSTED_BG_REMOVAL_URL) {
+    ctx.addIssue({
+      code: z2.ZodIssueCode.custom,
+      path: ["SELF_HOSTED_BG_REMOVAL_URL"],
+      message: "SELF_HOSTED_BG_REMOVAL_URL is required when BACKGROUND_REMOVAL_PROVIDER is self-hosted"
+    });
+  }
+});
+var cached2;
+function withoutBlanks2(source) {
+  const out = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === "string" && value.trim() !== "") out[key] = value;
+  }
+  return out;
+}
+function loadImageAiEnv() {
+  if (cached2) return cached2;
+  const parsed = envSchema2.safeParse(withoutBlanks2(process.env));
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid image-ai environment configuration: ${issues}`);
+  }
+  cached2 = parsed.data;
+  return cached2;
+}
+
+// server/image-ai/providers/self-hosted-bg-removal.service.ts
+var SelfHostedBgRemovalService = class {
+  baseUrl;
+  timeoutMs;
+  constructor(baseUrl, timeoutMs) {
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.timeoutMs = timeoutMs;
+  }
+  async warmUp() {
+    await fetch(`${this.baseUrl}/`, { signal: AbortSignal.timeout(this.timeoutMs) });
+  }
+  async removeBackground(input, mimeType) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const form = new FormData();
+      form.append("file", new Blob([new Uint8Array(input)], { type: mimeType }), "photo");
+      const response = await fetch(`${this.baseUrl}/remove-background`, {
+        method: "POST",
+        body: form,
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new BackgroundRemovalError(
+          "provider_error",
+          `Self-hosted background removal returned ${response.status}`,
+          detail.slice(0, 500)
+        );
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch (err) {
+      if (err instanceof BackgroundRemovalError) throw err;
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new BackgroundRemovalError(
+          "timeout",
+          `Self-hosted background removal did not respond within ${this.timeoutMs}ms`,
+          err
+        );
+      }
+      throw new BackgroundRemovalError("provider_error", "Self-hosted background removal request failed", err);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+};
+
+// server/image-ai/providers/disabled.service.ts
+var DisabledBackgroundRemovalService = class {
+  async removeBackground() {
+    throw new BackgroundRemovalError("not_configured", "Background removal is not configured");
+  }
+};
+
+// server/image-ai/factory.ts
+var cachedSelfHosted;
+function buildSelfHostedService() {
+  const env = loadImageAiEnv();
+  if (!env.SELF_HOSTED_BG_REMOVAL_URL) return null;
+  return new SelfHostedBgRemovalService(env.SELF_HOSTED_BG_REMOVAL_URL, env.SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS);
+}
+function getSelfHostedBgRemoval() {
+  if (cachedSelfHosted === void 0) cachedSelfHosted = buildSelfHostedService();
+  return cachedSelfHosted;
+}
+function buildBackgroundRemovalService() {
+  const env = loadImageAiEnv();
+  if (env.BACKGROUND_REMOVAL_PROVIDER === "self-hosted") {
+    const service = getSelfHostedBgRemoval();
+    if (service) return service;
+  }
+  return new DisabledBackgroundRemovalService();
+}
+
 // server/routes/health.ts
 var BASE_REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET"];
 var OPTIONAL_EXTRA = [
@@ -160,6 +289,18 @@ router.get("/", (_req, res) => {
     configValid = false;
     configError = err.message;
   }
+  let backgroundRemovalValid = true;
+  let backgroundRemovalError;
+  let backgroundRemovalProvider = "none";
+  let selfHostedBgRemovalUrl;
+  try {
+    const imageAiEnv = loadImageAiEnv();
+    backgroundRemovalProvider = imageAiEnv.BACKGROUND_REMOVAL_PROVIDER;
+    selfHostedBgRemovalUrl = imageAiEnv.SELF_HOSTED_BG_REMOVAL_URL;
+  } catch (err) {
+    backgroundRemovalValid = false;
+    backgroundRemovalError = err.message;
+  }
   res.json({
     status: missing.length === 0 && configValid ? "ok" : "misconfigured",
     version: "1.0.0",
@@ -170,6 +311,12 @@ router.get("/", (_req, res) => {
       groqKeys: collectGroqApiKeys(process.env).length,
       valid: configValid,
       ...configError ? { error: configError } : {}
+    },
+    backgroundRemoval: {
+      provider: backgroundRemovalProvider,
+      selfHostedUrl: selfHostedBgRemovalUrl,
+      valid: backgroundRemovalValid,
+      ...backgroundRemovalError ? { error: backgroundRemovalError } : {}
     }
   });
 });
@@ -177,7 +324,7 @@ var health_default = router;
 
 // server/routes/auth.ts
 import { Router as Router2 } from "express";
-import { z as z2 } from "zod";
+import { z as z3 } from "zod";
 
 // server/middleware/asyncRoute.ts
 function asyncRoute(handler2) {
@@ -188,14 +335,14 @@ function asyncRoute(handler2) {
 
 // server/lib/supabase.ts
 import { createClient } from "@supabase/supabase-js";
-var cached2;
+var cached3;
 function getSupabase() {
-  if (cached2) return cached2;
+  if (cached3) return cached3;
   const env = loadEnv();
-  cached2 = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  cached3 = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
-  return cached2;
+  return cached3;
 }
 function getStorageBucket() {
   return loadEnv().SUPABASE_STORAGE_BUCKET;
@@ -524,14 +671,14 @@ function verifyPassword(password, stored) {
 
 // server/routes/auth.ts
 var router2 = Router2();
-var RequestOtpSchema = z2.object({
-  email: z2.string().email("Enter a valid email address")
+var RequestOtpSchema = z3.object({
+  email: z3.string().email("Enter a valid email address")
 });
 var SELF_SERVE_ROLES = ["artisan", "buyer"];
-var VerifyOtpSchema = z2.object({
-  email: z2.string().email(),
-  otp: z2.string().regex(new RegExp(`^\\d{${OTP_LENGTH}}$`), `OTP must be ${OTP_LENGTH} digits`),
-  intendedRole: z2.enum(SELF_SERVE_ROLES).optional().default("artisan")
+var VerifyOtpSchema = z3.object({
+  email: z3.string().email(),
+  otp: z3.string().regex(new RegExp(`^\\d{${OTP_LENGTH}}$`), `OTP must be ${OTP_LENGTH} digits`),
+  intendedRole: z3.enum(SELF_SERVE_ROLES).optional().default("artisan")
 });
 router2.post(
   "/request-otp",
@@ -570,9 +717,9 @@ router2.post(
     });
   })
 );
-var AdminLoginSchema = z2.object({
-  email: z2.string().email(),
-  password: z2.string().min(1)
+var AdminLoginSchema = z3.object({
+  email: z3.string().email(),
+  password: z3.string().min(1)
 });
 var LOGIN_MAX_ATTEMPTS = 5;
 var LOGIN_LOCKOUT_MINUTES = 15;
@@ -703,7 +850,7 @@ var auth_default = router2;
 
 // server/routes/users.ts
 import { Router as Router3 } from "express";
-import { z as z3 } from "zod";
+import { z as z4 } from "zod";
 
 // server/middleware/auth.ts
 function requireAuth(req, res, next) {
@@ -855,13 +1002,13 @@ router3.get(
     res.json(toUserProfile(data));
   })
 );
-var UpdateUserSchema = z3.object({
-  displayName: z3.string().max(80).optional(),
-  shopName: z3.string().max(120).optional(),
-  region: z3.string().refine(isIndianRegion, "Unsupported region").optional(),
-  whatsappNumber: z3.string().refine((value) => value === "" || isValidWhatsAppNumber(value), "Enter a valid phone number").optional(),
-  pincode: z3.string().refine((value) => value === "" || isValidIndianPincode(value), "Enter a valid 6-digit pincode").optional(),
-  language: z3.string().refine(isAppLanguage, "Unsupported language").optional()
+var UpdateUserSchema = z4.object({
+  displayName: z4.string().max(80).optional(),
+  shopName: z4.string().max(120).optional(),
+  region: z4.string().refine(isIndianRegion, "Unsupported region").optional(),
+  whatsappNumber: z4.string().refine((value) => value === "" || isValidWhatsAppNumber(value), "Enter a valid phone number").optional(),
+  pincode: z4.string().refine((value) => value === "" || isValidIndianPincode(value), "Enter a valid 6-digit pincode").optional(),
+  language: z4.string().refine(isAppLanguage, "Unsupported language").optional()
 });
 router3.patch(
   "/me",
@@ -896,7 +1043,7 @@ var users_default = router3;
 
 // server/routes/products.ts
 import { Router as Router4 } from "express";
-import { z as z5 } from "zod";
+import { z as z6 } from "zod";
 
 // server/middleware/requireRole.ts
 function requireRole(...allowed) {
@@ -973,37 +1120,37 @@ var MalformedModelResponseError = class extends VoiceAiError {
 
 // server/voice-ai/config/env.ts
 import "dotenv/config";
-import { z as z4 } from "zod";
-var envSchema2 = z4.object({
-  VOICE_AI_PROVIDER: z4.enum(["groq", "gemini"]).default("groq"),
-  GROQ_API_KEY: z4.string().optional(),
-  GROQ_API_KEY_2: z4.string().optional(),
-  GROQ_API_KEY_3: z4.string().optional(),
-  GROQ_FALLBACK_API_KEYS: z4.string().optional(),
-  GROQ_STT_MODEL: z4.string().default("whisper-large-v3"),
-  GROQ_LLM_MODEL: z4.string().default("openai/gpt-oss-120b"),
-  GROQ_LLM_FALLBACK_MODEL: z4.string().default("openai/gpt-oss-20b"),
-  GEMINI_API_KEY: z4.string().optional(),
-  GEMINI_TRANSCRIBE_MODEL: z4.string().default("gemini-3.6-flash"),
-  GEMINI_FLASH_MODEL: z4.string().default("gemini-3.6-flash")
+import { z as z5 } from "zod";
+var envSchema3 = z5.object({
+  VOICE_AI_PROVIDER: z5.enum(["groq", "gemini"]).default("groq"),
+  GROQ_API_KEY: z5.string().optional(),
+  GROQ_API_KEY_2: z5.string().optional(),
+  GROQ_API_KEY_3: z5.string().optional(),
+  GROQ_FALLBACK_API_KEYS: z5.string().optional(),
+  GROQ_STT_MODEL: z5.string().default("whisper-large-v3"),
+  GROQ_LLM_MODEL: z5.string().default("openai/gpt-oss-120b"),
+  GROQ_LLM_FALLBACK_MODEL: z5.string().default("openai/gpt-oss-20b"),
+  GEMINI_API_KEY: z5.string().optional(),
+  GEMINI_TRANSCRIBE_MODEL: z5.string().default("gemini-3.6-flash"),
+  GEMINI_FLASH_MODEL: z5.string().default("gemini-3.6-flash")
 }).superRefine((env, ctx) => {
   if (env.VOICE_AI_PROVIDER === "groq" && !env.GROQ_API_KEY) {
     ctx.addIssue({
-      code: z4.ZodIssueCode.custom,
+      code: z5.ZodIssueCode.custom,
       path: ["GROQ_API_KEY"],
       message: "GROQ_API_KEY is required when VOICE_AI_PROVIDER is groq"
     });
   }
   if (env.VOICE_AI_PROVIDER === "gemini" && !env.GEMINI_API_KEY) {
     ctx.addIssue({
-      code: z4.ZodIssueCode.custom,
+      code: z5.ZodIssueCode.custom,
       path: ["GEMINI_API_KEY"],
       message: "GEMINI_API_KEY is required when VOICE_AI_PROVIDER is gemini"
     });
   }
 });
-var cached3;
-function withoutBlanks2(source) {
+var cached4;
+function withoutBlanks3(source) {
   const out = {};
   for (const [key, value] of Object.entries(source)) {
     if (typeof value === "string" && value.trim() !== "") out[key] = value;
@@ -1011,14 +1158,14 @@ function withoutBlanks2(source) {
   return out;
 }
 function loadEnv2() {
-  if (cached3) return cached3;
-  const parsed = envSchema2.safeParse(withoutBlanks2(process.env));
+  if (cached4) return cached4;
+  const parsed = envSchema3.safeParse(withoutBlanks3(process.env));
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     throw new Error(`Invalid voice-ai environment configuration: ${issues}`);
   }
-  cached3 = parsed.data;
-  return cached3;
+  cached4 = parsed.data;
+  return cached4;
 }
 
 // server/voice-ai/pipeline/voice-product-pipeline.ts
@@ -10528,22 +10675,22 @@ function toProduct(row) {
     updatedAt: row.updated_at
   };
 }
-var ProductInputSchema = z5.object({
-  category: z5.string().min(1),
-  material: z5.string().refine(isProductMaterial, "Unsupported material").optional(),
-  titleEn: z5.string().min(1),
-  titleLocal: z5.string().min(1),
-  descriptionEn: z5.string().min(1),
-  descriptionLocal: z5.string().min(1),
-  localLanguage: z5.string().min(2).max(8),
-  imageUrl: z5.string().url(),
-  price: z5.number().positive(),
-  materialCost: z5.number().positive(),
-  technique: z5.string().trim().min(1).max(120).optional(),
-  timeTaken: z5.string().trim().min(1).max(60).optional(),
-  giTag: z5.string().trim().min(1).max(120).optional(),
-  careInstructions: z5.string().trim().min(1).max(500).optional(),
-  weightKg: z5.number().positive().max(1e3).optional()
+var ProductInputSchema = z6.object({
+  category: z6.string().min(1),
+  material: z6.string().refine(isProductMaterial, "Unsupported material").optional(),
+  titleEn: z6.string().min(1),
+  titleLocal: z6.string().min(1),
+  descriptionEn: z6.string().min(1),
+  descriptionLocal: z6.string().min(1),
+  localLanguage: z6.string().min(2).max(8),
+  imageUrl: z6.string().url(),
+  price: z6.number().positive(),
+  materialCost: z6.number().positive(),
+  technique: z6.string().trim().min(1).max(120).optional(),
+  timeTaken: z6.string().trim().min(1).max(60).optional(),
+  giTag: z6.string().trim().min(1).max(120).optional(),
+  careInstructions: z6.string().trim().min(1).max(500).optional(),
+  weightKg: z6.number().positive().max(1e3).optional()
 });
 function toRow(input) {
   const row = {};
@@ -10663,16 +10810,16 @@ router4.get(
 var MAX_MARKETPLACE_CANDIDATES = 1e3;
 var DEFAULT_PAGE_SIZE = 12;
 var MAX_PAGE_SIZE = 48;
-var MarketplaceQuerySchema = z5.object({
-  q: z5.string().trim().max(200).optional(),
-  category: z5.string().optional(),
-  material: z5.string().refine(isProductMaterial, "Unsupported material").optional(),
-  region: z5.string().refine(isIndianRegion, "Unsupported region").optional(),
-  minPrice: z5.coerce.number().nonnegative().optional(),
-  maxPrice: z5.coerce.number().positive().optional(),
-  sort: z5.enum(["newest", "price_asc", "price_desc"]).default("newest"),
-  page: z5.coerce.number().int().positive().default(1),
-  limit: z5.coerce.number().int().positive().max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE)
+var MarketplaceQuerySchema = z6.object({
+  q: z6.string().trim().max(200).optional(),
+  category: z6.string().optional(),
+  material: z6.string().refine(isProductMaterial, "Unsupported material").optional(),
+  region: z6.string().refine(isIndianRegion, "Unsupported region").optional(),
+  minPrice: z6.coerce.number().nonnegative().optional(),
+  maxPrice: z6.coerce.number().positive().optional(),
+  sort: z6.enum(["newest", "price_asc", "price_desc"]).default("newest"),
+  page: z6.coerce.number().int().positive().default(1),
+  limit: z6.coerce.number().int().positive().max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE)
 });
 function matchesSearch(row, q) {
   const needle = q.toLowerCase();
@@ -10791,8 +10938,8 @@ router4.patch(
     res.json({ success: true });
   })
 );
-var SetStockSchema = z5.object({
-  inStock: z5.boolean()
+var SetStockSchema = z6.object({
+  inStock: z6.boolean()
 });
 router4.patch(
   "/:id/stock",
@@ -10829,8 +10976,8 @@ router4.delete(
     res.json({ success: true });
   })
 );
-var RelocaliseSchema = z5.object({
-  language: z5.string().refine(isAppLanguage, "Unsupported language")
+var RelocaliseSchema = z6.object({
+  language: z6.string().refine(isAppLanguage, "Unsupported language")
 });
 router4.post(
   "/relocalise",
@@ -10951,137 +11098,6 @@ function resolveOwnStorageUrl(sourceUrl, bucket, uid) {
 
 // server/services/imageEnhancer.ts
 import sharp from "sharp";
-
-// server/image-ai/errors/image-ai.errors.ts
-var BackgroundRemovalError = class extends Error {
-  reason;
-  cause;
-  constructor(reason, message, cause) {
-    super(message);
-    this.name = "BackgroundRemovalError";
-    this.reason = reason;
-    this.cause = cause;
-  }
-};
-
-// server/image-ai/config/env.ts
-import "dotenv/config";
-import { z as z6 } from "zod";
-var envSchema3 = z6.object({
-  BACKGROUND_REMOVAL_PROVIDER: z6.enum(["self-hosted", "none"]).default("none"),
-  SELF_HOSTED_BG_REMOVAL_URL: z6.string().url().optional(),
-  SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(3e4),
-  CRAFT_CLASSIFIER_PROVIDERS: z6.string().default("groq,gemini,render"),
-  CRAFT_CLASSIFIER_URL: z6.string().url().default("https://kala-setu-image-classifier.onrender.com"),
-  CRAFT_CLASSIFIER_TIMEOUT_MS: z6.coerce.number().int().positive().default(6e3),
-  CRAFT_CLASSIFIER_RENDER_TIMEOUT_MS: z6.coerce.number().int().positive().default(2e4),
-  GEMINI_VISION_MODEL: z6.string().optional(),
-  GROQ_VISION_MODEL: z6.string().default("qwen/qwen3.6-27b"),
-  GROQ_VISION_FALLBACK_MODEL: z6.string().default("qwen/qwen3.8-27b")
-}).superRefine((env, ctx) => {
-  if (env.BACKGROUND_REMOVAL_PROVIDER === "self-hosted" && !env.SELF_HOSTED_BG_REMOVAL_URL) {
-    ctx.addIssue({
-      code: z6.ZodIssueCode.custom,
-      path: ["SELF_HOSTED_BG_REMOVAL_URL"],
-      message: "SELF_HOSTED_BG_REMOVAL_URL is required when BACKGROUND_REMOVAL_PROVIDER is self-hosted"
-    });
-  }
-});
-var cached4;
-function withoutBlanks3(source) {
-  const out = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (typeof value === "string" && value.trim() !== "") out[key] = value;
-  }
-  return out;
-}
-function loadImageAiEnv() {
-  if (cached4) return cached4;
-  const parsed = envSchema3.safeParse(withoutBlanks3(process.env));
-  if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-    throw new Error(`Invalid image-ai environment configuration: ${issues}`);
-  }
-  cached4 = parsed.data;
-  return cached4;
-}
-
-// server/image-ai/providers/self-hosted-bg-removal.service.ts
-var SelfHostedBgRemovalService = class {
-  baseUrl;
-  timeoutMs;
-  constructor(baseUrl, timeoutMs) {
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
-    this.timeoutMs = timeoutMs;
-  }
-  async warmUp() {
-    await fetch(`${this.baseUrl}/`, { signal: AbortSignal.timeout(this.timeoutMs) });
-  }
-  async removeBackground(input, mimeType) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const form = new FormData();
-      form.append("file", new Blob([new Uint8Array(input)], { type: mimeType }), "photo");
-      const response = await fetch(`${this.baseUrl}/remove-background`, {
-        method: "POST",
-        body: form,
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new BackgroundRemovalError(
-          "provider_error",
-          `Self-hosted background removal returned ${response.status}`,
-          detail.slice(0, 500)
-        );
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    } catch (err) {
-      if (err instanceof BackgroundRemovalError) throw err;
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new BackgroundRemovalError(
-          "timeout",
-          `Self-hosted background removal did not respond within ${this.timeoutMs}ms`,
-          err
-        );
-      }
-      throw new BackgroundRemovalError("provider_error", "Self-hosted background removal request failed", err);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-};
-
-// server/image-ai/providers/disabled.service.ts
-var DisabledBackgroundRemovalService = class {
-  async removeBackground() {
-    throw new BackgroundRemovalError("not_configured", "Background removal is not configured");
-  }
-};
-
-// server/image-ai/factory.ts
-var cachedSelfHosted;
-function buildSelfHostedService() {
-  const env = loadImageAiEnv();
-  if (!env.SELF_HOSTED_BG_REMOVAL_URL) return null;
-  return new SelfHostedBgRemovalService(env.SELF_HOSTED_BG_REMOVAL_URL, env.SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS);
-}
-function getSelfHostedBgRemoval() {
-  if (cachedSelfHosted === void 0) cachedSelfHosted = buildSelfHostedService();
-  return cachedSelfHosted;
-}
-function buildBackgroundRemovalService() {
-  const env = loadImageAiEnv();
-  if (env.BACKGROUND_REMOVAL_PROVIDER === "self-hosted") {
-    const service = getSelfHostedBgRemoval();
-    if (service) return service;
-  }
-  return new DisabledBackgroundRemovalService();
-}
-
-// server/services/imageEnhancer.ts
 var MAX_IMAGE_DIMENSION = 1600;
 var JPEG_QUALITY = 86;
 var UnsupportedImageError = class extends Error {
