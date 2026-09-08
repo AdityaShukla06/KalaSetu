@@ -7,6 +7,7 @@ const envSchema = z
     REMOVE_BG_API_KEY: z.string().optional(),
     SELF_HOSTED_BG_REMOVAL_URL: z.string().url().optional(),
     BACKGROUND_REMOVAL_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+    SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
 
     CRAFT_CLASSIFIER_PROVIDERS: z.string().default("groq,gemini,render"),
     CRAFT_CLASSIFIER_URL: z.string().url().default("https://kala-setu-image-classifier.onrender.com"),

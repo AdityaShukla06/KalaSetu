@@ -18,11 +18,15 @@ const router = Router();
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 function warmExternalAiServices(): void {
-  const render = getRenderClassifier();
-  if (render) render.warmUp().catch(() => {});
+  try {
+    const render = getRenderClassifier();
+    if (render) render.warmUp().catch(() => {});
 
-  const selfHostedBgRemoval = getSelfHostedBgRemoval();
-  if (selfHostedBgRemoval) selfHostedBgRemoval.warmUp().catch(() => {});
+    const selfHostedBgRemoval = getSelfHostedBgRemoval();
+    if (selfHostedBgRemoval) selfHostedBgRemoval.warmUp().catch(() => {});
+  } catch {
+    return;
+  }
 }
 
 async function storeImage(buffer: Buffer, path: string, contentType: string): Promise<string> {

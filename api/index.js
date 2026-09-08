@@ -10972,6 +10972,7 @@ var envSchema3 = z6.object({
   REMOVE_BG_API_KEY: z6.string().optional(),
   SELF_HOSTED_BG_REMOVAL_URL: z6.string().url().optional(),
   BACKGROUND_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(8e3),
+  SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(3e4),
   CRAFT_CLASSIFIER_PROVIDERS: z6.string().default("groq,gemini,render"),
   CRAFT_CLASSIFIER_URL: z6.string().url().default("https://kala-setu-image-classifier.onrender.com"),
   CRAFT_CLASSIFIER_TIMEOUT_MS: z6.coerce.number().int().positive().default(6e3),
@@ -11145,7 +11146,7 @@ var cachedSelfHosted;
 function buildSelfHostedService() {
   const env = loadImageAiEnv();
   if (!env.SELF_HOSTED_BG_REMOVAL_URL) return null;
-  return new SelfHostedBgRemovalService(env.SELF_HOSTED_BG_REMOVAL_URL, env.BACKGROUND_REMOVAL_TIMEOUT_MS);
+  return new SelfHostedBgRemovalService(env.SELF_HOSTED_BG_REMOVAL_URL, env.SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS);
 }
 function getSelfHostedBgRemoval() {
   if (cachedSelfHosted === void 0) cachedSelfHosted = buildSelfHostedService();
@@ -11603,12 +11604,16 @@ async function classifyWithChain(providers, image, mimeType) {
 var router5 = Router5();
 var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 function warmExternalAiServices() {
-  const render = getRenderClassifier();
-  if (render) render.warmUp().catch(() => {
-  });
-  const selfHostedBgRemoval = getSelfHostedBgRemoval();
-  if (selfHostedBgRemoval) selfHostedBgRemoval.warmUp().catch(() => {
-  });
+  try {
+    const render = getRenderClassifier();
+    if (render) render.warmUp().catch(() => {
+    });
+    const selfHostedBgRemoval = getSelfHostedBgRemoval();
+    if (selfHostedBgRemoval) selfHostedBgRemoval.warmUp().catch(() => {
+    });
+  } catch {
+    return;
+  }
 }
 async function storeImage(buffer, path, contentType) {
   const supabase = getSupabase();

@@ -10,7 +10,7 @@ let cachedSelfHosted: SelfHostedBgRemovalService | null | undefined;
 function buildSelfHostedService(): SelfHostedBgRemovalService | null {
   const env = loadImageAiEnv();
   if (!env.SELF_HOSTED_BG_REMOVAL_URL) return null;
-  return new SelfHostedBgRemovalService(env.SELF_HOSTED_BG_REMOVAL_URL, env.BACKGROUND_REMOVAL_TIMEOUT_MS);
+  return new SelfHostedBgRemovalService(env.SELF_HOSTED_BG_REMOVAL_URL, env.SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS);
 }
 
 export function getSelfHostedBgRemoval(): SelfHostedBgRemovalService | null {
