@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { SelfHostedBgRemovalService } from "./self-hosted-bg-removal.service";
-import { BackgroundRemovalError } from "../errors/image-ai.errors";
 
 describe("SelfHostedBgRemovalService", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("posts the image as multipart form data and returns the response bytes", async () => {
@@ -16,6 +16,7 @@ describe("SelfHostedBgRemovalService", () => {
     const result = await service.removeBackground(Buffer.from("fake-image"), "image/png");
 
     expect(Buffer.compare(result, Buffer.from(cutoutBytes))).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://bg-removal.onrender.com/remove-background",
       expect.objectContaining({ method: "POST" }),
@@ -24,20 +25,42 @@ describe("SelfHostedBgRemovalService", () => {
     expect(init.body).toBeInstanceOf(FormData);
   });
 
-  it("throws a BackgroundRemovalError with reason provider_error for a non-2xx response", async () => {
+  it("retries once and succeeds if the second attempt works", async () => {
+    vi.useFakeTimers();
+    const cutoutBytes = new Uint8Array([9, 9, 9]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
+      .mockResolvedValueOnce(new Response(cutoutBytes, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SelfHostedBgRemovalService("https://bg-removal.onrender.com", 5000);
+    const resultPromise = service.removeBackground(Buffer.from("fake-image"), "image/png");
+
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(Buffer.compare(result, Buffer.from(cutoutBytes))).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws a BackgroundRemovalError with reason provider_error after both attempts fail", async () => {
+    vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("bad request", { status: 400 })));
 
     const service = new SelfHostedBgRemovalService("https://bg-removal.onrender.com", 5000);
-
-    await expect(service.removeBackground(Buffer.from("fake-image"), "image/png")).rejects.toBeInstanceOf(
-      BackgroundRemovalError,
-    );
-    await expect(service.removeBackground(Buffer.from("fake-image"), "image/png")).rejects.toMatchObject({
+    const resultPromise = service.removeBackground(Buffer.from("fake-image"), "image/png");
+    const expectation = expect(resultPromise).rejects.toMatchObject({
       reason: "provider_error",
     });
+
+    await vi.runAllTimersAsync();
+    await expectation;
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("throws a timeout error when the request is aborted", async () => {
+  it("throws a timeout error when every attempt is aborted", async () => {
+    vi.useFakeTimers();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(() => {
@@ -48,10 +71,13 @@ describe("SelfHostedBgRemovalService", () => {
     );
 
     const service = new SelfHostedBgRemovalService("https://bg-removal.onrender.com", 5000);
-
-    await expect(service.removeBackground(Buffer.from("fake-image"), "image/png")).rejects.toMatchObject({
+    const resultPromise = service.removeBackground(Buffer.from("fake-image"), "image/png");
+    const expectation = expect(resultPromise).rejects.toMatchObject({
       reason: "timeout",
     });
+
+    await vi.runAllTimersAsync();
+    await expectation;
   });
 
   it("strips trailing slashes from the base URL before building the request", async () => {

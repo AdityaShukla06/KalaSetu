@@ -144,7 +144,7 @@ import { z as z2 } from "zod";
 var envSchema2 = z2.object({
   BACKGROUND_REMOVAL_PROVIDER: z2.enum(["self-hosted", "none"]).default("none"),
   SELF_HOSTED_BG_REMOVAL_URL: z2.string().url().optional(),
-  SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS: z2.coerce.number().int().positive().default(3e4),
+  SELF_HOSTED_BG_REMOVAL_TIMEOUT_MS: z2.coerce.number().int().positive().default(22e3),
   CRAFT_CLASSIFIER_PROVIDERS: z2.string().default("groq,gemini,render"),
   CRAFT_CLASSIFIER_URL: z2.string().url().default("https://kala-setu-image-classifier.onrender.com"),
   CRAFT_CLASSIFIER_TIMEOUT_MS: z2.coerce.number().int().positive().default(6e3),
@@ -181,6 +181,11 @@ function loadImageAiEnv() {
 }
 
 // server/image-ai/providers/self-hosted-bg-removal.service.ts
+var MAX_ATTEMPTS = 2;
+var RETRY_DELAY_MS = 1e3;
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 var SelfHostedBgRemovalService = class {
   baseUrl;
   timeoutMs;
@@ -192,6 +197,24 @@ var SelfHostedBgRemovalService = class {
     await fetch(`${this.baseUrl}/`, { signal: AbortSignal.timeout(this.timeoutMs) });
   }
   async removeBackground(input, mimeType) {
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return await this.attemptRemoveBackground(input, mimeType);
+      } catch (err) {
+        lastError = err;
+        if (attempt < MAX_ATTEMPTS) {
+          console.warn("[image-ai] self-hosted background removal attempt failed, retrying", {
+            attempt,
+            detail: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200)
+          });
+          await sleep(RETRY_DELAY_MS);
+        }
+      }
+    }
+    throw lastError;
+  }
+  async attemptRemoveBackground(input, mimeType) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
