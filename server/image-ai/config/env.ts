@@ -3,8 +3,9 @@ import { z } from "zod";
 
 const envSchema = z
   .object({
-    BACKGROUND_REMOVAL_PROVIDER: z.enum(["remove-bg", "none"]).default("none"),
+    BACKGROUND_REMOVAL_PROVIDER: z.string().default("none"),
     REMOVE_BG_API_KEY: z.string().optional(),
+    SELF_HOSTED_BG_REMOVAL_URL: z.string().url().optional(),
     BACKGROUND_REMOVAL_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
 
     CRAFT_CLASSIFIER_PROVIDERS: z.string().default("groq,gemini,render"),
@@ -16,11 +17,20 @@ const envSchema = z
     GROQ_VISION_FALLBACK_MODEL: z.string().default("qwen/qwen3.8-27b"),
   })
   .superRefine((env, ctx) => {
-    if (env.BACKGROUND_REMOVAL_PROVIDER === "remove-bg" && !env.REMOVE_BG_API_KEY) {
+    const providers = env.BACKGROUND_REMOVAL_PROVIDER.split(",").map((entry) => entry.trim());
+
+    if (providers.includes("remove-bg") && !env.REMOVE_BG_API_KEY) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["REMOVE_BG_API_KEY"],
-        message: "REMOVE_BG_API_KEY is required when BACKGROUND_REMOVAL_PROVIDER is remove-bg",
+        message: "REMOVE_BG_API_KEY is required when BACKGROUND_REMOVAL_PROVIDER includes remove-bg",
+      });
+    }
+    if (providers.includes("self-hosted") && !env.SELF_HOSTED_BG_REMOVAL_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["SELF_HOSTED_BG_REMOVAL_URL"],
+        message: "SELF_HOSTED_BG_REMOVAL_URL is required when BACKGROUND_REMOVAL_PROVIDER includes self-hosted",
       });
     }
   });

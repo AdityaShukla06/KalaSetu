@@ -12,14 +12,17 @@ import { applyStudioAdjustments, StudioOptions } from "../services/imageStudio";
 import { prepareForClassification } from "../services/classifierInput";
 import { buildCraftClassifierChain, getRenderClassifier } from "../image-ai/classification/factory";
 import { classifyWithChain } from "../image-ai/classification/chain";
+import { getSelfHostedBgRemoval } from "../image-ai";
 
 const router = Router();
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
-function warmCraftClassifier(): void {
+function warmExternalAiServices(): void {
   const render = getRenderClassifier();
-  if (!render) return;
-  render.warmUp().catch(() => {});
+  if (render) render.warmUp().catch(() => {});
+
+  const selfHostedBgRemoval = getSelfHostedBgRemoval();
+  if (selfHostedBgRemoval) selfHostedBgRemoval.warmUp().catch(() => {});
 }
 
 async function storeImage(buffer: Buffer, path: string, contentType: string): Promise<string> {
@@ -56,7 +59,7 @@ router.post(
   requireRole("artisan"),
   asyncRoute(async (req: Request, res: Response): Promise<void> => {
     try {
-      warmCraftClassifier();
+      warmExternalAiServices();
 
       const raw = await readRawBody(req, MAX_IMAGE_BYTES);
       if (raw.length === 0) {

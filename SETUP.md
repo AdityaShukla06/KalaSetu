@@ -50,11 +50,14 @@ GROQ_FALLBACK_API_KEYS=gsk_fourth...,gsk_fifth...
 
 ## 3. Background removal (optional)
 
-Powers the "Remove background" button in the photo enhancement studio. Everything else in the studio (brightness, contrast, sharpen, crop, background fill/blur) runs locally in `sharp` and needs no key.
+Powers the "Remove background" button in the photo enhancement studio. Everything else in the studio (brightness, contrast, sharpen, crop, background fill/blur) runs locally in `sharp` and needs no key, and is deliberately deterministic rather than model-based; a marketplace photo has to keep showing the artisan's actual product.
 
-1. Go to [remove.bg](https://www.remove.bg), create an account, and open your account/API settings to get an API key.
-2. Set `BACKGROUND_REMOVAL_PROVIDER=remove-bg` and put the key in `REMOVE_BG_API_KEY`.
-3. **Free tier:** new accounts get 50 free API calls, at preview resolution (up to 0.25 megapixels). Beyond that it's pay-as-you-go credits. Check your remaining calls on your remove.bg account dashboard before demo day, since the exact allowance is set by remove.bg and can change.
+Two providers can be configured, tried in order, same comma-separated pattern as `CRAFT_CLASSIFIER_PROVIDERS` in section 4:
+
+1. **remove-bg**, using [remove.bg](https://www.remove.bg)'s API. Best cutout quality of the two. Create an account, get an API key from your account/API settings, set `REMOVE_BG_API_KEY`. **Free tier:** new accounts get 50 free API calls, at preview resolution (up to 0.25 megapixels). Beyond that it's pay-as-you-go credits; check your remaining calls on your remove.bg dashboard before demo day.
+2. **self-hosted**, a small model server you deploy yourself; see [`bg-removal-service/README.md`](bg-removal-service/README.md) for what it runs and how to deploy it to Render. No quota, no per-call cost, but real trade-offs measured against remove.bg, not assumed: it uses `u2netp`, the only one of three real open models actually tested that fits Render's free 512MB tier (measured peak 359MB; the two better-quality alternatives measured 938MB and 2.7GB respectively, the latter also taking 25+ seconds per photo, too slow to be a usable synchronous fallback regardless of hosting budget). It handles plain and simply-cluttered backgrounds well, but like every open model tested, fails on a busy patterned backdrop that fills most of the frame, exactly the kind of photo remove.bg's larger proprietary model exists to handle. Set `SELF_HOSTED_BG_REMOVAL_URL` to your deployed instance.
+
+Set `BACKGROUND_REMOVAL_PROVIDER=remove-bg,self-hosted` to use both, remove.bg first and the self-hosted tier only once remove.bg fails or its quota is exhausted, so an artisan never sees "background removal unavailable" just because the month's free remove.bg calls ran out. Using only one is fine too: `BACKGROUND_REMOVAL_PROVIDER=remove-bg` or `BACKGROUND_REMOVAL_PROVIDER=self-hosted` behaves exactly as a single provider always has here.
 
 **You can skip this entirely.** Leave `BACKGROUND_REMOVAL_PROVIDER=none` (the default) and the button reports background removal as unavailable; the rest of the photo pipeline, and the rest of the app, is unaffected.
 
@@ -117,7 +120,7 @@ To check the API is alive: `http://localhost:5173/api/health` should return `{"s
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `JWT_SECRET`
    - `GROQ_API_KEY`
-   - `BACKGROUND_REMOVAL_PROVIDER` and `REMOVE_BG_API_KEY` (only if you did step 3)
+   - `BACKGROUND_REMOVAL_PROVIDER`, `REMOVE_BG_API_KEY`, and/or `SELF_HOSTED_BG_REMOVAL_URL` (only if you did step 3)
    - `GEMINI_API_KEY` (only if you want the craft category suggestion's first tier, step 4)
    - `RESEND_API_KEY` (only if you did step 6)
    - `PUBLIC_APP_URL` (your deployed URL, so inquiry notification emails link back correctly)
@@ -168,7 +171,7 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 | Added more keys but it still runs out | All the keys belong to one Groq account | The daily quota is per account, not per key. Check `/api/health`'s `config.groqKeys` to confirm they were picked up, then confirm each key really is from a different account. |
 | Images 404 after upload | Storage bucket missing or private | Re-run `supabase/schema.sql`, then confirm `product-images` exists and is public. |
 | Category is never pre-selected after a photo | All three classifier tiers are unconfigured, disabled, or failed | Expected with no keys set at all, see section 4. Otherwise check the server logs for `craft classifier tier failed` to see which tiers were tried and why. |
-| "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, or the key is missing/wrong, or your remove.bg credits ran out | Check section 3, and your remove.bg dashboard for remaining credits. Everything else in the studio still works either way. |
+| "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, every configured provider is missing its key/URL, or all configured tiers failed | Check section 3. If both remove-bg and self-hosted are configured, check server logs for `background removal tier failed` to see which tier(s) failed and why before it gave up. Everything else in the studio still works either way. |
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |
 | Sign in returns 403 `account_deactivated` | An admin deactivated that artisan in the console | Reactivate them from `/internal/console/artisans`, or it's expected if that was intentional. |
 | `/internal/console` shows "Page not found" | You're not signed in as an admin | That's the intended behaviour for anyone else, not a bug. Seed or promote an admin account (see "Admin console for judging" above). |

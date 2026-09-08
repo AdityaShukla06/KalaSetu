@@ -10968,8 +10968,9 @@ var BackgroundRemovalError = class extends Error {
 import "dotenv/config";
 import { z as z6 } from "zod";
 var envSchema3 = z6.object({
-  BACKGROUND_REMOVAL_PROVIDER: z6.enum(["remove-bg", "none"]).default("none"),
+  BACKGROUND_REMOVAL_PROVIDER: z6.string().default("none"),
   REMOVE_BG_API_KEY: z6.string().optional(),
+  SELF_HOSTED_BG_REMOVAL_URL: z6.string().url().optional(),
   BACKGROUND_REMOVAL_TIMEOUT_MS: z6.coerce.number().int().positive().default(8e3),
   CRAFT_CLASSIFIER_PROVIDERS: z6.string().default("groq,gemini,render"),
   CRAFT_CLASSIFIER_URL: z6.string().url().default("https://kala-setu-image-classifier.onrender.com"),
@@ -10979,11 +10980,19 @@ var envSchema3 = z6.object({
   GROQ_VISION_MODEL: z6.string().default("qwen/qwen3.6-27b"),
   GROQ_VISION_FALLBACK_MODEL: z6.string().default("qwen/qwen3.8-27b")
 }).superRefine((env, ctx) => {
-  if (env.BACKGROUND_REMOVAL_PROVIDER === "remove-bg" && !env.REMOVE_BG_API_KEY) {
+  const providers = env.BACKGROUND_REMOVAL_PROVIDER.split(",").map((entry) => entry.trim());
+  if (providers.includes("remove-bg") && !env.REMOVE_BG_API_KEY) {
     ctx.addIssue({
       code: z6.ZodIssueCode.custom,
       path: ["REMOVE_BG_API_KEY"],
-      message: "REMOVE_BG_API_KEY is required when BACKGROUND_REMOVAL_PROVIDER is remove-bg"
+      message: "REMOVE_BG_API_KEY is required when BACKGROUND_REMOVAL_PROVIDER includes remove-bg"
+    });
+  }
+  if (providers.includes("self-hosted") && !env.SELF_HOSTED_BG_REMOVAL_URL) {
+    ctx.addIssue({
+      code: z6.ZodIssueCode.custom,
+      path: ["SELF_HOSTED_BG_REMOVAL_URL"],
+      message: "SELF_HOSTED_BG_REMOVAL_URL is required when BACKGROUND_REMOVAL_PROVIDER includes self-hosted"
     });
   }
 });
@@ -11053,6 +11062,77 @@ var RemoveBgService = class {
   }
 };
 
+// server/image-ai/providers/self-hosted-bg-removal.service.ts
+var SelfHostedBgRemovalService = class {
+  baseUrl;
+  timeoutMs;
+  constructor(baseUrl, timeoutMs) {
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.timeoutMs = timeoutMs;
+  }
+  async warmUp() {
+    await fetch(`${this.baseUrl}/`, { signal: AbortSignal.timeout(this.timeoutMs) });
+  }
+  async removeBackground(input, mimeType) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const form = new FormData();
+      form.append("file", new Blob([new Uint8Array(input)], { type: mimeType }), "photo");
+      const response = await fetch(`${this.baseUrl}/remove-background`, {
+        method: "POST",
+        body: form,
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new BackgroundRemovalError(
+          "provider_error",
+          `Self-hosted background removal returned ${response.status}`,
+          detail.slice(0, 500)
+        );
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch (err) {
+      if (err instanceof BackgroundRemovalError) throw err;
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new BackgroundRemovalError(
+          "timeout",
+          `Self-hosted background removal did not respond within ${this.timeoutMs}ms`,
+          err
+        );
+      }
+      throw new BackgroundRemovalError("provider_error", "Self-hosted background removal request failed", err);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+};
+
+// server/image-ai/providers/chained-bg-removal.service.ts
+var ChainedBackgroundRemovalService = class {
+  providers;
+  constructor(providers) {
+    this.providers = providers;
+  }
+  async removeBackground(input, mimeType) {
+    let lastError;
+    for (const provider of this.providers) {
+      try {
+        return await provider.removeBackground(input, mimeType);
+      } catch (err) {
+        lastError = err;
+        console.warn("[image-ai] background removal tier failed, trying the next one", {
+          detail: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200)
+        });
+      }
+    }
+    if (lastError instanceof BackgroundRemovalError) throw lastError;
+    throw new BackgroundRemovalError("provider_error", "All background removal providers failed", lastError);
+  }
+};
+
 // server/image-ai/providers/disabled.service.ts
 var DisabledBackgroundRemovalService = class {
   async removeBackground() {
@@ -11061,12 +11141,34 @@ var DisabledBackgroundRemovalService = class {
 };
 
 // server/image-ai/factory.ts
+var cachedSelfHosted;
+function buildSelfHostedService() {
+  const env = loadImageAiEnv();
+  if (!env.SELF_HOSTED_BG_REMOVAL_URL) return null;
+  return new SelfHostedBgRemovalService(env.SELF_HOSTED_BG_REMOVAL_URL, env.BACKGROUND_REMOVAL_TIMEOUT_MS);
+}
+function getSelfHostedBgRemoval() {
+  if (cachedSelfHosted === void 0) cachedSelfHosted = buildSelfHostedService();
+  return cachedSelfHosted;
+}
 function buildBackgroundRemovalService() {
   const env = loadImageAiEnv();
-  if (env.BACKGROUND_REMOVAL_PROVIDER === "remove-bg" && env.REMOVE_BG_API_KEY) {
-    return new RemoveBgService(env.REMOVE_BG_API_KEY, env.BACKGROUND_REMOVAL_TIMEOUT_MS);
+  const requested = env.BACKGROUND_REMOVAL_PROVIDER.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  const services = [];
+  for (const provider of requested) {
+    if (provider === "remove-bg") {
+      if (!env.REMOVE_BG_API_KEY) continue;
+      services.push(new RemoveBgService(env.REMOVE_BG_API_KEY, env.BACKGROUND_REMOVAL_TIMEOUT_MS));
+      continue;
+    }
+    if (provider === "self-hosted") {
+      const service = getSelfHostedBgRemoval();
+      if (service) services.push(service);
+    }
   }
-  return new DisabledBackgroundRemovalService();
+  if (services.length === 0) return new DisabledBackgroundRemovalService();
+  if (services.length === 1) return services[0];
+  return new ChainedBackgroundRemovalService(services);
 }
 
 // server/services/imageEnhancer.ts
@@ -11500,10 +11602,12 @@ async function classifyWithChain(providers, image, mimeType) {
 // server/routes/images.ts
 var router5 = Router5();
 var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-function warmCraftClassifier() {
+function warmExternalAiServices() {
   const render = getRenderClassifier();
-  if (!render) return;
-  render.warmUp().catch(() => {
+  if (render) render.warmUp().catch(() => {
+  });
+  const selfHostedBgRemoval = getSelfHostedBgRemoval();
+  if (selfHostedBgRemoval) selfHostedBgRemoval.warmUp().catch(() => {
   });
 }
 async function storeImage(buffer, path, contentType) {
@@ -11535,7 +11639,7 @@ router5.post(
   requireRole("artisan"),
   asyncRoute(async (req, res) => {
     try {
-      warmCraftClassifier();
+      warmExternalAiServices();
       const raw = await readRawBody(req, MAX_IMAGE_BYTES);
       if (raw.length === 0) {
         res.status(400).json({ error: "No image data provided" });
