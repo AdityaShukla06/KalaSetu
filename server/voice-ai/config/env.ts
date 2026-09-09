@@ -16,6 +16,25 @@ const envSchema = z
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.6-flash"),
     GEMINI_FLASH_MODEL: z.string().default("gemini-3.6-flash"),
+
+    BHASHINI_USER_ID: z.string().optional(),
+    BHASHINI_UDYAT_KEY: z.string().optional(),
+    BHASHINI_INFERENCE_API_KEY: z.string().optional(),
+    BHASHINI_PIPELINE_ID: z.string().default("64392f96daac500b55c543cd"),
+    BHASHINI_CONFIG_URL: z
+      .string()
+      .url()
+      .default("https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipeline"),
+    BHASHINI_COMPUTE_URL: z
+      .string()
+      .url()
+      .default("https://dhruva-api.bhashini.gov.in/services/inference/pipeline"),
+    BHASHINI_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+    BHASHINI_MAX_AUDIO_BYTES: z.coerce.number().int().positive().default(6291456),
+    BHASHINI_STT_ENABLED: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
   })
   .superRefine((env, ctx) => {
     if (env.VOICE_AI_PROVIDER === "groq" && !env.GROQ_API_KEY) {

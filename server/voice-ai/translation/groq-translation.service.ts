@@ -9,6 +9,8 @@ import { VoiceAiEnv } from "../config/env";
 import { groqChat } from "../groq/chat";
 import { GroqKeyPool, collectGroqApiKeys } from "../groq/keyPool";
 
+const TRANSLATION_TIMEOUT_MS = 12000;
+
 export class GroqTranslationService implements TranslationService {
   private readonly keyPool: GroqKeyPool;
   private readonly model: string;
@@ -47,6 +49,7 @@ export class GroqTranslationService implements TranslationService {
         fallbackModel: this.fallbackModel,
         json: true,
         prompt: buildPrompt(text, sourceName, targetName),
+        timeoutMs: TRANSLATION_TIMEOUT_MS,
       });
     } catch (err) {
       throw new TranslationFailedError(
@@ -92,6 +95,7 @@ export class GroqTranslationService implements TranslationService {
         fallbackModel: this.fallbackModel,
         json: true,
         prompt: buildDetectPrompt(text, targetName, hintName),
+        timeoutMs: TRANSLATION_TIMEOUT_MS,
       });
     } catch (err) {
       throw new TranslationFailedError(`Translation into ${targetLanguage} failed`, err);

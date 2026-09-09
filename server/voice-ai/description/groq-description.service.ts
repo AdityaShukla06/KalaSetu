@@ -5,6 +5,9 @@ import { groqChat } from "../groq/chat";
 import { GroqKeyPool, collectGroqApiKeys } from "../groq/keyPool";
 import { buildHeritagePrompt } from "./heritagePrompt";
 
+const DESCRIPTION_TIMEOUT_MS = 12000;
+const HERITAGE_TIMEOUT_MS = 15000;
+
 export class GroqDescriptionService implements ProductDescriptionService {
   private readonly keyPool: GroqKeyPool;
   private readonly model: string;
@@ -36,6 +39,7 @@ export class GroqDescriptionService implements ProductDescriptionService {
         fallbackModel: this.fallbackModel,
         json: true,
         prompt: buildPrompt(englishTranscript, category),
+        timeoutMs: DESCRIPTION_TIMEOUT_MS,
       });
     } catch (err) {
       throw new DescriptionGenerationError("Description generation call failed", err);
@@ -73,6 +77,7 @@ export class GroqDescriptionService implements ProductDescriptionService {
         fallbackModel: this.fallbackModel,
         json: true,
         prompt: buildHeritagePrompt(input),
+        timeoutMs: HERITAGE_TIMEOUT_MS,
       });
     } catch (err) {
       throw new DescriptionGenerationError("Heritage story generation call failed", err);

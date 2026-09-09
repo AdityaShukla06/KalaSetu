@@ -6,6 +6,9 @@ import { GeminiSttService } from "../stt/gemini-stt.service";
 import { GeminiTranslationService } from "../translation/gemini-translation.service";
 import { GeminiDescriptionService } from "../description/gemini-description.service";
 import { MockTranslationService } from "../translation/mock-translation.service";
+import { BhashiniSttService } from "../stt/bhashini-stt.service";
+import { ChainSttService } from "../stt/chain-stt.service";
+import { isBhashiniConfigured } from "../bhashini/configCache";
 import { loadEnv } from "../config/env";
 
 export interface BuildDependenciesOptions {
@@ -27,8 +30,13 @@ export function buildVoiceAiDependencies(options: BuildDependenciesOptions = {})
     };
   }
 
+  const groqStt = new GroqSttService(env);
+  const bhashiniEnabled = env.BHASHINI_STT_ENABLED ?? isBhashiniConfigured(env);
+
   return {
-    sttService: new GroqSttService(env),
+    sttService: bhashiniEnabled
+      ? new ChainSttService(new BhashiniSttService(env), groqStt, options.logger)
+      : groqStt,
     descriptionService: new GroqDescriptionService(env),
     translationService: options.forceMockTranslation
       ? new MockTranslationService()

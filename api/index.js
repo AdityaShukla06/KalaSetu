@@ -126,6 +126,167 @@ var GroqKeyPool = class {
   }
 };
 
+// server/voice-ai/errors/voice-ai.errors.ts
+var VoiceAiError = class extends Error {
+  stage;
+  /** The original error, kept for server-side logs only, never serialize this to the client. */
+  cause;
+  constructor(stage, message, cause) {
+    super(message);
+    this.name = "VoiceAiError";
+    this.stage = stage;
+    this.cause = cause;
+  }
+};
+var InvalidAudioError = class extends VoiceAiError {
+  constructor(message = "Audio is missing, empty, or in an unsupported format", cause) {
+    super("stt", message, cause);
+    this.name = "InvalidAudioError";
+  }
+};
+var EmptyTranscriptError = class extends VoiceAiError {
+  constructor(message = "Speech-to-text produced an empty transcript", cause) {
+    super("stt", message, cause);
+    this.name = "EmptyTranscriptError";
+  }
+};
+var BhashiniUnavailableError = class extends VoiceAiError {
+  constructor(message = "Bhashini could not transcribe this audio", cause) {
+    super("stt", message, cause);
+    this.name = "BhashiniUnavailableError";
+  }
+};
+var UnsupportedLanguageError = class extends VoiceAiError {
+  constructor(detected, cause) {
+    super("language-detection", `Detected language "${detected}" is not currently supported`, cause);
+    this.name = "UnsupportedLanguageError";
+  }
+};
+var TranslationFailedError = class extends VoiceAiError {
+  constructor(message = "Translation failed", cause) {
+    super("translation", message, cause);
+    this.name = "TranslationFailedError";
+  }
+};
+var DescriptionGenerationError = class extends VoiceAiError {
+  constructor(message = "Description generation failed", cause) {
+    super("generation", message, cause);
+    this.name = "DescriptionGenerationError";
+  }
+};
+var MalformedModelResponseError = class extends VoiceAiError {
+  constructor(stage, message = "Model returned a response in an unexpected shape", cause) {
+    super(stage, message, cause);
+    this.name = "MalformedModelResponseError";
+  }
+};
+
+// server/voice-ai/bhashini/serviceIds.ts
+var CONFORMER_HI = "ai4bharat/conformer-hi-gpu--t4";
+var CONFORMER_DRAVIDIAN = "ai4bharat/conformer-multilingual-dravidian-gpu--t4";
+var CONFORMER_INDO_ARYAN = "ai4bharat/conformer-multilingual-indo_aryan-gpu--t4";
+var CONFORMER_MULTILINGUAL = "bhashini/ai4bharat/conformer-multilingual-asr";
+var SERVICE_IDS = {
+  hi: CONFORMER_HI,
+  te: CONFORMER_DRAVIDIAN,
+  ta: CONFORMER_DRAVIDIAN,
+  kn: CONFORMER_DRAVIDIAN,
+  ml: CONFORMER_DRAVIDIAN,
+  bn: CONFORMER_INDO_ARYAN,
+  mr: CONFORMER_INDO_ARYAN,
+  ur: CONFORMER_INDO_ARYAN,
+  or: CONFORMER_INDO_ARYAN,
+  pa: CONFORMER_INDO_ARYAN,
+  gu: CONFORMER_INDO_ARYAN,
+  sa: CONFORMER_INDO_ARYAN,
+  as: CONFORMER_MULTILINGUAL,
+  ne: CONFORMER_MULTILINGUAL,
+  mai: CONFORMER_MULTILINGUAL,
+  ks: CONFORMER_MULTILINGUAL,
+  kok: CONFORMER_MULTILINGUAL,
+  doi: CONFORMER_MULTILINGUAL,
+  mni: CONFORMER_MULTILINGUAL,
+  brx: CONFORMER_MULTILINGUAL,
+  sat: CONFORMER_MULTILINGUAL,
+  sd: CONFORMER_MULTILINGUAL
+};
+function serviceIdFor(languageCode) {
+  return SERVICE_IDS[languageCode];
+}
+function bhashiniSupportsLanguage(languageCode) {
+  return languageCode in SERVICE_IDS;
+}
+
+// server/voice-ai/bhashini/configCache.ts
+var cache = /* @__PURE__ */ new Map();
+function isBhashiniConfigured(env) {
+  if (env.BHASHINI_INFERENCE_API_KEY) return true;
+  return Boolean(env.BHASHINI_USER_ID && env.BHASHINI_UDYAT_KEY);
+}
+async function resolveBhashiniEndpoint(env, languageCode) {
+  const cached5 = cache.get(languageCode);
+  if (cached5) return cached5;
+  const knownServiceId = serviceIdFor(languageCode);
+  if (knownServiceId && env.BHASHINI_INFERENCE_API_KEY) {
+    const endpoint2 = {
+      serviceId: knownServiceId,
+      computeUrl: env.BHASHINI_COMPUTE_URL,
+      authHeaderName: "Authorization",
+      authHeaderValue: env.BHASHINI_INFERENCE_API_KEY
+    };
+    cache.set(languageCode, endpoint2);
+    return endpoint2;
+  }
+  const endpoint = await fetchEndpointFromConfigCall(env, languageCode);
+  cache.set(languageCode, endpoint);
+  return endpoint;
+}
+async function fetchEndpointFromConfigCall(env, languageCode) {
+  if (!env.BHASHINI_USER_ID || !env.BHASHINI_UDYAT_KEY) {
+    throw new BhashiniUnavailableError(
+      `No Bhashini service is configured for language "${languageCode}"`
+    );
+  }
+  let response;
+  try {
+    response = await fetch(env.BHASHINI_CONFIG_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        userID: env.BHASHINI_USER_ID,
+        ulcaApiKey: env.BHASHINI_UDYAT_KEY
+      },
+      body: JSON.stringify({
+        pipelineTasks: [{ taskType: "asr", config: { language: { sourceLanguage: languageCode } } }],
+        pipelineRequestConfig: { pipelineId: env.BHASHINI_PIPELINE_ID }
+      }),
+      signal: AbortSignal.timeout(env.BHASHINI_TIMEOUT_MS)
+    });
+  } catch (err) {
+    throw new BhashiniUnavailableError("Bhashini pipeline config call failed", err);
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new BhashiniUnavailableError(
+      `Bhashini pipeline config call returned ${response.status}`,
+      detail.slice(0, 300)
+    );
+  }
+  const payload = await response.json();
+  const asrTask = payload.pipelineResponseConfig?.find((task) => task.taskType === "asr");
+  const serviceId = asrTask?.config?.find((entry) => entry.serviceId)?.serviceId;
+  const inference = payload.pipelineInferenceAPIEndPoint;
+  const computeUrl = inference?.callbackUrl ?? env.BHASHINI_COMPUTE_URL;
+  const authHeaderName = inference?.inferenceApiKey?.name ?? "Authorization";
+  const authHeaderValue = inference?.inferenceApiKey?.value ?? env.BHASHINI_INFERENCE_API_KEY;
+  if (!serviceId || !authHeaderValue) {
+    throw new BhashiniUnavailableError(
+      `Bhashini pipeline config returned no usable ASR service for "${languageCode}"`
+    );
+  }
+  return { serviceId, computeUrl, authHeaderName, authHeaderValue };
+}
+
 // server/image-ai/errors/image-ai.errors.ts
 var BackgroundRemovalError = class extends Error {
   reason;
@@ -286,7 +447,10 @@ var OPTIONAL_EXTRA = [
   "GROQ_API_KEY_2",
   "GROQ_API_KEY_3",
   "GROQ_FALLBACK_API_KEYS",
-  "GEMINI_API_KEY"
+  "GEMINI_API_KEY",
+  "BHASHINI_USER_ID",
+  "BHASHINI_UDYAT_KEY",
+  "BHASHINI_INFERENCE_API_KEY"
 ];
 var OPTIONAL = [
   "RESEND_API_KEY",
@@ -332,6 +496,7 @@ router.get("/", (_req, res) => {
       provider,
       present: [.../* @__PURE__ */ new Set([...required, ...OPTIONAL])].filter(isSet),
       groqKeys: collectGroqApiKeys(process.env).length,
+      bhashiniStt: isBhashiniConfigured(process.env),
       valid: configValid,
       ...configError ? { error: configError } : {}
     },
@@ -910,14 +1075,14 @@ var APP_LANGUAGES = [
   { code: "ne", englishName: "Nepali", nativeName: "\u0928\u0947\u092A\u093E\u0932\u0940", script: "Devanagari", speechSupported: true },
   { code: "sa", englishName: "Sanskrit", nativeName: "\u0938\u0902\u0938\u094D\u0915\u0943\u0924\u092E\u094D", script: "Devanagari", speechSupported: true },
   { code: "sd", englishName: "Sindhi", nativeName: "\u0633\u0646\u068C\u064A", script: "Arabic", speechSupported: true },
-  { code: "or", englishName: "Odia", nativeName: "\u0B13\u0B21\u0B3C\u0B3F\u0B06", script: "Odia", speechSupported: false },
-  { code: "mai", englishName: "Maithili", nativeName: "\u092E\u0948\u0925\u093F\u0932\u0940", script: "Devanagari", speechSupported: false },
-  { code: "ks", englishName: "Kashmiri", nativeName: "\u06A9\u0672\u0634\u064F\u0631", script: "Arabic", speechSupported: false },
-  { code: "kok", englishName: "Konkani", nativeName: "\u0915\u094B\u0902\u0915\u0923\u0940", script: "Devanagari", speechSupported: false },
-  { code: "doi", englishName: "Dogri", nativeName: "\u0921\u094B\u0917\u0930\u0940", script: "Devanagari", speechSupported: false },
-  { code: "mni", englishName: "Manipuri", nativeName: "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF", script: "Meetei Mayek", speechSupported: false },
-  { code: "brx", englishName: "Bodo", nativeName: "\u092C\u0921\u093C\u094B", script: "Devanagari", speechSupported: false },
-  { code: "sat", englishName: "Santali", nativeName: "\u1C65\u1C5F\u1C71\u1C5B\u1C5F\u1C72\u1C64", script: "Ol Chiki", speechSupported: false }
+  { code: "or", englishName: "Odia", nativeName: "\u0B13\u0B21\u0B3C\u0B3F\u0B06", script: "Odia", speechSupported: true },
+  { code: "mai", englishName: "Maithili", nativeName: "\u092E\u0948\u0925\u093F\u0932\u0940", script: "Devanagari", speechSupported: true },
+  { code: "ks", englishName: "Kashmiri", nativeName: "\u06A9\u0672\u0634\u064F\u0631", script: "Arabic", speechSupported: true },
+  { code: "kok", englishName: "Konkani", nativeName: "\u0915\u094B\u0902\u0915\u0923\u0940", script: "Devanagari", speechSupported: true },
+  { code: "doi", englishName: "Dogri", nativeName: "\u0921\u094B\u0917\u0930\u0940", script: "Devanagari", speechSupported: true },
+  { code: "mni", englishName: "Manipuri", nativeName: "\uABC3\uABE4\uABC7\uABE9\uABC2\uABE3\uABDF", script: "Meetei Mayek", speechSupported: true },
+  { code: "brx", englishName: "Bodo", nativeName: "\u092C\u0921\u093C\u094B", script: "Devanagari", speechSupported: true },
+  { code: "sat", englishName: "Santali", nativeName: "\u1C65\u1C5F\u1C71\u1C5B\u1C5F\u1C72\u1C64", script: "Ol Chiki", speechSupported: true }
 ];
 var LANGUAGE_CODES = APP_LANGUAGES.map((l) => l.code);
 var BY_CODE = new Map(APP_LANGUAGES.map((l) => [l.code, l]));
@@ -1092,55 +1257,6 @@ function isSupportedLanguageCode(value) {
   return isAppLanguage(value);
 }
 
-// server/voice-ai/errors/voice-ai.errors.ts
-var VoiceAiError = class extends Error {
-  stage;
-  /** The original error, kept for server-side logs only, never serialize this to the client. */
-  cause;
-  constructor(stage, message, cause) {
-    super(message);
-    this.name = "VoiceAiError";
-    this.stage = stage;
-    this.cause = cause;
-  }
-};
-var InvalidAudioError = class extends VoiceAiError {
-  constructor(message = "Audio is missing, empty, or in an unsupported format", cause) {
-    super("stt", message, cause);
-    this.name = "InvalidAudioError";
-  }
-};
-var EmptyTranscriptError = class extends VoiceAiError {
-  constructor(message = "Speech-to-text produced an empty transcript", cause) {
-    super("stt", message, cause);
-    this.name = "EmptyTranscriptError";
-  }
-};
-var UnsupportedLanguageError = class extends VoiceAiError {
-  constructor(detected, cause) {
-    super("language-detection", `Detected language "${detected}" is not currently supported`, cause);
-    this.name = "UnsupportedLanguageError";
-  }
-};
-var TranslationFailedError = class extends VoiceAiError {
-  constructor(message = "Translation failed", cause) {
-    super("translation", message, cause);
-    this.name = "TranslationFailedError";
-  }
-};
-var DescriptionGenerationError = class extends VoiceAiError {
-  constructor(message = "Description generation failed", cause) {
-    super("generation", message, cause);
-    this.name = "DescriptionGenerationError";
-  }
-};
-var MalformedModelResponseError = class extends VoiceAiError {
-  constructor(stage, message = "Model returned a response in an unexpected shape", cause) {
-    super(stage, message, cause);
-    this.name = "MalformedModelResponseError";
-  }
-};
-
 // server/voice-ai/config/env.ts
 import "dotenv/config";
 import { z as z5 } from "zod";
@@ -1155,7 +1271,16 @@ var envSchema3 = z5.object({
   GROQ_LLM_FALLBACK_MODEL: z5.string().default("openai/gpt-oss-20b"),
   GEMINI_API_KEY: z5.string().optional(),
   GEMINI_TRANSCRIBE_MODEL: z5.string().default("gemini-3.6-flash"),
-  GEMINI_FLASH_MODEL: z5.string().default("gemini-3.6-flash")
+  GEMINI_FLASH_MODEL: z5.string().default("gemini-3.6-flash"),
+  BHASHINI_USER_ID: z5.string().optional(),
+  BHASHINI_UDYAT_KEY: z5.string().optional(),
+  BHASHINI_INFERENCE_API_KEY: z5.string().optional(),
+  BHASHINI_PIPELINE_ID: z5.string().default("64392f96daac500b55c543cd"),
+  BHASHINI_CONFIG_URL: z5.string().url().default("https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipeline"),
+  BHASHINI_COMPUTE_URL: z5.string().url().default("https://dhruva-api.bhashini.gov.in/services/inference/pipeline"),
+  BHASHINI_TIMEOUT_MS: z5.coerce.number().int().positive().default(2e4),
+  BHASHINI_MAX_AUDIO_BYTES: z5.coerce.number().int().positive().default(6291456),
+  BHASHINI_STT_ENABLED: z5.enum(["true", "false"]).transform((value) => value === "true").optional()
 }).superRefine((env, ctx) => {
   if (env.VOICE_AI_PROVIDER === "groq" && !env.GROQ_API_KEY) {
     ctx.addIssue({
@@ -1204,7 +1329,11 @@ async function processVoiceDescription(input, deps2) {
   const logger = deps2.logger ?? noopLogger;
   logger.info("voice-ai: starting pipeline", { category: input.category, audioBytes: input.audio?.length });
   try {
-    const sttResult = await deps2.sttService.transcribe(input.audio, input.mimeType);
+    const sttResult = await deps2.sttService.transcribe(
+      input.audio,
+      input.mimeType,
+      input.targetLanguage
+    );
     logger.info("voice-ai: stt complete", { detectedLanguage: sttResult.language });
     const transcript = sttResult.text;
     const detectedLanguage = sttResult.language;
@@ -1267,6 +1396,7 @@ function extensionForAudio(mimeType) {
 
 // server/voice-ai/stt/groq-stt.service.ts
 var GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+var GROQ_STT_TIMEOUT_MS = 15e3;
 var GROQ_SUPPORTED_AUDIO_TYPES = [
   "audio/flac",
   "audio/m4a",
@@ -1328,7 +1458,8 @@ var GroqSttService = class {
         const response = await fetch(GROQ_TRANSCRIPTION_URL, {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}` },
-          body: buildForm()
+          body: buildForm(),
+          signal: AbortSignal.timeout(GROQ_STT_TIMEOUT_MS)
         });
         if (response.status === 429) {
           const detail = await response.text();
@@ -1432,6 +1563,7 @@ async function groqChat(options) {
 }
 
 // server/voice-ai/translation/groq-translation.service.ts
+var TRANSLATION_TIMEOUT_MS = 12e3;
 var GroqTranslationService = class {
   keyPool;
   model;
@@ -1458,7 +1590,8 @@ var GroqTranslationService = class {
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,
-        prompt: buildPrompt(text, sourceName, targetName)
+        prompt: buildPrompt(text, sourceName, targetName),
+        timeoutMs: TRANSLATION_TIMEOUT_MS
       });
     } catch (err) {
       throw new TranslationFailedError(
@@ -1494,7 +1627,8 @@ var GroqTranslationService = class {
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,
-        prompt: buildDetectPrompt(text, targetName, hintName)
+        prompt: buildDetectPrompt(text, targetName, hintName),
+        timeoutMs: TRANSLATION_TIMEOUT_MS
       });
     } catch (err) {
       throw new TranslationFailedError(`Translation into ${targetLanguage} failed`, err);
@@ -1590,6 +1724,8 @@ Respond with a JSON object of the form {"story": "..."}.`;
 }
 
 // server/voice-ai/description/groq-description.service.ts
+var DESCRIPTION_TIMEOUT_MS = 12e3;
+var HERITAGE_TIMEOUT_MS = 15e3;
 var GroqDescriptionService = class {
   keyPool;
   model;
@@ -1614,7 +1750,8 @@ var GroqDescriptionService = class {
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,
-        prompt: buildPrompt2(englishTranscript, category)
+        prompt: buildPrompt2(englishTranscript, category),
+        timeoutMs: DESCRIPTION_TIMEOUT_MS
       });
     } catch (err) {
       throw new DescriptionGenerationError("Description generation call failed", err);
@@ -1646,7 +1783,8 @@ var GroqDescriptionService = class {
         model: this.model,
         fallbackModel: this.fallbackModel,
         json: true,
-        prompt: buildHeritagePrompt(input)
+        prompt: buildHeritagePrompt(input),
+        timeoutMs: HERITAGE_TIMEOUT_MS
       });
     } catch (err) {
       throw new DescriptionGenerationError("Heritage story generation call failed", err);
@@ -2015,6 +2153,121 @@ var MockTranslationService = class {
   }
 };
 
+// server/voice-ai/stt/bhashini-stt.service.ts
+var BHASHINI_SUPPORTED_AUDIO_TYPES = ["audio/wav", "audio/flac", "audio/mp3", "audio/mpeg"];
+var AUDIO_FORMATS = {
+  "audio/wav": "wav",
+  "audio/flac": "flac",
+  "audio/mp3": "mp3",
+  "audio/mpeg": "mp3"
+};
+var SAMPLING_RATE = 16e3;
+var BhashiniSttService = class {
+  env;
+  constructor(env) {
+    this.env = env;
+  }
+  async transcribe(audio, mimeType, sourceLanguage) {
+    const language = (sourceLanguage ?? "").trim();
+    if (!language || !bhashiniSupportsLanguage(language)) {
+      throw new BhashiniUnavailableError(
+        `Bhashini has no ASR service for language "${language || "unknown"}"`
+      );
+    }
+    if (!audio || audio.length === 0) {
+      throw new BhashiniUnavailableError("Audio is missing or empty");
+    }
+    if (audio.length > this.env.BHASHINI_MAX_AUDIO_BYTES) {
+      throw new BhashiniUnavailableError(
+        `Audio is ${audio.length} bytes, over the ${this.env.BHASHINI_MAX_AUDIO_BYTES} byte Bhashini limit`
+      );
+    }
+    let audioFormat;
+    try {
+      audioFormat = AUDIO_FORMATS[normaliseAudioMimeType(mimeType, BHASHINI_SUPPORTED_AUDIO_TYPES)];
+    } catch (err) {
+      throw new BhashiniUnavailableError(`Bhashini does not accept "${mimeType}"`, err);
+    }
+    const endpoint = await resolveBhashiniEndpoint(this.env, language);
+    const serviceId = serviceIdFor(language) ?? endpoint.serviceId;
+    let response;
+    try {
+      response = await fetch(endpoint.computeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [endpoint.authHeaderName]: endpoint.authHeaderValue
+        },
+        body: JSON.stringify({
+          pipelineTasks: [
+            {
+              taskType: "asr",
+              config: {
+                language: { sourceLanguage: language },
+                serviceId,
+                audioFormat,
+                samplingRate: SAMPLING_RATE,
+                preProcessors: ["vad"],
+                postProcessors: ["itn"]
+              }
+            }
+          ],
+          inputData: {
+            audio: [{ audioContent: audio.toString("base64") }]
+          }
+        }),
+        signal: AbortSignal.timeout(this.env.BHASHINI_TIMEOUT_MS)
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        throw new BhashiniUnavailableError(
+          `Bhashini did not respond within ${this.env.BHASHINI_TIMEOUT_MS}ms`,
+          err
+        );
+      }
+      throw new BhashiniUnavailableError("Bhashini compute call failed", err);
+    }
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new BhashiniUnavailableError(
+        `Bhashini compute call returned ${response.status}`,
+        detail.slice(0, 300)
+      );
+    }
+    const payload = await response.json();
+    const text = payload.pipelineResponse?.find((task) => task.taskType === "asr")?.output?.find((entry) => entry.source)?.source?.trim();
+    if (!text) {
+      throw new EmptyTranscriptError("Bhashini returned an empty transcript");
+    }
+    return { text, language };
+  }
+};
+
+// server/voice-ai/stt/chain-stt.service.ts
+var ChainSttService = class {
+  primary;
+  fallback;
+  logger;
+  constructor(primary, fallback, logger) {
+    this.primary = primary;
+    this.fallback = fallback;
+    this.logger = logger;
+  }
+  async transcribe(audio, mimeType, sourceLanguage) {
+    try {
+      const result = await this.primary.transcribe(audio, mimeType, sourceLanguage);
+      this.logger?.info("voice-ai: bhashini transcribed", { sourceLanguage });
+      return result;
+    } catch (err) {
+      this.logger?.warn("voice-ai: bhashini unavailable, falling back to groq", {
+        sourceLanguage,
+        detail: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200)
+      });
+      return this.fallback.transcribe(audio, mimeType, sourceLanguage);
+    }
+  }
+};
+
 // server/voice-ai/pipeline/factory.ts
 function buildVoiceAiDependencies(options = {}) {
   const env = loadEnv2();
@@ -2026,8 +2279,10 @@ function buildVoiceAiDependencies(options = {}) {
       logger: options.logger
     };
   }
+  const groqStt = new GroqSttService(env);
+  const bhashiniEnabled = env.BHASHINI_STT_ENABLED ?? isBhashiniConfigured(env);
   return {
-    sttService: new GroqSttService(env),
+    sttService: bhashiniEnabled ? new ChainSttService(new BhashiniSttService(env), groqStt, options.logger) : groqStt,
     descriptionService: new GroqDescriptionService(env),
     translationService: options.forceMockTranslation ? new MockTranslationService() : new GroqTranslationService(env),
     logger: options.logger

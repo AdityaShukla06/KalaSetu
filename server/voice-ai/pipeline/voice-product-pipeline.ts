@@ -38,7 +38,11 @@ export async function processVoiceDescription(
   logger.info("voice-ai: starting pipeline", { category: input.category, audioBytes: input.audio?.length });
 
   try {
-    const sttResult = await deps.sttService.transcribe(input.audio, input.mimeType);
+    const sttResult = await deps.sttService.transcribe(
+      input.audio,
+      input.mimeType,
+      input.targetLanguage,
+    );
     logger.info("voice-ai: stt complete", { detectedLanguage: sttResult.language });
 
     const transcript = sttResult.text;

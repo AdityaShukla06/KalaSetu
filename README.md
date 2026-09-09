@@ -293,9 +293,25 @@ Fix any of them by editing the JSON directly. The generator will not overwrite a
 
 The six `category.*` labels get the most scrutiny, because they are also used as product titles. Several were wrong on inspection and have been corrected by hand: Tamil rendered pottery as limestone, Gujarati rendered jewellery as "deep", Telugu rendered woodwork as banyan, and Bengali, Marathi, Urdu and Malayalam all mistranslated cane. Others may still be wrong in languages nobody on the team reads.
 
-A product stores English plus the artisan's own language, with the language recorded alongside it, so a listing can always be shown in both. Speech is not restricted to the app's list: the artisan can speak anything the model can hear, and the detected language never gates the request. Urdu, Sindhi and Kashmiri render right to left.
+A product stores English plus the artisan's own language, with the language recorded alongside it, so a listing can always be shown in both. Speech is never gated on the language list either: Bhashini is told which language to expect and Whisper detects it, but in both cases an unrecognised language falls through to a transcript rather than an error. Urdu, Sindhi and Kashmiri render right to left. See [Bhashini speech to text](#bhashini-speech-to-text) for how a language picks a speech model.
 
 **The English/local language tab pair only shows up when there's actually a choice.** [`src/components/LanguageTabs.tsx`](src/components/LanguageTabs.tsx) returns nothing at all when the artisan's chosen language is English, rather than rendering two tabs both labelled "English" side by side: `titleLocal`/`descriptionLocal` are identical to their English counterparts for an English-speaking artisan, so a switcher between two copies of the same text has nothing to switch between. Every screen using it (description review, My Shop's edit sheet, the buyer's product detail) already defaults its own tab state to `"en"` for exactly this case, so hiding the switcher needs no other change.
+
+## Bhashini speech to text
+
+Speech is transcribed by [Bhashini](https://bhashini.gov.in), the Government of India language stack, with Groq Whisper as an automatic fallback. [`ChainSttService`](server/voice-ai/stt/chain-stt.service.ts) tries Bhashini first and falls through to Whisper on any refusal, error, or timeout, so a government outage degrades the transcript quality rather than breaking voice input.
+
+Everything after the transcript is unchanged: translation, description generation, and the heritage story still run on Groq.
+
+Two details shape the design.
+
+**Bhashini cannot detect the spoken language.** Whisper can, and the pipeline used to lean on that. Bhashini has to be told, so the artisan's app language is declared as the source. That needs no extra tap and is right whenever someone using the Marathi interface speaks Marathi. English is deliberately never sent to Bhashini, because `en` is also the language of every artisan who never picked one; sending it to Whisper instead means that exact case keeps automatic detection.
+
+**The browser already produces the right audio.** [`src/services/audio.ts`](src/services/audio.ts) downmixes to mono, resamples to 16kHz, and writes 16-bit PCM WAV before upload, which is what Bhashini's ASR wants, so nothing in the recording or upload path changed.
+
+[`serviceIds.ts`](server/voice-ai/bhashini/serviceIds.ts) maps each language to a model: the Hindi conformer for `hi`, the Dravidian conformer for Tamil, Telugu, Kannada and Malayalam, the Indo-Aryan conformer for the rest of the major Indic set, and the 22-language multilingual conformer for everything else. All 22 mappings were verified against the live API. This is why the eight languages Whisper handles poorly (Odia, Maithili, Kashmiri, Konkani, Dogri, Manipuri, Bodo and Santali) are now marked `speechSupported` in [`shared/languages.ts`](shared/languages.ts).
+
+Leave the keys blank, or set `BHASHINI_STT_ENABLED=false`, and transcription runs on Whisper alone exactly as before. `GET /api/health` reports `config.bhashiniStt`.
 
 ## Swapping the AI provider
 
@@ -304,6 +320,8 @@ A product stores English plus the artisan's own language, with the language reco
 Groq is the default because its free tier is far more generous. Gemini's free tier allows 5 requests per minute, and one voice note costs up to four, so a second recording inside a minute fails.
 
 Groq's free tier caps tokens per day per model rather than per minute, and each model has its own allowance. When the primary model runs out, `groqChat` falls through to `GROQ_LLM_FALLBACK_MODEL` instead of failing the request, and logs that it did so. A heavy day on one model no longer takes the voice feature down.
+
+Every Groq call in the voice pipeline is now bounded by an explicit timeout (12 seconds for translation and description, 15 for speech and the heritage story). The whole request, speech plus translation plus description, has to finish inside Vercel's 60 second function limit, and Bhashini's own 20 second budget comes out of the same total.
 
 ## Surviving a spent Groq quota
 

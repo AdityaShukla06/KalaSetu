@@ -36,6 +36,13 @@ export class EmptyTranscriptError extends VoiceAiError {
   }
 }
 
+export class BhashiniUnavailableError extends VoiceAiError {
+  constructor(message = "Bhashini could not transcribe this audio", cause?: unknown) {
+    super("stt", message, cause);
+    this.name = "BhashiniUnavailableError";
+  }
+}
+
 export class LanguageDetectionError extends VoiceAiError {
   constructor(message = "Could not determine the spoken language", cause?: unknown) {
     super("language-detection", message, cause);

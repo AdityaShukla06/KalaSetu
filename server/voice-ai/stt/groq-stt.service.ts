@@ -14,6 +14,8 @@ import { normaliseAudioMimeType, extensionForAudio } from "./audio-mime";
 
 const GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 
+const GROQ_STT_TIMEOUT_MS = 15000;
+
 export const GROQ_SUPPORTED_AUDIO_TYPES = [
   "audio/flac",
   "audio/m4a",
@@ -94,6 +96,7 @@ export class GroqSttService implements SpeechToTextService {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}` },
           body: buildForm(),
+          signal: AbortSignal.timeout(GROQ_STT_TIMEOUT_MS),
         });
 
         if (response.status === 429) {

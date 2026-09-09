@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { loadEnv } from "../lib/env";
 import { collectGroqApiKeys } from "../voice-ai/groq/keyPool";
+import { isBhashiniConfigured } from "../voice-ai/bhashini/configCache";
 import { loadImageAiEnv } from "../image-ai";
 
 const BASE_REQUIRED = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET"];
@@ -11,6 +12,9 @@ const OPTIONAL_EXTRA = [
   "GROQ_API_KEY_3",
   "GROQ_FALLBACK_API_KEYS",
   "GEMINI_API_KEY",
+  "BHASHINI_USER_ID",
+  "BHASHINI_UDYAT_KEY",
+  "BHASHINI_INFERENCE_API_KEY",
 ];
 const OPTIONAL = [
   "RESEND_API_KEY",
@@ -64,6 +68,7 @@ router.get("/", (_req, res) => {
       provider,
       present: [...new Set([...required, ...OPTIONAL])].filter(isSet),
       groqKeys: collectGroqApiKeys(process.env).length,
+      bhashiniStt: isBhashiniConfigured(process.env),
       valid: configValid,
       ...(configError ? { error: configError } : {}),
     },

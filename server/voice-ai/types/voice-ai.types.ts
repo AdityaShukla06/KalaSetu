@@ -72,7 +72,12 @@ export interface SpeechToTextResult {
 }
 
 export interface SpeechToTextService {
-  transcribe(audio: Buffer, mimeType: string): Promise<SpeechToTextResult>;
+  /**
+   * `sourceLanguage` is the app language the artisan is using. Providers that
+   * detect the language themselves ignore it; Bhashini cannot detect and needs
+   * it declared up front.
+   */
+  transcribe(audio: Buffer, mimeType: string, sourceLanguage?: string): Promise<SpeechToTextResult>;
 }
 
 // ---------------------------------------------------------------------------

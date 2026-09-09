@@ -48,7 +48,22 @@ GROQ_FALLBACK_API_KEYS=gsk_fourth...,gsk_fifth...
 
 `GET /api/health` reports `config.groqKeys`, so you can confirm how many keys a deployment actually picked up.
 
-## 3. Background removal (optional)
+## 3. Bhashini speech to text
+
+1. Go to [bhashini.gov.in](https://bhashini.gov.in), register, then open **My Profile** and create API keys for your project.
+2. Copy the inference key into `BHASHINI_INFERENCE_API_KEY`.
+
+Bhashini is the Government of India language stack, and it is what transcribes speech first. Groq Whisper stays configured and takes over automatically whenever Bhashini refuses or fails, so voice input never depends on a single service being up.
+
+The key is sent as a bare `Authorization` header with no `Bearer` prefix. `BHASHINI_USER_ID` and `BHASHINI_UDYAT_KEY` are optional: they are only used for the pipeline config call, which is a fallback for resolving a language that is missing from the built in service map in `server/voice-ai/bhashini/serviceIds.ts`. That map already covers all 22 scheduled languages, each one verified against the live API, so the config call normally never runs.
+
+**Bhashini cannot detect the spoken language**, unlike Whisper. It has to be told. The artisan's app language is what gets declared, which needs no extra tap and is right whenever someone using the Marathi interface speaks Marathi. English is deliberately never sent to Bhashini: `en` is also the language of every artisan who never picked one, so Whisper's automatic detection is the safer answer for that case, and it is a better English model besides.
+
+What this buys: the eight languages Whisper handles poorly or not at all (Odia, Maithili, Kashmiri, Konkani, Dogri, Manipuri, Bodo, Santali) now have real ASR models behind them, and speech no longer consumes the Groq daily quota. Measured round trip on a Hindi sample was well under a second, so `BHASHINI_TIMEOUT_MS` at 20 seconds is generous rather than tight. Audio is sent base64 encoded inside a JSON body, which is why `BHASHINI_MAX_AUDIO_BYTES` caps it at 6MB, roughly three minutes of the 16kHz mono WAV the browser produces; anything larger falls through to Whisper.
+
+**You can skip this entirely.** Leave the keys blank, or set `BHASHINI_STT_ENABLED=false`, and transcription runs on Whisper exactly as it did before. `GET /api/health` reports `config.bhashiniStt` so you can confirm which path a deployment is actually on.
+
+## 4. Background removal (optional)
 
 Powers the "Remove background" button in the photo enhancement studio. Everything else in the studio (brightness, contrast, sharpen, crop, background fill/blur) runs locally in `sharp` and needs no key, and is deliberately deterministic rather than model-based; a marketplace photo has to keep showing the artisan's actual product.
 
@@ -56,7 +71,7 @@ Set `BACKGROUND_REMOVAL_PROVIDER=self-hosted` and `SELF_HOSTED_BG_REMOVAL_URL` t
 
 **You can skip this entirely.** Leave `BACKGROUND_REMOVAL_PROVIDER=none` (the default) and the button reports background removal as unavailable; the rest of the photo pipeline, and the rest of the app, is unaffected.
 
-## 4. Craft category suggestion (optional)
+## 5. Craft category suggestion (optional)
 
 After an artisan takes a photo, the app suggests which category it belongs to (textiles, pottery, jewelry, woodwork, bamboo & cane, or other) so the next screen opens with that tile already picked. It is always editable with one tap, and nothing here is required for the app to work: with no keys configured at all, the category screen behaves exactly as if this feature did not exist.
 
@@ -70,7 +85,7 @@ Three providers are tried in order, each one only used if the one before it fail
 
 To turn a tier off, remove it from the comma-separated `CRAFT_CLASSIFIER_PROVIDERS` (default `groq,gemini,render`). Setting it to an empty string disables the feature entirely.
 
-## 5. A session secret
+## 6. A session secret
 
 Generate any long random string for `JWT_SECRET`:
 
@@ -80,7 +95,7 @@ openssl rand -base64 32
 
 If you change this later, everyone is signed out. That is the intended way to revoke all sessions.
 
-## 6. Email delivery (optional)
+## 7. Email delivery (optional)
 
 Sign in codes are emailed through [Resend](https://resend.com). Free tier, no card, 3000 emails a month.
 
@@ -91,7 +106,7 @@ Sign in codes are emailed through [Resend](https://resend.com). Free tier, no ca
 
 The same Resend setup also emails an artisan when a buyer sends an inquiry. Set `PUBLIC_APP_URL` to your deployed URL (defaults to `http://localhost:5173`) so that email's "view and respond" link points somewhere real.
 
-## 7. Run it locally
+## 8. Run it locally
 
 ```bash
 npm install
@@ -105,7 +120,7 @@ Open `http://localhost:5173`. Sign in with any email address and the code `5741`
 
 To check the API is alive: `http://localhost:5173/api/health` should return `{"status":"ok", ...}`. If it instead returns the app's HTML, the `[api]` process didn't start, most likely because a required `.env` value is missing; check the `[api]` process's own terminal output for the actual error.
 
-## 8. Deploy to Vercel
+## 9. Deploy to Vercel
 
 1. Push your branch to GitHub.
 2. Go to [vercel.com](https://vercel.com), sign in with GitHub, **Add New -> Project**, import the repository.
@@ -115,9 +130,10 @@ To check the API is alive: `http://localhost:5173/api/health` should return `{"s
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `JWT_SECRET`
    - `GROQ_API_KEY`
-   - `BACKGROUND_REMOVAL_PROVIDER` and `SELF_HOSTED_BG_REMOVAL_URL` (only if you did step 3)
-   - `GEMINI_API_KEY` (only if you want the craft category suggestion's first tier, step 4)
-   - `RESEND_API_KEY` (only if you did step 6)
+   - `BHASHINI_INFERENCE_API_KEY` (only if you did step 3; without it speech runs on Whisper alone)
+   - `BACKGROUND_REMOVAL_PROVIDER` and `SELF_HOSTED_BG_REMOVAL_URL` (only if you did step 4)
+   - `GEMINI_API_KEY` (only if you want the craft category suggestion's first tier, step 5)
+   - `RESEND_API_KEY` (only if you did step 7)
    - `PUBLIC_APP_URL` (your deployed URL, so inquiry notification emails link back correctly)
    - `DEMO_FALLBACK_OTP_ENABLED`
 5. **Deploy.**
@@ -126,7 +142,7 @@ Vercel gives you an HTTPS URL. That matters: the camera and microphone only work
 
 `VITE_API_BASE_URL` should stay empty in production. The API is served from the same origin at `/api`.
 
-## 9. Verify the deployment
+## 10. Verify the deployment
 
 - [ ] `https://<your-app>.vercel.app/api/health` returns `{"status":"ok","version":"1.0.0"}`. **Check this first.** If it fails, everything else will fail in ways that look unrelated.
 - [ ] The app loads at the root URL.
@@ -158,15 +174,15 @@ Change the code itself with `DEMO_FALLBACK_OTP`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `/api/health` returns 500 | A required env var is missing | Vercel logs name the exact variable. Check all of section 7. |
+| `/api/health` returns 500 | A required env var is missing | Vercel logs name the exact variable. Check all of section 8. |
 | `Invalid server environment configuration` | Same as above | The error lists every missing or invalid variable. |
 | Sign in says the code is wrong | No email arrived and you typed a guess | Use `5741`, or set `RESEND_API_KEY` to receive real codes. |
 | Voice returns 500 with `stage: "stt"` | Provider key, model, or rate limit | The function logs carry the provider's own error. |
 | Voice or translation stops working partway through a busy day | Groq's daily token quota is spent | Expected on the free tier. Fill `GROQ_API_KEY_2` / `GROQ_API_KEY_3` with keys from separate Groq accounts (see section 2), or wait for the quota to reset. Extra keys from the same account do not help. |
 | Added more keys but it still runs out | All the keys belong to one Groq account | The daily quota is per account, not per key. Check `/api/health`'s `config.groqKeys` to confirm they were picked up, then confirm each key really is from a different account. |
 | Images 404 after upload | Storage bucket missing or private | Re-run `supabase/schema.sql`, then confirm `product-images` exists and is public. |
-| Category is never pre-selected after a photo | All three classifier tiers are unconfigured, disabled, or failed | Expected with no keys set at all, see section 4. Otherwise check the server logs for `craft classifier tier failed` to see which tiers were tried and why. |
-| "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, `SELF_HOSTED_BG_REMOVAL_URL` is missing/wrong, or the service failed or timed out | Check section 3, and that your `bg-removal-service` deployment is actually up (its `/` route). Everything else in the studio still works either way. |
+| Category is never pre-selected after a photo | All three classifier tiers are unconfigured, disabled, or failed | Expected with no keys set at all, see section 5. Otherwise check the server logs for `craft classifier tier failed` to see which tiers were tried and why. |
+| "Remove background" always reports unavailable | `BACKGROUND_REMOVAL_PROVIDER` is `none`, `SELF_HOSTED_BG_REMOVAL_URL` is missing/wrong, or the service failed or timed out | Check section 4, and that your `bg-removal-service` deployment is actually up (its `/` route). Everything else in the studio still works either way. |
 | Everything 401s | `JWT_SECRET` changed between deploys | Expected, sign in again. |
 | Sign in returns 403 `account_deactivated` | An admin deactivated that artisan in the console | Reactivate them from `/internal/console/artisans`, or it's expected if that was intentional. |
 | `/internal/console` shows "Page not found" | You're not signed in as an admin | That's the intended behaviour for anyone else, not a bug. Seed or promote an admin account (see "Admin console for judging" above). |
