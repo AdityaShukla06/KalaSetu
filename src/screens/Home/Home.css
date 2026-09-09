@@ -7,29 +7,41 @@
 
 .home-header-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--space-3);
 }
 
 .home-header-links {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-1);
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .home-analytics-link {
+  flex: 1 1 0;
+  min-width: 0;
   min-height: var(--hit-min);
-  background: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-4);
+  background: var(--color-primary-tint);
   border: none;
-  padding: 0;
+  border-radius: var(--radius-pill);
   color: var(--color-primary);
   font-family: var(--font-body);
   font-size: var(--text-body-s-size);
   font-weight: 600;
-  text-decoration: underline;
+  text-align: center;
   cursor: pointer;
+  transition: background 0.1s ease, transform 0.1s ease;
+}
+
+.home-analytics-link:active {
+  background: var(--color-primary);
+  color: var(--color-surface);
+  transform: scale(0.98);
 }
 
 .gem-banner {
