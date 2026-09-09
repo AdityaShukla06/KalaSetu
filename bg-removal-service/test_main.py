@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from main import app
+from main import MAX_DIMENSION, app, build_session, fit_within
 
 
 @pytest.fixture(scope="module")
@@ -28,6 +28,26 @@ def test_health(client: TestClient):
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "online"
+
+
+def test_session_disables_the_memory_arena():
+    session = build_session("u2netp.onnx")
+    options = session.get_session_options()
+    assert options.enable_cpu_mem_arena is False
+    assert options.enable_mem_pattern is False
+
+
+def test_oversized_images_are_scaled_down_before_processing():
+    oversized = Image.new("RGB", (MAX_DIMENSION * 2, MAX_DIMENSION))
+    fitted = fit_within(oversized, MAX_DIMENSION)
+
+    assert max(fitted.size) == MAX_DIMENSION
+    assert fitted.size == (MAX_DIMENSION, MAX_DIMENSION // 2)
+
+
+def test_images_within_the_limit_are_left_alone():
+    small = Image.new("RGB", (640, 480))
+    assert fit_within(small, MAX_DIMENSION) is small
 
 
 def test_remove_background_returns_rgba_png_with_real_alpha(client: TestClient):
