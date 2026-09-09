@@ -81,7 +81,7 @@ function useMeasuredWidth(fallback: number) {
   const [width, setWidth] = useState(fallback);
   const ref = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
-    const measure = () => setWidth(Math.max(fallback, Math.round(node.clientWidth)));
+    const measure = () => setWidth(Math.round(node.clientWidth) || fallback);
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
