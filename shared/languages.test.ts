@@ -47,8 +47,16 @@ describe("isWrittenInOwnScript", () => {
     expect(isWrittenInOwnScript("तीन दिन", "gu")).toBe(false);
   });
 
-  it("counts a message as being in its script when the script appears at all, so mixed text is not sent for translation", () => {
-    expect(isWrittenInOwnScript("Delivery कितने दिन", "hi")).toBe(true);
+  it("judges mixed text by which script most of it is in, not by which scripts appear", () => {
+    expect(isWrittenInOwnScript("Delivery कितने दिन लगेंगे भाई", "hi")).toBe(true);
+
+    expect(isWrittenInOwnScript("প্রতিখন বহীত ১৫০ টকা ok", "en")).toBe(false);
+    expect(isWrittenInOwnScript("Yes ok fine, টকা", "en")).toBe(true);
+  });
+
+  it("treats text with no letters at all as nothing worth translating", () => {
+    expect(isWrittenInOwnScript("1500", "en")).toBe(true);
+    expect(isWrittenInOwnScript("???", "or")).toBe(true);
   });
 
   it("has a usable script pattern for every language the app offers", () => {

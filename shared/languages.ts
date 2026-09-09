@@ -9,10 +9,11 @@ export interface AppLanguage {
 /**
  * English plus the 22 languages of the Eighth Schedule of the Constitution.
  *
- * `speechSupported` records whether the transcription model recognises the
- * language by name. It is informational only: an artisan can speak any
- * language and the pipeline will still transcribe and translate, because the
- * detected language is never used to gate the request.
+ * `speechSupported` records whether a transcription model covers the language.
+ * Every one of them is now covered by Bhashini's ASR services. It stays
+ * informational only: an artisan can speak any language and the pipeline will
+ * still transcribe and translate, because the language is never used to gate
+ * the request, only to pick a Bhashini service.
  */
 export const APP_LANGUAGES: AppLanguage[] = [
   { code: "en", englishName: "English", nativeName: "English", script: "Latin", speechSupported: true },
@@ -30,14 +31,14 @@ export const APP_LANGUAGES: AppLanguage[] = [
   { code: "ne", englishName: "Nepali", nativeName: "नेपाली", script: "Devanagari", speechSupported: true },
   { code: "sa", englishName: "Sanskrit", nativeName: "संस्कृतम्", script: "Devanagari", speechSupported: true },
   { code: "sd", englishName: "Sindhi", nativeName: "سنڌي", script: "Arabic", speechSupported: true },
-  { code: "or", englishName: "Odia", nativeName: "ଓଡ଼ିଆ", script: "Odia", speechSupported: false },
-  { code: "mai", englishName: "Maithili", nativeName: "मैथिली", script: "Devanagari", speechSupported: false },
-  { code: "ks", englishName: "Kashmiri", nativeName: "کٲشُر", script: "Arabic", speechSupported: false },
-  { code: "kok", englishName: "Konkani", nativeName: "कोंकणी", script: "Devanagari", speechSupported: false },
-  { code: "doi", englishName: "Dogri", nativeName: "डोगरी", script: "Devanagari", speechSupported: false },
-  { code: "mni", englishName: "Manipuri", nativeName: "ꯃꯤꯇꯩꯂꯣꯟ", script: "Meetei Mayek", speechSupported: false },
-  { code: "brx", englishName: "Bodo", nativeName: "बड़ो", script: "Devanagari", speechSupported: false },
-  { code: "sat", englishName: "Santali", nativeName: "ᱥᱟᱱᱛᱟᱲᱤ", script: "Ol Chiki", speechSupported: false },
+  { code: "or", englishName: "Odia", nativeName: "ଓଡ଼ିଆ", script: "Odia", speechSupported: true },
+  { code: "mai", englishName: "Maithili", nativeName: "मैथिली", script: "Devanagari", speechSupported: true },
+  { code: "ks", englishName: "Kashmiri", nativeName: "کٲشُر", script: "Arabic", speechSupported: true },
+  { code: "kok", englishName: "Konkani", nativeName: "कोंकणी", script: "Devanagari", speechSupported: true },
+  { code: "doi", englishName: "Dogri", nativeName: "डोगरी", script: "Devanagari", speechSupported: true },
+  { code: "mni", englishName: "Manipuri", nativeName: "ꯃꯤꯇꯩꯂꯣꯟ", script: "Meetei Mayek", speechSupported: true },
+  { code: "brx", englishName: "Bodo", nativeName: "बड़ो", script: "Devanagari", speechSupported: true },
+  { code: "sat", englishName: "Santali", nativeName: "ᱥᱟᱱᱛᱟᱲᱤ", script: "Ol Chiki", speechSupported: true },
 ];
 
 export const DEFAULT_LANGUAGE = "en";
@@ -91,8 +92,34 @@ const SCRIPT_PATTERNS: Record<string, RegExp> = {
  * Whether the text is actually written in the script the language uses. False
  * for romanised text such as Hindi or Odia typed in Latin letters, which reads
  * as a different language to anyone who cannot sound it out.
+ *
+ * Asks whether most of the letters are in that script rather than whether any
+ * are, because a mostly Bengali message carrying one English word is not
+ * readable to an English speaker, and treating it as readable would withhold
+ * the translate button from the person who needs it most. Text with no letters
+ * in any known script (bare digits, punctuation) counts as readable: there is
+ * nothing there to translate.
  */
 export function isWrittenInOwnScript(text: string, code: string): boolean {
-  const pattern = SCRIPT_PATTERNS[getLanguage(code).script];
-  return pattern ? pattern.test(text) : true;
+  const script = getLanguage(code).script;
+  if (!SCRIPT_PATTERNS[script]) return true;
+
+  let own = 0;
+  let scripted = 0;
+
+  for (const character of text) {
+    let inOwnScript = false;
+    let inAnyScript = false;
+
+    for (const [name, pattern] of Object.entries(SCRIPT_PATTERNS)) {
+      if (!pattern.test(character)) continue;
+      inAnyScript = true;
+      if (name === script) inOwnScript = true;
+    }
+
+    if (inAnyScript) scripted += 1;
+    if (inOwnScript) own += 1;
+  }
+
+  return scripted === 0 || own * 2 >= scripted;
 }
