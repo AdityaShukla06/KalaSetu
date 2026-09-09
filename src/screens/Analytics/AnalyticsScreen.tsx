@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Skeleton } from "../../components/Skeleton";
@@ -27,35 +28,257 @@ function RetryIcon() {
   );
 }
 
-function ViewsChart({ points }: { points: AnalyticsSummary["viewsOverTime"] }) {
-  const max = Math.max(1, ...points.map((p) => p.count));
-  const width = Math.max(360, points.length * 14);
-  const height = 120;
+const PLOT_HEIGHT = 130;
+const MARGIN_TOP = 14;
+const MARGIN_RIGHT = 12;
+const MARGIN_BOTTOM = 44;
+const MAX_X_LABELS = 5;
+const MIN_LABEL_GAP = 70;
+const DOT_LIMIT = 14;
 
-  const stepX = width / Math.max(1, points.length - 1);
-  const coords = points.map((point, index) => {
-    const x = index * stepX;
-    const y = height - (point.count / max) * height;
-    return { x, y, point };
-  });
+function buildYTicks(maxValue: number): number[] {
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+  const step = steps.find((candidate) => maxValue / candidate <= 4) ?? Math.ceil(maxValue / 4);
+  const top = Math.max(step, Math.ceil(maxValue / step) * step);
+  const ticks: number[] = [];
+  for (let value = 0; value <= top; value += step) ticks.push(value);
+  return ticks;
+}
+
+function parseDay(date: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
+}
+
+function makeDateFormatter(language: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  try {
+    return new Intl.DateTimeFormat(language, options);
+  } catch {
+    return new Intl.DateTimeFormat(undefined, options);
+  }
+}
+
+function pickLabelIndices(count: number, plotWidth: number): number[] {
+  const stepX = plotWidth / Math.max(1, count - 1);
+  const maxLabels = Math.max(2, Math.min(MAX_X_LABELS, Math.floor(plotWidth / MIN_LABEL_GAP) + 1));
+  if (count <= maxLabels) return Array.from({ length: count }, (_, index) => index);
+
+  const spacing = (count - 1) / (maxLabels - 1);
+  const kept: number[] = [];
+  for (let slot = 0; slot < maxLabels; slot += 1) {
+    const index = Math.round(slot * spacing);
+    const previous = kept[kept.length - 1];
+    if (previous === undefined || (index - previous) * stepX >= MIN_LABEL_GAP) {
+      kept.push(index);
+    } else if (index === count - 1) {
+      kept[kept.length - 1] = index;
+    }
+  }
+  return kept;
+}
+
+function useMeasuredWidth(fallback: number) {
+  const [width, setWidth] = useState(fallback);
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const measure = () => setWidth(Math.max(fallback, Math.round(node.clientWidth)));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fallback]);
+  return { ref, width };
+}
+
+function ViewsChart({ points }: { points: AnalyticsSummary["viewsOverTime"] }) {
+  const { t, language } = useLanguage();
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const { ref: plotRef, width } = useMeasuredWidth(260);
+
+  const shortDate = useMemo(() => makeDateFormatter(language, { day: "numeric", month: "short" }), [language]);
+  const longDate = useMemo(
+    () => makeDateFormatter(language, { weekday: "short", day: "numeric", month: "long" }),
+    [language],
+  );
+
+  const yTicks = buildYTicks(Math.max(1, ...points.map((point) => point.count)));
+  const yMax = yTicks[yTicks.length - 1];
+
+  const marginLeft = 24 + String(yMax).length * 8;
+  const plotWidth = Math.max(120, width - marginLeft - MARGIN_RIGHT);
+  const height = PLOT_HEIGHT + MARGIN_TOP + MARGIN_BOTTOM;
+  const baselineY = MARGIN_TOP + PLOT_HEIGHT;
+
+  const stepX = plotWidth / Math.max(1, points.length - 1);
+  const coords = points.map((point, index) => ({
+    x: marginLeft + index * stepX,
+    y: baselineY - (point.count / yMax) * PLOT_HEIGHT,
+    point,
+  }));
 
   const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" ");
+  const lastX = coords[coords.length - 1].x.toFixed(1);
+  const areaPath = `${linePath} L ${lastX} ${baselineY} L ${coords[0].x.toFixed(1)} ${baselineY} Z`;
+
+  const peakIndex = coords.reduce((best, current, index) => (current.point.count > coords[best].point.count ? index : best), 0);
+  const peak = coords[peakIndex];
+  const totalViews = points.reduce((sum, point) => sum + point.count, 0);
+  const activeCoord = activeIndex === null ? null : coords[activeIndex];
+  const readout = activeCoord ?? peak;
+
+  function moveTo(index: number) {
+    setActiveIndex(Math.min(points.length - 1, Math.max(0, index)));
+  }
+
+  function handlePointer(event: PointerEvent<SVGSVGElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const localX = ((event.clientX - rect.left) * width) / rect.width - marginLeft;
+    moveTo(Math.round(localX / stepX));
+  }
+
+  function handleKeyDown(event: KeyboardEvent<SVGSVGElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const current = activeIndex ?? peakIndex;
+    moveTo(event.key === "ArrowLeft" ? current - 1 : current + 1);
+  }
 
   return (
-    <div className="analytics-chart-scroll">
-      <svg width={width} height={height + 24} role="img" aria-label="Views over the last 30 days">
-        <path d={linePath} fill="none" stroke="var(--color-primary)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        {coords.map(({ x, y, point }, index) => (
-          <g key={point.date}>
-            <circle cx={x} cy={y} r={2.5} fill="var(--color-primary)" />
-            {index % 5 === 0 && (
-              <text x={x} y={height + 16} textAnchor="middle" fontSize="10" fill="var(--color-text-muted)">
-                {point.date.slice(5)}
-              </text>
-            )}
-          </g>
-        ))}
-      </svg>
+    <div className="analytics-chart">
+      <p className="analytics-chart-readout">
+        <span className="analytics-chart-readout-value">{readout.point.count}</span>
+        <span className="analytics-chart-readout-label">{t("analytics.chartYAxis")}</span>
+        <span className="analytics-chart-readout-date">{longDate.format(parseDay(readout.point.date))}</span>
+      </p>
+
+      <div className="analytics-chart-plot" ref={plotRef}>
+        <svg
+          width={width}
+          height={height}
+          tabIndex={0}
+          role="img"
+          aria-label={t("analytics.chartAria", {
+            total: totalViews,
+            date: longDate.format(parseDay(peak.point.date)),
+            peak: peak.point.count,
+          })}
+          onPointerMove={handlePointer}
+          onPointerDown={handlePointer}
+          onPointerLeave={() => setActiveIndex(null)}
+          onFocus={() => setActiveIndex(peakIndex)}
+          onBlur={() => setActiveIndex(null)}
+          onKeyDown={handleKeyDown}
+        >
+          {yTicks.map((tick) => {
+            const y = baselineY - (tick / yMax) * PLOT_HEIGHT;
+            return (
+              <g key={tick}>
+                <line x1={marginLeft} y1={y} x2={marginLeft + plotWidth} y2={y} stroke="var(--color-border)" strokeWidth={1} />
+                <text x={marginLeft - 8} y={y + 4} textAnchor="end" fontSize="11" fill="var(--color-text-muted)">
+                  {tick}
+                </text>
+              </g>
+            );
+          })}
+
+          <path d={areaPath} fill="var(--color-primary)" fillOpacity={0.12} />
+          <path
+            d={linePath}
+            fill="none"
+            stroke="var(--color-primary)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+
+          {pickLabelIndices(points.length, plotWidth).map((index) => (
+            <text
+              key={coords[index].point.date}
+              x={coords[index].x}
+              y={baselineY + 18}
+              textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+              fontSize="11"
+              fill="var(--color-text-muted)"
+            >
+              {shortDate.format(parseDay(coords[index].point.date))}
+            </text>
+          ))}
+
+          {points.length <= DOT_LIMIT &&
+            coords.map((coord) => (
+              <circle
+                key={coord.point.date}
+                cx={coord.x}
+                cy={coord.y}
+                r={4}
+                fill="var(--color-primary)"
+                stroke="var(--color-surface)"
+                strokeWidth={2}
+              />
+            ))}
+
+          <circle cx={peak.x} cy={peak.y} r={4} fill="var(--color-primary)" stroke="var(--color-surface)" strokeWidth={2} />
+          <text
+            x={Math.min(Math.max(peak.x, marginLeft + 10), marginLeft + plotWidth - 10)}
+            y={Math.max(peak.y - 10, 11)}
+            textAnchor="middle"
+            fontSize="12"
+            fontWeight="700"
+            fill="var(--color-secondary)"
+          >
+            {peak.point.count}
+          </text>
+
+          {activeCoord && (
+            <>
+              <line
+                x1={activeCoord.x}
+                y1={MARGIN_TOP}
+                x2={activeCoord.x}
+                y2={baselineY}
+                stroke="var(--color-primary)"
+                strokeWidth={1}
+                strokeOpacity={0.5}
+              />
+              <circle
+                cx={activeCoord.x}
+                cy={activeCoord.y}
+                r={5}
+                fill="var(--color-primary)"
+                stroke="var(--color-surface)"
+                strokeWidth={2}
+              />
+            </>
+          )}
+
+          <line x1={marginLeft} y1={baselineY} x2={marginLeft + plotWidth} y2={baselineY} stroke="var(--color-text-muted)" strokeWidth={1} />
+          <text
+            x={marginLeft + plotWidth / 2}
+            y={height - 5}
+            textAnchor="middle"
+            fontSize="11"
+            fontWeight="600"
+            fill="var(--color-text-muted)"
+          >
+            {t("analytics.chartXAxis")}
+          </text>
+          <text
+            x={10}
+            y={MARGIN_TOP + PLOT_HEIGHT / 2}
+            textAnchor="middle"
+            fontSize="11"
+            fontWeight="600"
+            fill="var(--color-text-muted)"
+            transform={`rotate(-90 10 ${MARGIN_TOP + PLOT_HEIGHT / 2})`}
+          >
+            {t("analytics.chartYAxis")}
+          </text>
+        </svg>
+      </div>
+
+      <p className="caption analytics-chart-note">{t("analytics.chartHint")}</p>
     </div>
   );
 }
