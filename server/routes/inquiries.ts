@@ -6,6 +6,7 @@ import { asyncRoute } from "../middleware/asyncRoute";
 import { getSupabase } from "../lib/supabase";
 import { sendInquiryMessageEmail } from "../lib/mailer";
 import { loadEnv } from "../lib/env";
+import { isAppLanguage } from "../../shared/languages";
 import {
   Inquiry,
   InquiryMessage,
@@ -39,6 +40,7 @@ interface MessageRow {
   inquiry_id: string;
   sender_role: string;
   body: string;
+  body_language: string | null;
   created_at: string;
 }
 
@@ -47,9 +49,12 @@ function toMessage(row: MessageRow): InquiryMessage {
     messageId: row.id,
     senderRole: row.sender_role as InquirySenderRole,
     body: row.body,
+    bodyLanguage: row.body_language,
     createdAt: row.created_at,
   };
 }
+
+const BodyLanguageSchema = z.string().refine(isAppLanguage, "Unsupported language").optional();
 
 async function enrichInquiries(rows: InquiryRow[], viewerRole: "buyer" | "artisan"): Promise<Inquiry[]> {
   if (rows.length === 0) return [];
@@ -64,7 +69,7 @@ async function enrichInquiries(rows: InquiryRow[], viewerRole: "buyer" | "artisa
     supabase.from("users").select("id, email").in("id", buyerIds),
     supabase
       .from("inquiry_messages")
-      .select("id, inquiry_id, sender_role, body, created_at")
+      .select("id, inquiry_id, sender_role, body, body_language, created_at")
       .in("inquiry_id", inquiryIds)
       .order("created_at", { ascending: true }),
   ]);
@@ -179,6 +184,7 @@ const CreateInquirySchema = z
   .object({
     productId: z.string().uuid(),
     message: z.string().trim().min(1).max(2000),
+    messageLanguage: BodyLanguageSchema,
     quantity: z.number().int().positive().optional(),
     contactPreference: z.enum(["email", "phone", "whatsapp"]),
     contactValue: z.string().trim().min(1).max(40).optional(),
@@ -231,6 +237,7 @@ router.post(
       inquiry_id: inquiry.id,
       sender_role: "buyer",
       body: parsed.data.message,
+      body_language: parsed.data.messageLanguage ?? null,
     });
     if (messageError) throw new Error(`Could not save the inquiry message: ${messageError.message}`);
 
@@ -346,6 +353,7 @@ router.patch(
 
 const SendMessageSchema = z.object({
   body: z.string().trim().min(1).max(2000),
+  bodyLanguage: BodyLanguageSchema,
 });
 
 router.post(
@@ -378,7 +386,12 @@ router.post(
 
     const { data: message, error: insertError } = await supabase
       .from("inquiry_messages")
-      .insert({ inquiry_id: inquiry.id, sender_role: senderRole, body: parsed.data.body })
+      .insert({
+        inquiry_id: inquiry.id,
+        sender_role: senderRole,
+        body: parsed.data.body,
+        body_language: parsed.data.bodyLanguage ?? null,
+      })
       .select("id, created_at")
       .single();
 

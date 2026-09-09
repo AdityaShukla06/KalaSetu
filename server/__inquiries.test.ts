@@ -96,6 +96,7 @@ interface InquiryMessageJson {
   messageId: string;
   senderRole: "buyer" | "artisan";
   body: string;
+  bodyLanguage: string | null;
   createdAt: string;
 }
 
@@ -274,6 +275,47 @@ suite("buyer-to-artisan inquiry threads", () => {
     const artisanEntry = artisanView.find((item) => item.inquiryId === inquiryId);
     expect(artisanEntry?.messages).toHaveLength(4);
   }, 20000);
+
+  it("PASS/FAIL: each message remembers the language it was written in, and an unstated language stays null rather than being guessed", async () => {
+    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const buyer = await signInAs(EMAIL_BUYER, "buyer");
+    const productId = await createProduct(artisan.token);
+    const inquiryId = await createInquiry(buyer.token, productId, {
+      message: "ଏହା କେତେ ଦିନରେ ପହଞ୍ଚିବ?",
+      messageLanguage: "or",
+    });
+
+    await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
+      method: "POST",
+      headers: { ...auth(artisan.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "तीन दिन लगेंगे", bodyLanguage: "hi" }),
+    });
+
+    await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
+      method: "POST",
+      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "Thank you" }),
+    });
+
+    const view = await json<InquiryJson[]>(await fetch(`${base}/api/inquiries/received`, { headers: auth(artisan.token) }));
+    const entry = view.find((item) => item.inquiryId === inquiryId);
+    expect(entry?.messages.map((m) => m.bodyLanguage)).toEqual(["or", "hi", null]);
+  }, 20000);
+
+  it("PASS/FAIL: a language outside the app's registry is rejected rather than stored", async () => {
+    const artisan = await signInAs(EMAIL_ARTISAN, "artisan");
+    const buyer = await signInAs(EMAIL_BUYER, "buyer");
+    const productId = await createProduct(artisan.token);
+    const inquiryId = await createInquiry(buyer.token, productId);
+
+    const res = await fetch(`${base}/api/inquiries/${inquiryId}/messages`, {
+      method: "POST",
+      headers: { ...auth(buyer.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "Bonjour", bodyLanguage: "fr" }),
+    });
+
+    expect(res.status).toBe(400);
+  }, 15000);
 
   it("PASS/FAIL: unread tracking works independently for each side of the conversation", async () => {
     const artisan = await signInAs(EMAIL_ARTISAN, "artisan");

@@ -165,6 +165,7 @@ export function ProductDetailScreen() {
       await createInquiry({
         productId,
         message: message.trim(),
+        messageLanguage: language,
         quantity: quantity.trim() && Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : undefined,
         contactPreference,
         contactValue: needsContactValue ? contactValue.trim() : undefined,

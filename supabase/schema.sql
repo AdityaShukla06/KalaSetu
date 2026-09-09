@@ -119,6 +119,7 @@ create table if not exists inquiry_messages (
   inquiry_id  uuid not null references inquiries(id) on delete cascade,
   sender_role text not null check (sender_role in ('buyer', 'artisan')),
   body        text not null,
+  body_language text,
   created_at  timestamptz not null default now()
 );
 

@@ -24,7 +24,14 @@ function getDeps() {
 
 const TranslateSchema = z.object({
   text: z.string().min(1).max(4000),
-  from: z.string().refine(isAppLanguage, "Unsupported source language"),
+  /** A known source language. Given, the text is translated from it verbatim. */
+  from: z.string().refine(isAppLanguage, "Unsupported source language").optional(),
+  /**
+   * A guess at the source, used when `from` is absent. The sender's interface
+   * language is a good guess but not proof: someone with an English interface
+   * can still type romanised Hindi, so the model decides and reports back.
+   */
+  hint: z.string().refine(isAppLanguage, "Unsupported hint language").optional(),
   to: z.string().refine(isAppLanguage, "Unsupported target language"),
 });
 
@@ -38,19 +45,36 @@ router.post(
       return;
     }
 
-    const { text, from, to } = parsed.data;
+    const { text, from, hint, to } = parsed.data;
 
     if (from === to) {
-      res.json({ translation: text });
+      res.json({ translation: text, from, to });
       return;
     }
 
+    const { translationService } = getDeps();
+
     try {
-      const translation = await getDeps().translationService.translate(text, from, to);
-      res.json({ translation });
+      if (from) {
+        const translation = await translationService.translate(text, from, to);
+        res.json({ translation, from, to });
+        return;
+      }
+
+      if (!translationService.detectAndTranslate) {
+        res.status(400).json({ error: "source_language_required" });
+        return;
+      }
+
+      const result = await translationService.detectAndTranslate(text, to, hint);
+      res.json({
+        translation: result.translation,
+        from: result.detectedLanguage || null,
+        to,
+      });
     } catch (err: any) {
       console.error("translate failed", {
-        from,
+        from: from ?? "auto",
         to,
         message: err?.message,
         cause: err?.cause?.message ?? String(err?.cause ?? ""),

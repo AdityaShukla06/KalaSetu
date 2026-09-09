@@ -64,3 +64,35 @@ const RTL = new Set(["ur", "sd", "ks"]);
 export function isRtl(code: string): boolean {
   return RTL.has(code);
 }
+
+/**
+ * The Unicode block each script occupies. Used only to tell whether a message
+ * was typed in its language's own script or romanised into Latin letters, so
+ * "kitne din lagenge" is recognised as Hindi worth translating rather than
+ * taken for English.
+ */
+const SCRIPT_PATTERNS: Record<string, RegExp> = {
+  Latin: /[A-Za-z]/,
+  Devanagari: /[\u0900-\u097F]/,
+  Bengali: /[\u0980-\u09FF]/,
+  Gurmukhi: /[\u0A00-\u0A7F]/,
+  Gujarati: /[\u0A80-\u0AFF]/,
+  Odia: /[\u0B00-\u0B7F]/,
+  Tamil: /[\u0B80-\u0BFF]/,
+  Telugu: /[\u0C00-\u0C7F]/,
+  Kannada: /[\u0C80-\u0CFF]/,
+  Malayalam: /[\u0D00-\u0D7F]/,
+  Arabic: /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF]/,
+  "Meetei Mayek": /[\uABC0-\uABFF\uAAE0-\uAAFF]/,
+  "Ol Chiki": /[\u1C50-\u1C7F]/,
+};
+
+/**
+ * Whether the text is actually written in the script the language uses. False
+ * for romanised text such as Hindi or Odia typed in Latin letters, which reads
+ * as a different language to anyone who cannot sound it out.
+ */
+export function isWrittenInOwnScript(text: string, code: string): boolean {
+  const pattern = SCRIPT_PATTERNS[getLanguage(code).script];
+  return pattern ? pattern.test(text) : true;
+}

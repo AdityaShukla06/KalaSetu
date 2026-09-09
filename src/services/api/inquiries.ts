@@ -17,6 +17,7 @@ export interface InquiryMessage {
   messageId: string;
   senderRole: InquirySenderRole;
   body: string;
+  bodyLanguage: string | null;
   createdAt: string;
 }
 
@@ -39,6 +40,7 @@ export interface Inquiry {
 export interface CreateInquiryInput {
   productId: string;
   message: string;
+  messageLanguage?: string;
   quantity?: number;
   contactPreference: InquiryContactPreference;
   contactValue?: string;
@@ -69,9 +71,10 @@ export function closeInquiry(inquiryId: string): Promise<{ success: boolean }> {
 export function sendInquiryMessage(
   inquiryId: string,
   body: string,
+  bodyLanguage?: string,
 ): Promise<{ messageId: string; createdAt: string; emailDelivered: boolean }> {
   return apiFetch(`/inquiries/${encodeURIComponent(inquiryId)}/messages`, {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, bodyLanguage }),
   });
 }

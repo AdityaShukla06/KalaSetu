@@ -79,8 +79,24 @@ export interface SpeechToTextService {
 // Translation
 // ---------------------------------------------------------------------------
 
+export interface DetectedTranslation {
+  translation: string;
+  detectedLanguage: string;
+}
+
 export interface TranslationService {
   translate(text: string, sourceLanguage: string, targetLanguage: string): Promise<string>;
+  /**
+   * Translates without being told the source language, reporting back what it
+   * decided the source was. Handles text romanised into Latin letters, where
+   * the writer's stated language is a hint at best. Optional: a provider that
+   * cannot do this simply omits it, and callers fall back to an explicit source.
+   */
+  detectAndTranslate?(
+    text: string,
+    targetLanguage: string,
+    sourceHint?: string,
+  ): Promise<DetectedTranslation>;
 }
 
 // ---------------------------------------------------------------------------

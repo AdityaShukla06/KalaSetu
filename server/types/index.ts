@@ -107,6 +107,7 @@ export interface InquiryMessage {
   messageId: string;
   senderRole: InquirySenderRole;
   body: string;
+  bodyLanguage: string | null;
   createdAt: string;
 }
 

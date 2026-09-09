@@ -1484,6 +1484,39 @@ var GroqTranslationService = class {
     }
     return translated;
   }
+  async detectAndTranslate(text, targetLanguage, sourceHint) {
+    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.englishName ?? targetLanguage;
+    const hintName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceHint)?.englishName;
+    let raw;
+    try {
+      raw = await groqChat({
+        keyPool: this.keyPool,
+        model: this.model,
+        fallbackModel: this.fallbackModel,
+        json: true,
+        prompt: buildDetectPrompt(text, targetName, hintName)
+      });
+    } catch (err) {
+      throw new TranslationFailedError(`Translation into ${targetLanguage} failed`, err);
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      throw new MalformedModelResponseError(
+        "translation",
+        "Translation response was not valid JSON",
+        parseErr
+      );
+    }
+    const translation = parsed.translation?.trim();
+    if (!translation) {
+      throw new TranslationFailedError(`Empty translation output for ${targetName}`);
+    }
+    const claimed = parsed.sourceLanguageCode?.trim().toLowerCase();
+    const detectedLanguage = SUPPORTED_LANGUAGES.some((l) => l.code === claimed) ? claimed : "";
+    return { translation, detectedLanguage };
+  }
 };
 function buildPrompt(text, sourceName, targetName) {
   return `Translate the following artisan product text from ${sourceName} into natural ${targetName}.
@@ -1498,6 +1531,31 @@ Original text:
 """${text}"""
 
 Respond with a JSON object of the form {"translation": "..."}.`;
+}
+function buildDetectPrompt(text, targetName, hintName) {
+  const codes = SUPPORTED_LANGUAGES.map((l) => `${l.code} (${l.englishName})`).join(", ");
+  const hint = hintName ? `
+The writer's app was set to ${hintName}, which is a hint only. Trust the message itself over the hint.
+` : "";
+  return `A person wrote the message below in one of these languages: ${codes}.
+
+Work out which one it is, then translate the message into natural ${targetName}.
+${hint}
+Rules:
+1. The message may be romanised, meaning an Indian language typed in Latin letters rather than its own
+   script (for example "kitne din lagenge" is Hindi, "enthu vela" is Telugu, "koto din lagbe" is Bengali).
+   Judge the language by the words themselves, not by the script they are written in. Report the language
+   the words belong to, never Latin or English, unless the words really are English.
+2. Preserve the exact meaning. Add nothing, drop nothing.
+3. Do not add commentary, notes, or markup.
+4. Write ${targetName} in its own script.
+5. If the message already reads naturally as ${targetName} in its own script, return it unchanged.
+6. Report the source language as one of the codes listed above, and nothing else.
+
+Message:
+"""${text}"""
+
+Respond with a JSON object of the form {"sourceLanguageCode": "..", "translation": ".."}.`;
 }
 
 // server/voice-ai/description/heritagePrompt.ts
@@ -1766,6 +1824,54 @@ Translated ${targetName} Text:`
       throw new TranslationFailedError(`Gemini translation failed for ${sourceLanguage} -> ${targetLanguage}`, err);
     }
   }
+  async detectAndTranslate(text, targetLanguage, sourceHint) {
+    const targetName = SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.englishName || targetLanguage;
+    const codes = SUPPORTED_LANGUAGES.map((l) => `${l.code} (${l.englishName})`).join(", ");
+    const hintName = SUPPORTED_LANGUAGES.find((l) => l.code === sourceHint)?.englishName;
+    const hint = hintName ? `The writer's app was set to ${hintName}, which is a hint only. Trust the message itself over the hint.
+` : "";
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.model,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `A person wrote the message below in one of these languages: ${codes}.
+Work out which one it is, then translate the message into natural ${targetName}.
+` + hint + `The message may be romanised, meaning an Indian language typed in Latin letters rather than its own script (for example "kitne din lagenge" is Hindi, "enthu vela" is Telugu, "koto din lagbe" is Bengali). Judge the language by the words themselves, not the script, and never report Latin or English unless the words really are English.
+Preserve the exact meaning without adding commentary or markup, and write ${targetName} in its own script.
+If the message already reads naturally as ${targetName} in its own script, return it unchanged.
+Report the source language as one of the codes listed above.
+
+Message:
+"""${text}"""
+
+Respond with only a JSON object of the form {"sourceLanguageCode": "..", "translation": ".."}.`
+              }
+            ]
+          }
+        ],
+        config: { responseMimeType: "application/json" }
+      });
+      const raw = response.text?.trim();
+      if (!raw) {
+        throw new TranslationFailedError(`Empty translation output for ${targetName}`);
+      }
+      const parsed = JSON.parse(raw);
+      const translation = parsed.translation?.trim();
+      if (!translation) {
+        throw new TranslationFailedError(`Empty translation output for ${targetName}`);
+      }
+      const claimed = parsed.sourceLanguageCode?.trim().toLowerCase();
+      const detectedLanguage = SUPPORTED_LANGUAGES.some((l) => l.code === claimed) ? claimed : "";
+      return { translation, detectedLanguage };
+    } catch (err) {
+      if (err instanceof TranslationFailedError) throw err;
+      throw new TranslationFailedError(`Gemini translation into ${targetLanguage} failed`, err);
+    }
+  }
 };
 
 // server/voice-ai/description/gemini-description.service.ts
@@ -1900,6 +2006,12 @@ var MockTranslationService = class {
       throw new TranslationFailedError(`Simulated failure for ${sourceLanguage} -> ${targetLanguage}`);
     }
     return `[mock:${sourceLanguage}->${targetLanguage}] ${text}`;
+  }
+  async detectAndTranslate(text, targetLanguage, sourceHint) {
+    return {
+      translation: `[mock:auto->${targetLanguage}] ${text}`,
+      detectedLanguage: sourceHint ?? "en"
+    };
   }
 };
 
@@ -2456,6 +2568,14 @@ var as_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0986\u09AA\u09C1\u09A8\u09BF",
+  "inquiryThread.translate": "{to}\u09B2\u09C8 \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09F0\u0995",
+  "inquiryThread.translating": "\u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09F0\u09BE \u09B9\u09C8\u099B\u09C7...",
+  "inquiryThread.translatedFromTo": "{from}\u09F0 \u09AA\u09F0\u09BE {to}\u09B2\u09C8 \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09F0\u09BE \u09B9\u09C8\u099B\u09C7",
+  "inquiryThread.translatedTo": "{to}\u09B2\u09C8 \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09F0\u09BE \u09B9\u09C8\u099B\u09C7",
+  "inquiryThread.alreadyInLanguage": "\u098F\u0987 \u09AC\u09BE\u09F0\u09CD\u09A4\u09BE \u0987\u09A4\u09BF\u09AE\u09A7\u09CD\u09AF\u09C7 {to}\u09A4 \u0986\u099B\u09C7",
+  "inquiryThread.showOriginal": "\u09AE\u09C2\u09B2\u099F\u09CB \u09A6\u09C7\u0996\u09C1\u09F1\u09BE\u0993\u0995",
+  "inquiryThread.showTranslation": "\u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u09A6\u09C7\u0996\u09C1\u09F1\u09BE\u0993\u0995",
+  "inquiryThread.translateFailed": "\u09AC\u09BE\u09F0\u09CD\u09A4\u09BE \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09F0\u09BF\u09AC \u09A8\u09CB\u09F1\u09BE\u09F0\u09BF\u0964 \u09AA\u09C1\u09A8\u09F0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09F0\u0995\u0964",
   "inquiryThread.artisan": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0",
   "inquiryThread.buyer": "\u0995\u09CD\u09F0\u09C7\u09A4\u09BE",
   "inquiryThread.placeholder": "\u09AC\u09BE\u09F0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u0995, \u098F\u0987\u099F\u09CB \u0985\u09A8\u09CD\u09AF\u099C\u09A8\u09B2\u09C8 \u0987\u09AE\u09C7\u0987\u09B2 \u0995\u09F0\u09BE \u09B9'\u09AC",
@@ -2820,6 +2940,14 @@ var bn_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0986\u09AA\u09A8\u09BF",
+  "inquiryThread.translate": "{to} \u09A4\u09C7 \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09B0\u09C1\u09A8",
+  "inquiryThread.translating": "\u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09B0\u09BE \u09B9\u099A\u09CD\u099B\u09C7...",
+  "inquiryThread.translatedFromTo": "{from} \u09A5\u09C7\u0995\u09C7 {to} \u09A4\u09C7 \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09B0\u09BE \u09B9\u09AF\u09BC\u09C7\u099B\u09C7",
+  "inquiryThread.translatedTo": "{to} \u09A4\u09C7 \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09B0\u09BE \u09B9\u09AF\u09BC\u09C7\u099B\u09C7",
+  "inquiryThread.alreadyInLanguage": "\u098F\u0987 \u09AC\u09BE\u09B0\u09CD\u09A4\u09BE\u099F\u09BF \u0987\u09A4\u09BF\u09AE\u09A7\u09CD\u09AF\u09C7 {to} \u09A4\u09C7 \u0986\u099B\u09C7",
+  "inquiryThread.showOriginal": "\u09AE\u09C2\u09B2\u099F\u09BF \u09A6\u09C7\u0996\u09C1\u09A8",
+  "inquiryThread.showTranslation": "\u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u09A6\u09C7\u0996\u09C1\u09A8",
+  "inquiryThread.translateFailed": "\u098F\u0987 \u09AC\u09BE\u09B0\u09CD\u09A4\u09BE \u0985\u09A8\u09C1\u09AC\u09BE\u09A6 \u0995\u09B0\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF\u0964 \u0986\u09AC\u09BE\u09B0 \u099A\u09C7\u09B7\u09CD\u099F\u09BE \u0995\u09B0\u09C1\u09A8\u0964",
   "inquiryThread.artisan": "\u09B6\u09BF\u09B2\u09CD\u09AA\u09C0",
   "inquiryThread.buyer": "\u0995\u09CD\u09B0\u09C7\u09A4\u09BE",
   "inquiryThread.placeholder": "\u09AC\u09BE\u09B0\u09CD\u09A4\u09BE \u09B2\u09BF\u0996\u09C1\u09A8, \u098F\u099F\u09BF \u0985\u09A8\u09CD\u09AF\u0995\u09C7 \u0987\u09AE\u09C7\u0987\u09B2 \u09B9\u09AC\u09C7",
@@ -3184,6 +3312,14 @@ var brx_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0928'\u0907",
+  "inquiryThread.translate": "{to} \u092C\u093E\u092F \u0925\u093E\u0902\u091C\u093E\u092F",
+  "inquiryThread.translating": "\u0925\u093E\u0902\u091C\u093E\u092F \u0917\u093E\u092C...",
+  "inquiryThread.translatedFromTo": "{from} \u0928\u093F\u092B\u094D\u0930\u093F {to} \u092C\u093E\u092F \u0925\u093E\u0902\u091C\u093E\u092F",
+  "inquiryThread.translatedTo": "{to} \u092C\u093E\u092F \u0925\u093E\u0902\u091C\u093E\u092F",
+  "inquiryThread.alreadyInLanguage": "\u0939\u093E\u092C\u093E \u0938\u0928\u094D\u0926\u0947\u0936 {to} \u092C\u093E\u092F \u0925\u093E\u0902\u091C\u093E\u092F",
+  "inquiryThread.showOriginal": "\u0905\u0938\u0932\u0940 \u0926\u0947\u0916\u093E\u092C",
+  "inquiryThread.showTranslation": "\u0925\u093E\u0902\u091C\u093E\u092F \u0926\u0947\u0916\u093E\u092C",
+  "inquiryThread.translateFailed": "\u0939\u093E\u092C\u093E \u0938\u0928\u094D\u0926\u0947\u0936 \u0925\u093E\u0902\u091C\u093E\u092F \u0928\u093E\u092F \u0939\u094B\u092C\u0964 \u092B\u093F\u0928 \u0925\u093E\u0902\u091C\u093E\u092F \u092C\u093F\u0938\u093E\u092C\u0964",
   "inquiryThread.artisan": "\u0939\u0938\u094D\u0924\u0915\u0932\u093E",
   "inquiryThread.buyer": "\u0916\u0930\u093F\u0926\u0917\u094D\u0930\u093E",
   "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u093E\u092C, \u090F\u0916\u094B\u0928 \u0926\u094B\u092C\u094D\u092C\u0930 \u092B\u093E\u0932\u093E\u092F \u0926\u093F\u0939\u093E\u092F",
@@ -3548,6 +3684,14 @@ var doi_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0924\u0941\u0939\u093E\u0902",
+  "inquiryThread.translate": "{to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926 \u0915\u0930\u094B",
+  "inquiryThread.translating": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0939\u094B \u0930\u0939\u093E \u0939\u0948...",
+  "inquiryThread.translatedFromTo": "{from} \u0938\u0947 {to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926 \u0939\u094B \u0917\u092F\u093E",
+  "inquiryThread.translatedTo": "{to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926 \u0939\u094B \u0917\u092F\u093E",
+  "inquiryThread.alreadyInLanguage": "\u092F\u0939 \u0938\u0902\u0926\u0947\u0936 \u092A\u0939\u0932\u0947 \u0939\u0940 {to} \u092E\u0947\u0902 \u0939\u0948",
+  "inquiryThread.showOriginal": "\u092E\u0942\u0932 \u0926\u093F\u0916\u093E\u0913",
+  "inquiryThread.showTranslation": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0926\u093F\u0916\u093E\u0913",
+  "inquiryThread.translateFailed": "\u0938\u0902\u0926\u0947\u0936 \u0905\u0928\u0941\u0935\u093E\u0926 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E\u0964 \u092B\u093F\u0930 \u0915\u094B\u0936\u093F\u0936 \u0915\u0930\u094B\u0964",
   "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
   "inquiryThread.buyer": "\u0916\u0930\u0940\u0926\u093E\u0930",
   "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u094B, \u0908\u2011\u092E\u0947\u0932 \u0926\u094B\u0939\u093E\u0902 \u0928\u0942\u0901 \u091C\u093E\u0935\u0947\u0917\u093E",
@@ -3912,6 +4056,14 @@ var en_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "You",
+  "inquiryThread.translate": "Translate to {to}",
+  "inquiryThread.translating": "Translating...",
+  "inquiryThread.translatedFromTo": "Translated to {to} from {from}",
+  "inquiryThread.translatedTo": "Translated to {to}",
+  "inquiryThread.alreadyInLanguage": "This message is already in {to}",
+  "inquiryThread.showOriginal": "Show the original",
+  "inquiryThread.showTranslation": "Show the translation",
+  "inquiryThread.translateFailed": "Could not translate this message. Please try again.",
   "inquiryThread.artisan": "Artisan",
   "inquiryThread.buyer": "Buyer",
   "inquiryThread.placeholder": "Write a message, this is emailed to the other side",
@@ -4276,6 +4428,14 @@ var gu_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0AA4\u0AAE\u0AC7",
+  "inquiryThread.translate": "{to} \u0AAE\u0ABE\u0A82 \u0A85\u0AA8\u0AC1\u0AB5\u0ABE\u0AA6 \u0A95\u0AB0\u0ACB",
+  "inquiryThread.translating": "\u0A85\u0AA8\u0AC1\u0AB5\u0ABE\u0AA6 \u0AA5\u0A88 \u0AB0\u0AB9\u0ACD\u0AAF\u0ACB \u0A9B\u0AC7...",
+  "inquiryThread.translatedFromTo": "{from} \u0AAE\u0ABE\u0A82\u0AA5\u0AC0 {to} \u0AAE\u0ABE\u0A82 \u0A85\u0AA8\u0AC1\u0AB5\u0ABE\u0AA6\u0ABF\u0AA4",
+  "inquiryThread.translatedTo": "{to} \u0AAE\u0ABE\u0A82 \u0A85\u0AA8\u0AC1\u0AB5\u0ABE\u0AA6\u0ABF\u0AA4",
+  "inquiryThread.alreadyInLanguage": "\u0A86 \u0AB8\u0A82\u0AA6\u0AC7\u0AB6 \u0AAA\u0AB9\u0AC7\u0AB2\u0AC7\u0AA5\u0AC0 \u0A9C {to} \u0AAE\u0ABE\u0A82 \u0A9B\u0AC7",
+  "inquiryThread.showOriginal": "\u0AAE\u0AC2\u0AB3 \u0AAC\u0AA4\u0ABE\u0AB5\u0ACB",
+  "inquiryThread.showTranslation": "\u0A85\u0AA8\u0AC1\u0AB5\u0ABE\u0AA6 \u0AAC\u0AA4\u0ABE\u0AB5\u0ACB",
+  "inquiryThread.translateFailed": "\u0A86 \u0AB8\u0A82\u0AA6\u0AC7\u0AB6\u0AA8\u0AC1\u0A82 \u0A85\u0AA8\u0AC1\u0AB5\u0ABE\u0AA6 \u0A95\u0AB0\u0AC0 \u0AB6\u0A95\u0ACD\u0AAF\u0ABE \u0AA8\u0AA5\u0AC0. \u0AAB\u0AB0\u0AC0 \u0AAA\u0ACD\u0AB0\u0AAF\u0ABE\u0AB8 \u0A95\u0AB0\u0ACB.",
   "inquiryThread.artisan": "\u0A95\u0ABE\u0AB0\u0ABF\u0A97\u0AB0",
   "inquiryThread.buyer": "\u0A96\u0AB0\u0AC0\u0AA6\u0AA6\u0ABE\u0AB0",
   "inquiryThread.placeholder": "\u0AB8\u0A82\u0AA6\u0AC7\u0AB6 \u0AB2\u0A96\u0ACB, \u0A86 \u0AAC\u0AC0\u0A9C\u0ABE \u0AAA\u0A95\u0ACD\u0AB7\u0AA8\u0AC7 \u0A87\u0AAE\u0AC7\u0AB2 \u0AA5\u0AB6\u0AC7",
@@ -4640,6 +4800,14 @@ var hi_default = {
   "inquiries.whatsappReplyPrefill": "\u0928\u092E\u0938\u094D\u0924\u0947! KalaSetu \u092A\u0930 {product} \u092E\u0947\u0902 \u0906\u092A\u0915\u0940 \u0930\u0941\u091A\u093F \u0915\u0947 \u0932\u093F\u090F \u0927\u0928\u094D\u092F\u0935\u093E\u0926\u0964",
   "inquiries.close": "\u092A\u0942\u091B\u0924\u093E\u091B \u092C\u0902\u0926 \u0915\u0930\u0947\u0902",
   "inquiryThread.you": "\u0906\u092A",
+  "inquiryThread.translate": "{to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926 \u0915\u0930\u0947\u0902",
+  "inquiryThread.translating": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0939\u094B \u0930\u0939\u093E \u0939\u0948...",
+  "inquiryThread.translatedFromTo": "{from} \u0938\u0947 {to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.translatedTo": "{to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.alreadyInLanguage": "\u092F\u0939 \u0938\u0902\u0926\u0947\u0936 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0939\u0940 {to} \u092E\u0947\u0902 \u0939\u0948",
+  "inquiryThread.showOriginal": "\u092E\u0942\u0932 \u0926\u093F\u0916\u093E\u090F\u0901",
+  "inquiryThread.showTranslation": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0926\u093F\u0916\u093E\u090F\u0901",
+  "inquiryThread.translateFailed": "\u0907\u0938 \u0938\u0902\u0926\u0947\u0936 \u0915\u093E \u0905\u0928\u0941\u0935\u093E\u0926 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E\u0964 \u0915\u0943\u092A\u092F\u093E \u092B\u093F\u0930 \u0938\u0947 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964",
   "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
   "inquiryThread.buyer": "\u0916\u0930\u0940\u0926\u093E\u0930",
   "inquiryThread.placeholder": "\u090F\u0915 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0947\u0902, \u092F\u0939 \u0926\u0942\u0938\u0930\u0947 \u092A\u0915\u094D\u0937 \u0915\u094B \u0908\u092E\u0947\u0932 \u0915\u093F\u092F\u093E \u091C\u093E\u090F\u0917\u093E",
@@ -5004,6 +5172,14 @@ var kn_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0CA8\u0CC0\u0CB5\u0CC1",
+  "inquiryThread.translate": "{to}\u0C97\u0CC6 \u0C85\u0CA8\u0CC1\u0CB5\u0CBE\u0CA6\u0CBF\u0CB8\u0CBF",
+  "inquiryThread.translating": "\u0C85\u0CA8\u0CC1\u0CB5\u0CBE\u0CA6\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CC1\u0CA4\u0CCD\u0CA4\u0CBF\u0CA6\u0CC6...",
+  "inquiryThread.translatedFromTo": "{from} \u0CA8\u0CBF\u0C82\u0CA6 {to} \u0C97\u0CC6 \u0C85\u0CA8\u0CC1\u0CB5\u0CBE\u0CA6\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
+  "inquiryThread.translatedTo": "{to} \u0C97\u0CC6 \u0C85\u0CA8\u0CC1\u0CB5\u0CBE\u0CA6\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CBF\u0CA6\u0CC6",
+  "inquiryThread.alreadyInLanguage": "\u0C88 \u0CB8\u0C82\u0CA6\u0CC7\u0CB6\u0CB5\u0CC1 \u0C88\u0C97\u0CBE\u0C97\u0CB2\u0CC7 {to} \u0CA8\u0CB2\u0CCD\u0CB2\u0CBF \u0C87\u0CA6\u0CC6",
+  "inquiryThread.showOriginal": "\u0CAE\u0CC2\u0CB2\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CA4\u0CCB\u0CB0\u0CBF\u0CB8\u0CBF",
+  "inquiryThread.showTranslation": "\u0C85\u0CA8\u0CC1\u0CB5\u0CBE\u0CA6\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CA4\u0CCB\u0CB0\u0CBF\u0CB8\u0CBF",
+  "inquiryThread.translateFailed": "\u0C88 \u0CB8\u0C82\u0CA6\u0CC7\u0CB6\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0C85\u0CA8\u0CC1\u0CB5\u0CBE\u0CA6\u0CBF\u0CB8\u0CB2\u0CBE\u0C97\u0CB2\u0CBF\u0CB2\u0CCD\u0CB2. \u0CA6\u0CAF\u0CB5\u0CBF\u0C9F\u0CCD\u0C9F\u0CC1 \u0CAE\u0CA4\u0CCD\u0CA4\u0CC6 \u0CAA\u0CCD\u0CB0\u0CAF\u0CA4\u0CCD\u0CA8\u0CBF\u0CB8\u0CBF.",
   "inquiryThread.artisan": "\u0C95\u0CB2\u0CBE\u0C95\u0CBE\u0CB0",
   "inquiryThread.buyer": "\u0C96\u0CB0\u0CC0\u0CA6\u0CBF\u0CA6\u0CBE\u0CB0",
   "inquiryThread.placeholder": "\u0CB8\u0C82\u0CA6\u0CC7\u0CB6\u0CB5\u0CA8\u0CCD\u0CA8\u0CC1 \u0CAC\u0CB0\u0CC6\u0CAF\u0CBF\u0CB0\u0CBF, \u0C87\u0CA6\u0CC1 \u0C87\u0CA8\u0CCD\u0CA8\u0CCA\u0CAC\u0CCD\u0CAC\u0CB0\u0CBF\u0C97\u0CC6 \u0C87\u0CAE\u0CC7\u0CB2\u0CCD \u0C86\u0C97\u0CC1\u0CA4\u0CCD\u0CA4\u0CA6\u0CC6",
@@ -5368,6 +5544,14 @@ var kok_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0924\u0942\u0902",
+  "inquiryThread.translate": "{to} \u0915\u0921\u0947 \u0905\u0928\u0941\u0935\u093E\u0926",
+  "inquiryThread.translating": "\u0905\u0928\u0941\u0935\u093E\u0926 \u091A\u093E\u0932\u0942...",
+  "inquiryThread.translatedFromTo": "{from} \u0939\u0942\u0928 {to} \u0915\u0921\u0947 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.translatedTo": "{to} \u0915\u0921\u0947 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.alreadyInLanguage": "\u0939\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u0906\u0927\u0940\u091A {to} \u092E\u0927\u094D\u092F\u0947 \u0906\u0938\u093E",
+  "inquiryThread.showOriginal": "\u092E\u0942\u0933 \u0926\u093E\u0916\u0935",
+  "inquiryThread.showTranslation": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0926\u093E\u0916\u0935",
+  "inquiryThread.translateFailed": "\u0939\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u0905\u0928\u0941\u0935\u093E\u0926 \u0915\u0930\u092A\u093E\u0915 \u091C\u093E\u0932\u094B \u0928\u093E. \u092A\u0941\u0928\u094D\u0939\u093E \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930",
   "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
   "inquiryThread.buyer": "\u0916\u0930\u0947\u0926\u0940\u0926\u093E\u0930",
   "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0939\u093E, \u0939\u093E\u091A \u0926\u0941\u0938\u0931\u094D\u092F\u093E\u0902\u0915\u093E \u0908\u092E\u0947\u0932 \u0915\u0930\u092A",
@@ -5732,6 +5916,14 @@ var ks_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u062A\u0648\u06C1",
+  "inquiryThread.translate": "\u062A\u0631\u062C\u0645 \u06A9\u0631\u0646 {to}",
+  "inquiryThread.translating": "\u062A\u0631\u062C\u0645 \u06A9\u0631\u0627\u0646...",
+  "inquiryThread.translatedFromTo": "\u062A\u0631\u062C\u0645 \u06A9\u0631\u0646 \u0686\u06BE\u064F {to} \u0633\u06C4\u0646\u062F {from}",
+  "inquiryThread.translatedTo": "\u062A\u0631\u062C\u0645 \u06A9\u0631\u0646 \u0686\u06BE\u064F {to}",
+  "inquiryThread.alreadyInLanguage": "\u06CC\u06C1 \u067E\u06CC\u063A\u0627\u0645 \u0686\u06BE\u064F {to} \u0698\u0654",
+  "inquiryThread.showOriginal": "\u0627\u0635\u0644 \u062F\u0650\u06A9\u06BE\u0627\u0624",
+  "inquiryThread.showTranslation": "\u062A\u0631\u062C\u0645 \u062F\u0650\u06A9\u06BE\u0627\u0624",
+  "inquiryThread.translateFailed": "\u06CC\u06C1 \u067E\u06CC\u063A\u0627\u0645 \u062A\u0631\u062C\u0645 \u0646\u06C1 \u06A9\u0631\u0646 \u06C1\u0646\u062F\u06D4 \u0645\u06C1\u0631\u0628\u0627\u0646\u06CC \u06A9\u0631 \u06A9\u06D2 \u062F\u0648\u0628\u0627\u0631 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u0646\u06D4",
   "inquiryThread.artisan": "\u06A9\u0627\u0631\u06AF\u0631",
   "inquiryThread.buyer": "\u062E\u0631\u06CC\u062F\u0627\u0631",
   "inquiryThread.placeholder": "\u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u06CC\u0648\u060C \u06CC\u06C1 \u062F\u0648\u0633\u0631\u0627 \u067E\u0679\u06BE\u0646 \u06C1\u0646\u062F \u0627\u06CC \u0645\u06CC\u0644 \u06A9\u0631\u0646 \u06C1\u0646\u062F \u0686\u06BE",
@@ -6096,6 +6288,14 @@ var mai_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0905\u0939\u093E\u0901",
+  "inquiryThread.translate": "{to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926",
+  "inquiryThread.translating": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0939\u094B \u0930\u0939\u0932 \u0905\u091B\u093F...",
+  "inquiryThread.translatedFromTo": "{from} \u0938\u0901 {to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.translatedTo": "{to} \u092E\u0947\u0902 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.alreadyInLanguage": "\u0908 \u0938\u0902\u0926\u0947\u0936 \u092A\u0939\u093F\u0928\u0947 \u0938\u0901 {to} \u092E\u0947\u0902 \u0905\u091B\u093F",
+  "inquiryThread.showOriginal": "\u092E\u0942\u0932 \u0926\u0947\u0916\u093E\u0909",
+  "inquiryThread.showTranslation": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0926\u0947\u0916\u093E\u0909",
+  "inquiryThread.translateFailed": "\u090F\u0939 \u0938\u0902\u0926\u0947\u0936 \u0915\u0947 \u0905\u0928\u0941\u0935\u093E\u0926 \u0928\u0939\u093F \u092D' \u0938\u0915\u0932\u0964 \u0915\u0943\u092A\u092F\u093E \u092B\u0947\u0930 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0942\u0964",
   "inquiryThread.artisan": "\u0915\u093E\u0930\u0940\u0917\u0930",
   "inquiryThread.buyer": "\u0916\u0930\u0940\u0926\u093E\u0930",
   "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916\u0942, \u0908 \u0926\u094B\u0938\u0930 \u092A\u0915\u094D\u0937 \u0915\u0947 \u0908\u092E\u0947\u0932 \u0915\u090F\u0932 \u091C\u093E\u092F\u0924",
@@ -6460,6 +6660,14 @@ var ml_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0D28\u0D3F\u0D19\u0D4D\u0D19\u0D7E",
+  "inquiryThread.translate": "{to} \u0D32\u0D47\u0D15\u0D4D\u0D15\u0D4D \u0D35\u0D3F\u0D35\u0D7C\u0D24\u0D4D\u0D24\u0D28\u0D02 \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D41\u0D15",
+  "inquiryThread.translating": "\u0D35\u0D3F\u0D35\u0D7C\u0D24\u0D4D\u0D24\u0D28\u0D02 \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D41\u0D28\u0D4D\u0D28\u0D41...",
+  "inquiryThread.translatedFromTo": "{from} \u0D28\u0D3F\u0D28\u0D4D\u0D28\u0D4D {to} \u0D32\u0D47\u0D15\u0D4D\u0D15\u0D4D \u0D35\u0D3F\u0D35\u0D7C\u0D24\u0D4D\u0D24\u0D28\u0D02 \u0D1A\u0D46\u0D2F\u0D4D\u0D24\u0D41",
+  "inquiryThread.translatedTo": "{to} \u0D32\u0D47\u0D15\u0D4D\u0D15\u0D4D \u0D35\u0D3F\u0D35\u0D7C\u0D24\u0D4D\u0D24\u0D28\u0D02 \u0D1A\u0D46\u0D2F\u0D4D\u0D24\u0D41",
+  "inquiryThread.alreadyInLanguage": "\u0D08 \u0D38\u0D28\u0D4D\u0D26\u0D47\u0D36\u0D02 \u0D07\u0D24\u0D3F\u0D28\u0D15\u0D02 {to} \u0D32\u0D3E\u0D23\u0D4D",
+  "inquiryThread.showOriginal": "\u0D2E\u0D42\u0D32\u0D2A\u0D3E\u0D20\u0D02 \u0D15\u0D3E\u0D23\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15",
+  "inquiryThread.showTranslation": "\u0D35\u0D3F\u0D35\u0D7C\u0D24\u0D4D\u0D24\u0D28\u0D02 \u0D15\u0D3E\u0D23\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15",
+  "inquiryThread.translateFailed": "\u0D08 \u0D38\u0D28\u0D4D\u0D26\u0D47\u0D36\u0D02 \u0D35\u0D3F\u0D35\u0D7C\u0D24\u0D4D\u0D24\u0D28\u0D02 \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D3E\u0D7B \u0D38\u0D3E\u0D27\u0D3F\u0D1A\u0D4D\u0D1A\u0D3F\u0D32\u0D4D\u0D32. \u0D26\u0D2F\u0D35\u0D3E\u0D2F\u0D3F \u0D35\u0D40\u0D23\u0D4D\u0D1F\u0D41\u0D02 \u0D36\u0D4D\u0D30\u0D2E\u0D3F\u0D15\u0D4D\u0D15\u0D41\u0D15.",
   "inquiryThread.artisan": "\u0D15\u0D32\u0D3E\u0D15\u0D3E\u0D30\u0D3F",
   "inquiryThread.buyer": "\u0D35\u0D3E\u0D19\u0D4D\u0D19\u0D41\u0D28\u0D4D\u0D28\u0D35\u0D7B",
   "inquiryThread.placeholder": "\u0D12\u0D30\u0D41 \u0D38\u0D28\u0D4D\u0D26\u0D47\u0D36\u0D02 \u0D0E\u0D34\u0D41\u0D24\u0D41\u0D15, \u0D07\u0D24\u0D4D \u0D2E\u0D31\u0D4D\u0D31\u0D35\u0D7C\u0D15\u0D4D\u0D15\u0D41 \u0D07\u0D2E\u0D46\u0D2F\u0D3F\u0D7D \u0D1A\u0D46\u0D2F\u0D4D\u0D2F\u0D41\u0D02",
@@ -6824,6 +7032,14 @@ var mni_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\uABC5\uABE4",
+  "inquiryThread.translate": "\uABCA\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4 {to}",
+  "inquiryThread.translating": "\uABCA\uABE7\uABD4\uABE4 \uABCD\uABDF\uABD5\uABE4...",
+  "inquiryThread.translatedFromTo": "\uABCA\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4 {to} \uABCD\uABDF\uABD5\uABE4 {from}",
+  "inquiryThread.translatedTo": "\uABCA\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4 {to}",
+  "inquiryThread.alreadyInLanguage": "\uABCA\uABE7\uABD4\uABE4 \uABCD\uABE7\uABD4\uABE4\uABE1 {to} \uABCD\uABDF\uABD5\uABE4",
+  "inquiryThread.showOriginal": "\uABCA\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4 \uABCA\uABD5\uABE4",
+  "inquiryThread.showTranslation": "\uABCA\uABE7\uABD4\uABE4 \uABCA\uABD5\uABE4",
+  "inquiryThread.translateFailed": "\uABCA\uABE7\uABD4\uABE4 \uABCD\uABDF\uABD5\uABE4 \uABCA\uABE7\uABD4\uABE4 \uABCD\uABDF\uABD5\uABE4. \uABCA\uABE7\uABD4\uABE4 \uABCD\uABDF\uABD5\uABE4 \uABCD\uABDF\uABD5\uABE4",
   "inquiryThread.artisan": "\uABC3\uABC1\uABE4\uABDF\uABC5\uABE4",
   "inquiryThread.buyer": "\uABCA\uABE7\uABD5\uABE4",
   "inquiryThread.placeholder": "\uABC3\uABE6\uABC1\uABE6\uABD6 \uABCD\uABDF\uABD5\uABE4, \uABD1\uABC3\uABC1\uABE4 \uABCA\uABE7\uABD4\uABE4\uABE1 \uABCA\uABD5\uABE4",
@@ -7188,6 +7404,14 @@ var mr_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0924\u0941\u092E\u094D\u0939\u0940",
+  "inquiryThread.translate": "{to} \u092E\u0927\u094D\u092F\u0947 \u0905\u0928\u0941\u0935\u093E\u0926 \u0915\u0930\u093E",
+  "inquiryThread.translating": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0939\u094B\u0924 \u0906\u0939\u0947...",
+  "inquiryThread.translatedFromTo": "{from} \u092A\u093E\u0938\u0942\u0928 {to} \u092E\u0927\u094D\u092F\u0947 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.translatedTo": "{to} \u092E\u0927\u094D\u092F\u0947 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924",
+  "inquiryThread.alreadyInLanguage": "\u0939\u093E \u0938\u0902\u0926\u0947\u0936 \u0906\u0927\u0940\u091A {to} \u092E\u0927\u094D\u092F\u0947 \u0906\u0939\u0947",
+  "inquiryThread.showOriginal": "\u092E\u0942\u0933 \u0926\u093E\u0916\u0935\u093E",
+  "inquiryThread.showTranslation": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0926\u093E\u0916\u0935\u093E",
+  "inquiryThread.translateFailed": "\u0939\u093E \u0938\u0902\u0926\u0947\u0936 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924 \u0915\u0930\u0924\u093E \u0906\u0932\u093E \u0928\u093E\u0939\u0940. \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u094D\u0939\u093E \u092A\u094D\u0930\u092F\u0924\u094D\u0928 \u0915\u0930\u093E.",
   "inquiryThread.artisan": "\u0915\u093E\u0930\u093F\u0917\u0930",
   "inquiryThread.buyer": "\u0916\u0930\u0947\u0926\u0940\u0926\u093E\u0930",
   "inquiryThread.placeholder": "\u0938\u0902\u0926\u0947\u0936 \u091F\u093E\u0907\u092A \u0915\u0930\u093E, \u0939\u093E \u0926\u0941\u0938\u0931\u094D\u092F\u093E \u0935\u094D\u092F\u0915\u094D\u0924\u0940\u0932\u093E \u0908\u092E\u0947\u0932 \u0915\u0947\u0932\u093E \u091C\u093E\u0908\u0932",
@@ -7552,6 +7776,14 @@ var ne_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0924\u092A\u093E\u0908\u0902",
+  "inquiryThread.translate": "{to} \u092E\u093E \u0905\u0928\u0941\u0935\u093E\u0926 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D",
+  "inquiryThread.translating": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0939\u0941\u0901\u0926\u0948\u091B...",
+  "inquiryThread.translatedFromTo": "{from} \u092C\u093E\u091F {to} \u092E\u093E \u0905\u0928\u0941\u0935\u093E\u0926 \u0917\u0930\u093F\u092F\u094B",
+  "inquiryThread.translatedTo": "{to} \u092E\u093E \u0905\u0928\u0941\u0935\u093E\u0926 \u0917\u0930\u093F\u092F\u094B",
+  "inquiryThread.alreadyInLanguage": "\u092F\u094B \u0938\u0928\u094D\u0926\u0947\u0936 \u092A\u0939\u093F\u0932\u0947 \u0928\u0948 {to} \u092E\u093E \u091B",
+  "inquiryThread.showOriginal": "\u092E\u0942\u0932 \u0926\u0947\u0916\u093E\u0909\u0928\u0941\u0939\u094B\u0938\u094D",
+  "inquiryThread.showTranslation": "\u0905\u0928\u0941\u0935\u093E\u0926 \u0926\u0947\u0916\u093E\u0909\u0928\u0941\u0939\u094B\u0938\u094D",
+  "inquiryThread.translateFailed": "\u0938\u0928\u094D\u0926\u0947\u0936 \u0905\u0928\u0941\u0935\u093E\u0926 \u0917\u0930\u094D\u0928 \u0938\u0915\u0947\u0928\u0964 \u0915\u0943\u092A\u092F\u093E \u092B\u0947\u0930\u093F \u092A\u094D\u0930\u092F\u093E\u0938 \u0917\u0930\u094D\u0928\u0941\u0939\u094B\u0938\u094D\u0964",
   "inquiryThread.artisan": "\u0915\u0941\u0936\u0932\u0915\u093E\u0930\u0940",
   "inquiryThread.buyer": "\u0917\u094D\u0930\u093E\u0939\u0915",
   "inquiryThread.placeholder": "\u0938\u0928\u094D\u0926\u0947\u0936 \u0932\u0947\u0916\u094D\u0928\u0941\u0939\u094B\u0938\u094D, \u092F\u094B \u0905\u0930\u094D\u0915\u094B \u092A\u0915\u094D\u0937\u0932\u093E\u0908 \u0907\u092E\u0947\u0932 \u0917\u0930\u093F\u0928\u094D\u091B",
@@ -7916,6 +8148,14 @@ var or_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0B06\u0B2A\u0B23",
+  "inquiryThread.translate": "{to} \u0B15\u0B41 \u0B05\u0B28\u0B41\u0B2C\u0B3E\u0B26 \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41",
+  "inquiryThread.translating": "\u0B05\u0B28\u0B41\u0B2C\u0B3E\u0B26 \u0B39\u0B47\u0B09\u0B1B\u0B3F...",
+  "inquiryThread.translatedFromTo": "{from} \u0B30\u0B41 {to} \u0B15\u0B41 \u0B05\u0B28\u0B41\u0B2C\u0B3E\u0B26 \u0B39\u0B4B\u0B07\u0B1B\u0B3F",
+  "inquiryThread.translatedTo": "{to} \u0B15\u0B41 \u0B05\u0B28\u0B41\u0B2C\u0B3E\u0B26 \u0B39\u0B4B\u0B07\u0B1B\u0B3F",
+  "inquiryThread.alreadyInLanguage": "\u0B0F\u0B39\u0B3F \u0B2C\u0B3E\u0B30\u0B4D\u0B24\u0B4D\u0B24\u0B3E \u0B2A\u0B42\u0B30\u0B4D\u0B2C\u0B30\u0B41 {to} \u0B2D\u0B3E\u0B37\u0B3E\u0B30\u0B47 \u0B05\u0B1B\u0B3F",
+  "inquiryThread.showOriginal": "\u0B2E\u0B42\u0B33 \u0B2C\u0B3E\u0B30\u0B4D\u0B24\u0B4D\u0B24\u0B3E \u0B26\u0B47\u0B16\u0B3E\u0B28\u0B4D\u0B24\u0B41",
+  "inquiryThread.showTranslation": "\u0B05\u0B28\u0B41\u0B2C\u0B3E\u0B26 \u0B26\u0B47\u0B16\u0B3E\u0B28\u0B4D\u0B24\u0B41",
+  "inquiryThread.translateFailed": "\u0B0F\u0B39\u0B3F \u0B2C\u0B3E\u0B30\u0B4D\u0B24\u0B4D\u0B24\u0B3E \u0B05\u0B28\u0B41\u0B2C\u0B3E\u0B26 \u0B15\u0B30\u0B3F\u0B2A\u0B3E\u0B30\u0B3F\u0B32\u0B3E \u0B28\u0B3E\u0B39\u0B3F\u0B01\u0964 \u0B26\u0B5F\u0B3E\u0B15\u0B30\u0B3F \u0B2A\u0B41\u0B23\u0B3F \u0B1A\u0B47\u0B37\u0B4D\u0B1F\u0B3E \u0B15\u0B30\u0B28\u0B4D\u0B24\u0B41\u0964",
   "inquiryThread.artisan": "\u0B15\u0B3E\u0B30\u0B3F\u0B17\u0B30",
   "inquiryThread.buyer": "\u0B15\u0B4D\u0B30\u0B47\u0B24\u0B3E",
   "inquiryThread.placeholder": "\u0B0F\u0B15 \u0B38\u0B28\u0B4D\u0B26\u0B47\u0B36 \u0B32\u0B47\u0B16\u0B28\u0B4D\u0B24\u0B41, \u0B0F\u0B39\u0B3E \u0B05\u0B28\u0B4D\u0B5F \u0B2A\u0B15\u0B4D\u0B37\u0B15\u0B41 \u0B07\u0B2E\u0B47\u0B32\u0B4D \u0B39\u0B47\u0B2C",
@@ -8280,6 +8520,14 @@ var pa_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0A24\u0A41\u0A38\u0A40\u0A02",
+  "inquiryThread.translate": "{to} \u0A35\u0A3F\u0A71\u0A1A \u0A05\u0A28\u0A41\u0A35\u0A3E\u0A26 \u0A15\u0A30\u0A4B",
+  "inquiryThread.translating": "\u0A05\u0A28\u0A41\u0A35\u0A3E\u0A26 \u0A39\u0A4B \u0A30\u0A3F\u0A39\u0A3E \u0A39\u0A48...",
+  "inquiryThread.translatedFromTo": "{from} \u0A24\u0A4B\u0A02 {to} \u0A35\u0A3F\u0A71\u0A1A \u0A05\u0A28\u0A41\u0A35\u0A3E\u0A26 \u0A15\u0A40\u0A24\u0A3E",
+  "inquiryThread.translatedTo": "{to} \u0A35\u0A3F\u0A71\u0A1A \u0A05\u0A28\u0A41\u0A35\u0A3E\u0A26 \u0A15\u0A40\u0A24\u0A3E",
+  "inquiryThread.alreadyInLanguage": "\u0A07\u0A39 \u0A38\u0A41\u0A28\u0A47\u0A39\u0A3E \u0A2A\u0A39\u0A3F\u0A32\u0A3E\u0A02 \u0A39\u0A40 {to} \u0A35\u0A3F\u0A71\u0A1A \u0A39\u0A48",
+  "inquiryThread.showOriginal": "\u0A2E\u0A42\u0A32 \u0A26\u0A3F\u0A16\u0A3E\u0A13",
+  "inquiryThread.showTranslation": "\u0A05\u0A28\u0A41\u0A35\u0A3E\u0A26 \u0A26\u0A3F\u0A16\u0A3E\u0A13",
+  "inquiryThread.translateFailed": "\u0A07\u0A38 \u0A38\u0A41\u0A28\u0A47\u0A39\u0A47 \u0A26\u0A3E \u0A05\u0A28\u0A41\u0A35\u0A3E\u0A26 \u0A28\u0A39\u0A40\u0A02 \u0A39\u0A4B \u0A38\u0A15\u0A3F\u0A06\u0964 \u0A15\u0A3F\u0A30\u0A2A\u0A3E \u0A15\u0A30\u0A15\u0A47 \u0A26\u0A41\u0A2C\u0A3E\u0A30\u0A3E \u0A15\u0A4B\u0A36\u0A3F\u0A36 \u0A15\u0A30\u0A4B\u0964",
   "inquiryThread.artisan": "\u0A15\u0A3E\u0A30\u0A40\u0A17\u0A30",
   "inquiryThread.buyer": "\u0A16\u0A30\u0A40\u0A26\u0A26\u0A3E\u0A30",
   "inquiryThread.placeholder": "\u0A38\u0A41\u0A28\u0A47\u0A39\u0A3E \u0A32\u0A3F\u0A16\u0A4B, \u0A07\u0A39 \u0A26\u0A42\u0A1C\u0A47 \u0A2A\u0A3E\u0A38\u0A47 \u0A28\u0A42\u0A70 \u0A08\u0A2E\u0A47\u0A32 \u0A15\u0A40\u0A24\u0A3E \u0A1C\u0A3E\u0A02\u0A26\u0A3E \u0A39\u0A48",
@@ -8644,6 +8892,14 @@ var sa_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0924\u094D\u0935\u092E\u094D",
+  "inquiryThread.translate": "{to} \u0915\u0942 \u0905\u0928\u0941\u0935\u093E\u0926",
+  "inquiryThread.translating": "\u0905\u0928\u0941\u0935\u093E\u0926\u0902 \u0915\u0930\u094D\u0924\u0941\u0902...",
+  "inquiryThread.translatedFromTo": "{from} \u0907\u0924\u094D\u092F\u0924\u0903 {to} \u0915\u0942 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924\u092E\u094D",
+  "inquiryThread.translatedTo": "{to} \u0915\u0942 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924\u092E\u094D",
+  "inquiryThread.alreadyInLanguage": "\u0938\u0902\u0926\u0947\u0936\u0903 {to} \u0907\u0924\u094D\u092F\u0924\u094D\u0930\u0948\u0935",
+  "inquiryThread.showOriginal": "\u092E\u0942\u0932\u0902 \u0926\u0930\u094D\u0936\u092F",
+  "inquiryThread.showTranslation": "\u0905\u0928\u0941\u0935\u093E\u0926\u0902 \u0926\u0930\u094D\u0936\u092F",
+  "inquiryThread.translateFailed": "\u0938\u0902\u0926\u0947\u0936\u0902 \u0905\u0928\u0941\u0935\u093E\u0926\u093F\u0924\u0941\u0902 \u0928 \u0936\u0915\u094D\u0928\u094B\u0924\u093F\u0964 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u0924\u094D\u0938\u094D\u0935\u0964",
   "inquiryThread.artisan": "\u0936\u093F\u0932\u094D\u092A\u0940",
   "inquiryThread.buyer": "\u0915\u094D\u0930\u0947\u0924\u093E",
   "inquiryThread.placeholder": "\u0938\u0928\u094D\u0926\u0947\u0936\u0902 \u0932\u093F\u0916\u0924\u0941, \u0907\u0926\u0902 \u092A\u094D\u0930\u0924\u093F\u092A\u0915\u094D\u0937\u0947 \u0908\u092E\u0947\u0932\u094D \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u0920\u094D\u092F\u0924\u0947",
@@ -9008,6 +9264,14 @@ var sat_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u1C5F\u1C79\u1C5C",
+  "inquiryThread.translate": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F {to} \u1C5F\u1C79",
+  "inquiryThread.translating": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C60\u1C5A\u1C71\u1C5A...",
+  "inquiryThread.translatedFromTo": "{from} \u1C5A\u1C71\u1C5A\u1C72\u1C5F {to} \u1C5F\u1C79",
+  "inquiryThread.translatedTo": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F {to} \u1C5F\u1C79",
+  "inquiryThread.alreadyInLanguage": "\u1C5F\u1C79\u1C5C\u1C5A {to} \u1C5F\u1C79 \u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5F\u1C79\u1C5E\u1C64",
+  "inquiryThread.showOriginal": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5A\u1C71\u1C5A\u1C72\u1C5F",
+  "inquiryThread.showTranslation": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5A\u1C71\u1C5A\u1C72\u1C5F",
+  "inquiryThread.translateFailed": "\u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5F\u1C79\u1C5E\u1C64 \u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5F\u1C79\u1C5E\u1C64. \u1C5F\u1C79\u1C5E\u1C5A\u1C71\u1C5F \u1C5A\u1C71\u1C5A\u1C72\u1C5F \u1C5F\u1C79\u1C5E\u1C64.",
   "inquiryThread.artisan": "\u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C",
   "inquiryThread.buyer": "\u1C5A\u1C71\u1C5A\u1C5E\u1C64\u1C71",
   "inquiryThread.placeholder": "\u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C \u1C62\u1C6E\u1C65\u1C5F\u1C5C, \u1C71\u1C64\u1C71\u1C5F \u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C \u1C5F\u1C79\u1C5C\u1C5F \u1C5A\u1C71\u1C5A\u1C5E\u1C5F\u1C5C",
@@ -9372,6 +9636,14 @@ var sd_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u062A\u0648\u06BE\u0627\u0646",
+  "inquiryThread.translate": "\u062A\u0631\u062C\u0645\u0648 {to} \u06FE",
+  "inquiryThread.translating": "\u062A\u0631\u062C\u0645\u0648 \u067F\u064A \u0631\u0647\u064A\u0648 \u0622\u0647\u064A...",
+  "inquiryThread.translatedFromTo": "{from} \u0645\u0627\u0646 {to} \u06FE \u062A\u0631\u062C\u0645\u0648 \u067F\u064A\u0648",
+  "inquiryThread.translatedTo": "{to} \u06FE \u062A\u0631\u062C\u0645\u0648 \u067F\u064A\u0648",
+  "inquiryThread.alreadyInLanguage": "\u0647\u064A \u067E\u064A\u063A\u0627\u0645 \u0627\u06B3 \u06FE \u0626\u064A {to} \u06FE \u0622\u0647\u064A",
+  "inquiryThread.showOriginal": "\u0627\u0635\u0644 \u068F\u064A\u06A9\u0627\u0631\u064A\u0648",
+  "inquiryThread.showTranslation": "\u062A\u0631\u062C\u0645\u0648 \u068F\u064A\u06A9\u0627\u0631\u064A\u0648",
+  "inquiryThread.translateFailed": "\u0647\u064A \u067E\u064A\u063A\u0627\u0645 \u062A\u0631\u062C\u0645\u0648 \u0646\u0647 \u067F\u064A \u0633\u06AF\u0647\u064A\u0648. \u0645\u0647\u0631\u0628\u0627\u0646\u064A \u06AA\u0631\u064A \u067B\u064A\u0647\u0631 \u06AA\u0648\u0634\u0634 \u06AA\u0631\u064A\u0648.",
   "inquiryThread.artisan": "\u06AA\u0627\u0631\u064A\u06AF\u0631",
   "inquiryThread.buyer": "\u062E\u0631\u064A\u062F\u0627\u0631",
   "inquiryThread.placeholder": "\u0647\u06AA \u067E\u064A\u063A\u0627\u0645 \u0644\u06A9\u062C\u0648\u060C \u0627\u0647\u0648 \u067B\u0626\u064A \u067E\u0627\u0633\u064A \u06A9\u064A \u0627\u064A \u0645\u064A\u0644 \u067F\u064A\u0646\u062F\u0648",
@@ -9736,6 +10008,14 @@ var ta_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0BA8\u0BC0",
+  "inquiryThread.translate": "{to}\u0B95\u0BCD\u0B95\u0BC1 \u0BAE\u0BCA\u0BB4\u0BBF\u0BAA\u0BC6\u0BAF\u0BB0\u0BCD\u0B95\u0BCD\u0B95",
+  "inquiryThread.translating": "\u0BAE\u0BCA\u0BB4\u0BBF\u0BAA\u0BC6\u0BAF\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BBF\u0BB1\u0BA4\u0BC1...",
+  "inquiryThread.translatedFromTo": "{from} \u0B87\u0BB2\u0BBF\u0BB0\u0BC1\u0BA8\u0BCD\u0BA4\u0BC1 {to}\u0B95\u0BCD\u0B95\u0BC1 \u0BAE\u0BCA\u0BB4\u0BBF\u0BAA\u0BC6\u0BAF\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
+  "inquiryThread.translatedTo": "{to}\u0B95\u0BCD\u0B95\u0BC1 \u0BAE\u0BCA\u0BB4\u0BBF\u0BAA\u0BC6\u0BAF\u0BB0\u0BCD\u0B95\u0BCD\u0B95\u0BAA\u0BCD\u0BAA\u0B9F\u0BCD\u0B9F\u0BA4\u0BC1",
+  "inquiryThread.alreadyInLanguage": "\u0B87\u0BA8\u0BCD\u0BA4 \u0B9A\u0BC6\u0BAF\u0BCD\u0BA4\u0BBF \u0B8F\u0BB1\u0BCD\u0B95\u0BA9\u0BB5\u0BC7 {to} \u0BAE\u0BCA\u0BB4\u0BBF\u0BAF\u0BBF\u0BB2\u0BCD \u0B89\u0BB3\u0BCD\u0BB3\u0BA4\u0BC1",
+  "inquiryThread.showOriginal": "\u0BAE\u0BC2\u0BB2\u0BA4\u0BCD\u0BA4\u0BC8 \u0B95\u0BBE\u0BA3\u0BCD\u0BAA\u0BBF",
+  "inquiryThread.showTranslation": "\u0BAE\u0BCA\u0BB4\u0BBF\u0BAA\u0BC6\u0BAF\u0BB0\u0BCD\u0BAA\u0BCD\u0BAA\u0BC8 \u0B95\u0BBE\u0BA3\u0BCD\u0BAA\u0BBF",
+  "inquiryThread.translateFailed": "\u0B87\u0BA8\u0BCD\u0BA4 \u0B9A\u0BC6\u0BAF\u0BCD\u0BA4\u0BBF\u0BAF\u0BC8 \u0BAE\u0BCA\u0BB4\u0BBF\u0BAA\u0BC6\u0BAF\u0BB0\u0BCD\u0B95\u0BCD\u0B95 \u0BAE\u0BC1\u0B9F\u0BBF\u0BAF\u0BB5\u0BBF\u0BB2\u0BCD\u0BB2\u0BC8. \u0BAE\u0BC0\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD \u0BAE\u0BC1\u0BAF\u0BB1\u0BCD\u0B9A\u0BBF\u0B95\u0BCD\u0B95\u0BB5\u0BC1\u0BAE\u0BCD.",
   "inquiryThread.artisan": "\u0B95\u0BB2\u0BC8\u0B9E\u0BB0\u0BCD",
   "inquiryThread.buyer": "\u0BB5\u0BBE\u0B99\u0BCD\u0B95\u0BC1\u0BAA\u0BB5\u0BB0\u0BCD",
   "inquiryThread.placeholder": "\u0B92\u0BB0\u0BC1 \u0B9A\u0BC6\u0BAF\u0BCD\u0BA4\u0BBF\u0BAF\u0BC8 \u0B8E\u0BB4\u0BC1\u0BA4\u0BC1\u0B99\u0BCD\u0B95\u0BB3\u0BCD; \u0B87\u0BA4\u0BC1 \u0BAE\u0BB1\u0BCD\u0BB1\u0BB5\u0BB0\u0BC1\u0B95\u0BCD\u0B95\u0BC1 \u0BAE\u0BBF\u0BA9\u0BCD\u0BA9\u0B9E\u0BCD\u0B9A\u0BB2\u0BBE\u0B95 \u0B85\u0BA9\u0BC1\u0BAA\u0BCD\u0BAA\u0BAA\u0BCD\u0BAA\u0B9F\u0BC1\u0BAE\u0BCD",
@@ -10100,6 +10380,14 @@ var te_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0C2E\u0C40\u0C30\u0C41",
+  "inquiryThread.translate": "{to}\u0C15\u0C3F \u0C05\u0C28\u0C41\u0C35\u0C26\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F",
+  "inquiryThread.translating": "\u0C05\u0C28\u0C41\u0C35\u0C26\u0C3F\u0C38\u0C4D\u0C24\u0C4B\u0C02\u0C26\u0C3F...",
+  "inquiryThread.translatedFromTo": "{from} \u0C28\u0C41\u0C02\u0C21\u0C3F {to}\u0C15\u0C3F \u0C05\u0C28\u0C41\u0C35\u0C26\u0C3F\u0C02\u0C1A\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F",
+  "inquiryThread.translatedTo": "{to}\u0C15\u0C3F \u0C05\u0C28\u0C41\u0C35\u0C26\u0C3F\u0C02\u0C1A\u0C2C\u0C21\u0C3F\u0C02\u0C26\u0C3F",
+  "inquiryThread.alreadyInLanguage": "\u0C08 \u0C38\u0C02\u0C26\u0C47\u0C36\u0C02 \u0C07\u0C2A\u0C4D\u0C2A\u0C1F\u0C3F\u0C15\u0C47 {to}\u0C32\u0C4B \u0C09\u0C02\u0C26\u0C3F",
+  "inquiryThread.showOriginal": "\u0C2E\u0C42\u0C32\u0C3E\u0C28\u0C4D\u0C28\u0C3F \u0C1A\u0C42\u0C2A\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F",
+  "inquiryThread.showTranslation": "\u0C05\u0C28\u0C41\u0C35\u0C3E\u0C26\u0C3E\u0C28\u0C4D\u0C28\u0C3F \u0C1A\u0C42\u0C2A\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F",
+  "inquiryThread.translateFailed": "\u0C08 \u0C38\u0C02\u0C26\u0C47\u0C36\u0C3E\u0C28\u0C4D\u0C28\u0C3F \u0C05\u0C28\u0C41\u0C35\u0C26\u0C3F\u0C02\u0C1A\u0C32\u0C47\u0C15\u0C2A\u0C4B\u0C2F\u0C3E\u0C02. \u0C26\u0C2F\u0C1A\u0C47\u0C38\u0C3F \u0C2E\u0C33\u0C4D\u0C32\u0C40 \u0C2A\u0C4D\u0C30\u0C2F\u0C24\u0C4D\u0C28\u0C3F\u0C02\u0C1A\u0C02\u0C21\u0C3F.",
   "inquiryThread.artisan": "\u0C15\u0C3E\u0C30\u0C3F\u0C17\u0C30\u0C02",
   "inquiryThread.buyer": "\u0C15\u0C4A\u0C28\u0C41\u0C17\u0C4B\u0C32\u0C41\u0C26\u0C3E\u0C30\u0C41",
   "inquiryThread.placeholder": "\u0C38\u0C02\u0C26\u0C47\u0C36\u0C3E\u0C28\u0C4D\u0C28\u0C3F \u0C30\u0C3E\u0C2F\u0C02\u0C21\u0C3F, \u0C07\u0C26\u0C3F \u0C07\u0C24\u0C30\u0C35\u0C3E\u0C30\u0C3F\u0C15\u0C3F \u0C07\u0C2E\u0C46\u0C2F\u0C3F\u0C32\u0C4D \u0C26\u0C4D\u0C35\u0C3E\u0C30\u0C3E \u0C2A\u0C02\u0C2A\u0C2C\u0C21\u0C41\u0C24\u0C41\u0C02\u0C26\u0C3F",
@@ -10464,6 +10752,14 @@ var ur_default = {
   "inquiries.whatsappReplyPrefill": "Hi! Thanks for your interest in {product} on KalaSetu.",
   "inquiries.close": "Close inquiry",
   "inquiryThread.you": "\u0622\u067E",
+  "inquiryThread.translate": "{to} \u0645\u06CC\u06BA \u062A\u0631\u062C\u0645\u06C1 \u06A9\u0631\u06CC\u06BA",
+  "inquiryThread.translating": "\u062A\u0631\u062C\u0645\u06C1 \u06C1\u0648 \u0631\u06C1\u0627 \u06C1\u06D2...",
+  "inquiryThread.translatedFromTo": "{from} \u0633\u06D2 {to} \u0645\u06CC\u06BA \u062A\u0631\u062C\u0645\u06C1 \u06C1\u0648\u0627",
+  "inquiryThread.translatedTo": "{to} \u0645\u06CC\u06BA \u062A\u0631\u062C\u0645\u06C1 \u06C1\u0648\u0627",
+  "inquiryThread.alreadyInLanguage": "\u06CC\u06C1 \u067E\u06CC\u063A\u0627\u0645 \u067E\u06C1\u0644\u06D2 \u06C1\u06CC {to} \u0645\u06CC\u06BA \u06C1\u06D2",
+  "inquiryThread.showOriginal": "\u0627\u0635\u0644 \u062F\u06A9\u06BE\u0627\u0626\u06CC\u06BA",
+  "inquiryThread.showTranslation": "\u062A\u0631\u062C\u0645\u06C1 \u062F\u06A9\u06BE\u0627\u0626\u06CC\u06BA",
+  "inquiryThread.translateFailed": "\u06CC\u06C1 \u067E\u06CC\u063A\u0627\u0645 \u062A\u0631\u062C\u0645\u06C1 \u0646\u06C1\u06CC\u06BA \u06C1\u0648 \u0633\u06A9\u0627\u06D4 \u0628\u0631\u0627\u06C1\u0650 \u06A9\u0631\u0645 \u062F\u0648\u0628\u0627\u0631\u06C1 \u06A9\u0648\u0634\u0634 \u06A9\u0631\u06CC\u06BA\u06D4",
   "inquiryThread.artisan": "\u06A9\u0627\u0631\u06CC\u06AF\u0631",
   "inquiryThread.buyer": "\u062E\u0631\u06CC\u062F\u0627\u0631",
   "inquiryThread.placeholder": "\u067E\u06CC\u063A\u0627\u0645 \u0644\u06A9\u06BE\u06CC\u06BA\u060C \u06CC\u06C1 \u062F\u0648\u0633\u0631\u06CC \u0637\u0631\u0641 \u0627\u06CC \u0645\u06CC\u0644 \u06A9\u06CC\u0627 \u062C\u0627\u0626\u06D2 \u06AF\u0627",
@@ -11926,7 +12222,14 @@ function getDeps() {
 }
 var TranslateSchema = z8.object({
   text: z8.string().min(1).max(4e3),
-  from: z8.string().refine(isAppLanguage, "Unsupported source language"),
+  /** A known source language. Given, the text is translated from it verbatim. */
+  from: z8.string().refine(isAppLanguage, "Unsupported source language").optional(),
+  /**
+   * A guess at the source, used when `from` is absent. The sender's interface
+   * language is a good guess but not proof: someone with an English interface
+   * can still type romanised Hindi, so the model decides and reports back.
+   */
+  hint: z8.string().refine(isAppLanguage, "Unsupported hint language").optional(),
   to: z8.string().refine(isAppLanguage, "Unsupported target language")
 });
 router7.post(
@@ -11938,17 +12241,31 @@ router7.post(
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
-    const { text, from, to } = parsed.data;
+    const { text, from, hint, to } = parsed.data;
     if (from === to) {
-      res.json({ translation: text });
+      res.json({ translation: text, from, to });
       return;
     }
+    const { translationService } = getDeps();
     try {
-      const translation = await getDeps().translationService.translate(text, from, to);
-      res.json({ translation });
+      if (from) {
+        const translation = await translationService.translate(text, from, to);
+        res.json({ translation, from, to });
+        return;
+      }
+      if (!translationService.detectAndTranslate) {
+        res.status(400).json({ error: "source_language_required" });
+        return;
+      }
+      const result = await translationService.detectAndTranslate(text, to, hint);
+      res.json({
+        translation: result.translation,
+        from: result.detectedLanguage || null,
+        to
+      });
     } catch (err) {
       console.error("translate failed", {
-        from,
+        from: from ?? "auto",
         to,
         message: err?.message,
         cause: err?.cause?.message ?? String(err?.cause ?? "")
@@ -12026,9 +12343,11 @@ function toMessage(row) {
     messageId: row.id,
     senderRole: row.sender_role,
     body: row.body,
+    bodyLanguage: row.body_language,
     createdAt: row.created_at
   };
 }
+var BodyLanguageSchema = z10.string().refine(isAppLanguage, "Unsupported language").optional();
 async function enrichInquiries(rows, viewerRole) {
   if (rows.length === 0) return [];
   const inquiryIds = rows.map((row) => row.id);
@@ -12038,7 +12357,7 @@ async function enrichInquiries(rows, viewerRole) {
   const [productsResult, buyersResult, messagesResult] = await Promise.all([
     supabase.from("products").select("id, title_en, title_local, local_language, image_url, price, passport_id").in("id", productIds),
     supabase.from("users").select("id, email").in("id", buyerIds),
-    supabase.from("inquiry_messages").select("id, inquiry_id, sender_role, body, created_at").in("inquiry_id", inquiryIds).order("created_at", { ascending: true })
+    supabase.from("inquiry_messages").select("id, inquiry_id, sender_role, body, body_language, created_at").in("inquiry_id", inquiryIds).order("created_at", { ascending: true })
   ]);
   if (productsResult.error) throw new Error(`Could not load inquiry products: ${productsResult.error.message}`);
   if (buyersResult.error) throw new Error(`Could not load inquiry buyers: ${buyersResult.error.message}`);
@@ -12119,6 +12438,7 @@ async function notifyNewMessage(params) {
 var CreateInquirySchema = z10.object({
   productId: z10.string().uuid(),
   message: z10.string().trim().min(1).max(2e3),
+  messageLanguage: BodyLanguageSchema,
   quantity: z10.number().int().positive().optional(),
   contactPreference: z10.enum(["email", "phone", "whatsapp"]),
   contactValue: z10.string().trim().min(1).max(40).optional()
@@ -12155,7 +12475,8 @@ router9.post(
     const { error: messageError } = await supabase.from("inquiry_messages").insert({
       inquiry_id: inquiry.id,
       sender_role: "buyer",
-      body: parsed.data.message
+      body: parsed.data.message,
+      body_language: parsed.data.messageLanguage ?? null
     });
     if (messageError) throw new Error(`Could not save the inquiry message: ${messageError.message}`);
     const emailDelivered = await notifyNewMessage({
@@ -12233,7 +12554,8 @@ router9.patch(
   })
 );
 var SendMessageSchema = z10.object({
-  body: z10.string().trim().min(1).max(2e3)
+  body: z10.string().trim().min(1).max(2e3),
+  bodyLanguage: BodyLanguageSchema
 });
 router9.post(
   "/:id/messages",
@@ -12254,7 +12576,12 @@ router9.post(
       res.status(404).json({ error: "Inquiry not found" });
       return;
     }
-    const { data: message, error: insertError } = await supabase.from("inquiry_messages").insert({ inquiry_id: inquiry.id, sender_role: senderRole, body: parsed.data.body }).select("id, created_at").single();
+    const { data: message, error: insertError } = await supabase.from("inquiry_messages").insert({
+      inquiry_id: inquiry.id,
+      sender_role: senderRole,
+      body: parsed.data.body,
+      body_language: parsed.data.bodyLanguage ?? null
+    }).select("id, created_at").single();
     if (insertError) throw new Error(`Could not save the message: ${insertError.message}`);
     const recipientId = senderRole === "buyer" ? inquiry.artisan_id : inquiry.buyer_id;
     const emailDelivered = await notifyNewMessage({

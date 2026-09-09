@@ -1,4 +1,4 @@
-import { TranslationService, SupportedLanguageCode } from "../types/voice-ai.types";
+import { TranslationService, DetectedTranslation, SupportedLanguageCode } from "../types/voice-ai.types";
 import { TranslationFailedError } from "../errors/voice-ai.errors";
 
 /**
@@ -26,5 +26,16 @@ export class MockTranslationService implements TranslationService {
     }
 
     return `[mock:${sourceLanguage}->${targetLanguage}] ${text}`;
+  }
+
+  async detectAndTranslate(
+    text: string,
+    targetLanguage: SupportedLanguageCode,
+    sourceHint?: string,
+  ): Promise<DetectedTranslation> {
+    return {
+      translation: `[mock:auto->${targetLanguage}] ${text}`,
+      detectedLanguage: sourceHint ?? "en",
+    };
   }
 }
