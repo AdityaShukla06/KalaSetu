@@ -12,7 +12,13 @@ export async function toWavBlob(input: Blob): Promise<Blob> {
     const mono = downmixToMono(decoded);
     const resampled = resample(mono, decoded.sampleRate, TARGET_SAMPLE_RATE);
     return new Blob([encodeWav(resampled, TARGET_SAMPLE_RATE)], { type: "audio/wav" });
-  } catch {
+  } catch (err) {
+    console.warn("toWavBlob: falling back to the original recording", {
+      name: err instanceof Error ? err.name : typeof err,
+      message: err instanceof Error ? err.message : String(err),
+      inputType: input.type,
+      inputSize: input.size,
+    });
     return input;
   } finally {
     context.close().catch(() => undefined);
