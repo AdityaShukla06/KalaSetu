@@ -150,6 +150,14 @@ Found while opening the app in a browser to test it for real: `npm run dev` only
 - A separate script checks the row-level security policies directly against Postgres, independent of the API.
 - Full lint and type checks pass across both the frontend and the server, and a production build succeeds.
 
+## A second pricing engine, built but not switched on
+
+`pricing-service/` is a standalone Python service redesigning how a price is suggested. The existing engine (`server/services/pricingEngine.ts`) imputes labour as a fixed multiple of material cost, which has no relationship to how long a piece actually took; the new one prices labour from real crafting hours times a regional skilled wage, and predicts the market side by embedding the photo and description and retrieving similar priced listings from a catalogue, rather than a static 14-row lookup table. The two sides are blended by how confident the retrieval is, and the cost floor always wins the tie, so the recommendation can never fall below what the piece actually cost to make at a fair wage.
+
+The wiring is done and tested: `server/services/pricingServiceClient.ts` calls the Python service with a timeout, `server/services/pricingServiceMapper.ts` translates its response into the exact shape the pricing screen and the overcharge auto-flag already expect, and `server/routes/pricing.ts` tries the new engine first and falls back to the old one on any failure, so nothing about pricing can break because of this. 300 server tests pass, and the full chain (a real running instance of the Python service, through the real client, through the real mapper) was verified end to end, not just mocked.
+
+It is not live. `PRICING_SERVICE_URL` is unset by default, so every request today still goes through the original engine unchanged. Two things gate turning it on: the market catalogue is a 16-row synthetic fixture (`pricing-service/data/catalogue.sample.json`), not real listings, so the market side would rarely have anything genuine to compare against; and the service does not fit a free hosting tier as it stands, since it loads `torch` plus two encoder models, needing either a paid instance or an ONNX conversion that has not been started. See `pricing-service/README.md` for the full picture, including a worked example showing the old engine's roughly 25 rupees an hour on a real test case against the 85 rupee an hour benchmark it is meant to guarantee.
+
 ## What is deliberately not built yet
 
 - **Multi-image galleries.** Each product still stores exactly one photo. The buyer-facing product page is built to show a gallery, but there's only ever one image in it today.

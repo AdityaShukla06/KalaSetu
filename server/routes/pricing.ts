@@ -2,7 +2,9 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/auth";
 import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
-import { calculateSmartPrice, ComplexityLevel } from "../services/pricingEngine";
+import { calculateSmartPrice, CATEGORY_DATASET, ComplexityLevel } from "../services/pricingEngine";
+import { getPricingServiceClient } from "../services/pricingServiceFactory";
+import { mapPricingServiceResponse } from "../services/pricingServiceMapper";
 
 const router = Router();
 
@@ -23,6 +25,9 @@ const PricingInputSchema = z
     imageUrl: z.string().url().optional().or(z.literal("")),
     complexity: z.enum(["simple", "standard", "detailed", "complex", "exceptional"]).optional(),
     subcategory: z.string().optional(),
+    craftingTime: z.union([z.string(), z.number()]).optional(),
+    state: z.string().optional(),
+    hasGiTag: z.boolean().optional(),
   })
   .refine(
     (data) =>
@@ -34,6 +39,13 @@ const PricingInputSchema = z
     },
   );
 
+export function totalMaterialCost(data: z.infer<typeof PricingInputSchema>): number | undefined {
+  if (data.rawMaterials && data.rawMaterials.length > 0) {
+    return data.rawMaterials.reduce((sum, item) => sum + item.cost, 0);
+  }
+  return data.materialCost;
+}
+
 router.post(
   "/suggest",
   requireAuth,
@@ -44,16 +56,48 @@ router.post(
       return;
     }
 
+    const data = parsed.data;
+    const materialCost = totalMaterialCost(data);
+    const client = getPricingServiceClient();
+
+    if (client && materialCost !== undefined) {
+      try {
+        const response = await client.estimate({
+          category: data.category,
+          materialCost,
+          craftingTime: data.craftingTime,
+          description: data.descriptionEn,
+          state: data.state,
+          hasGiTag: data.hasGiTag,
+        });
+
+        const categoryName = CATEGORY_DATASET[data.category.toLowerCase()]?.name ?? data.category;
+        res.json(
+          mapPricingServiceResponse(response, {
+            complexity: data.complexity as ComplexityLevel | undefined,
+            subcategory: data.subcategory ?? null,
+            categoryName,
+          }),
+        );
+        return;
+      } catch (err: any) {
+        console.warn("[pricing] pricing service unavailable, falling back to local engine", {
+          reason: err?.reason,
+          detail: err?.message?.slice(0, 200),
+        });
+      }
+    }
+
     try {
       const output = calculateSmartPrice({
-        category: parsed.data.category,
-        materialCost: parsed.data.materialCost,
-        rawMaterials: parsed.data.rawMaterials,
-        descriptionEn: parsed.data.descriptionEn,
-        descriptionHi: parsed.data.descriptionHi,
-        imageUrl: parsed.data.imageUrl,
-        complexity: parsed.data.complexity as ComplexityLevel | undefined,
-        subcategory: parsed.data.subcategory,
+        category: data.category,
+        materialCost: data.materialCost,
+        rawMaterials: data.rawMaterials,
+        descriptionEn: data.descriptionEn,
+        descriptionHi: data.descriptionHi,
+        imageUrl: data.imageUrl,
+        complexity: data.complexity as ComplexityLevel | undefined,
+        subcategory: data.subcategory,
       });
 
       res.json(output);
@@ -66,4 +110,5 @@ router.post(
   }),
 );
 
+export { PricingInputSchema };
 export default router;
