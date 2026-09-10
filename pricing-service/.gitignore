@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+data/catalogue.json
+data/*.embeddings.npy
+data/*.embeddings.mode

@@ -1,0 +1,8 @@
+{
+  "textiles": { "typical_min": 80, "typical_max": 4000 },
+  "pottery": { "typical_min": 20, "typical_max": 900 },
+  "jewelry": { "typical_min": 50, "typical_max": 6000 },
+  "woodwork": { "typical_min": 60, "typical_max": 3500 },
+  "bamboo-cane": { "typical_min": 20, "typical_max": 700 },
+  "other": { "typical_min": 20, "typical_max": 5000 }
+}

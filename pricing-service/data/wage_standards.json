@@ -1,0 +1,37 @@
+{
+  "source": "PLACEHOLDER. Replace with the cited state notification under the Minimum Wages Act 1948, or the Chief Labour Commissioner half yearly revision for the central sphere, before any public use.",
+  "notification_date": null,
+  "verified": false,
+  "basis": "Hourly wage is the statutory daily wage for a skilled worker divided by an 8 hour working day.",
+  "national_default": {
+    "name": "National default",
+    "daily_inr": 680
+  },
+  "states": {
+    "uttar pradesh": { "name": "Uttar Pradesh", "daily_inr": 640 },
+    "rajasthan": { "name": "Rajasthan", "daily_inr": 720 },
+    "odisha": { "name": "Odisha", "daily_inr": 680 },
+    "karnataka": { "name": "Karnataka", "daily_inr": 760 },
+    "west bengal": { "name": "West Bengal", "daily_inr": 640 },
+    "assam": { "name": "Assam", "daily_inr": 680 },
+    "chhattisgarh": { "name": "Chhattisgarh", "daily_inr": 640 },
+    "jammu and kashmir": { "name": "Jammu and Kashmir", "daily_inr": 880 }
+  },
+  "aliases": {
+    "up": "uttar pradesh",
+    "u p": "uttar pradesh",
+    "uttarpradesh": "uttar pradesh",
+    "wb": "west bengal",
+    "westbengal": "west bengal",
+    "bengal": "west bengal",
+    "orissa": "odisha",
+    "jk": "jammu and kashmir",
+    "j k": "jammu and kashmir",
+    "kashmir": "jammu and kashmir",
+    "jammu": "jammu and kashmir",
+    "jammu kashmir": "jammu and kashmir",
+    "chattisgarh": "chhattisgarh",
+    "karnatak": "karnataka",
+    "rajastan": "rajasthan"
+  }
+}

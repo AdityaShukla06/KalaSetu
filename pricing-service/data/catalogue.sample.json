@@ -1,0 +1,183 @@
+{
+  "version": "sample-fixture",
+  "synthetic": true,
+  "warning": "These listings are invented test fixtures used to exercise the retrieval path. They are not market data and must never be used to price a real item. Build data/catalogue.json from real listings before any public use.",
+  "listings": [
+    {
+      "id": "sample-pot-1",
+      "title": "Jaipur blue pottery vase, GI tagged",
+      "description": "hand painted cobalt floral vase, blue pottery, 8 inch, Jaipur",
+      "price": 2800,
+      "category": "pottery",
+      "subcategory": "vase",
+      "has_gi_tag": true,
+      "source": "sample",
+      "observed_date": "2026-08-30"
+    },
+    {
+      "id": "sample-pot-2",
+      "title": "Blue pottery flower vase",
+      "description": "turquoise and cobalt hand painted flower vase, blue pottery",
+      "price": 2450,
+      "category": "pottery",
+      "subcategory": "vase",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-28"
+    },
+    {
+      "id": "sample-pot-3",
+      "title": "Blue pottery vase, large",
+      "description": "large hand painted blue pottery vase with floral work",
+      "price": 3200,
+      "category": "pottery",
+      "subcategory": "vase",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-22"
+    },
+    {
+      "id": "sample-pot-4",
+      "title": "Hand painted ceramic vase",
+      "description": "glazed ceramic decorative vase, hand painted floral pattern",
+      "price": 2100,
+      "category": "pottery",
+      "subcategory": "vase",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-19"
+    },
+    {
+      "id": "sample-pot-5",
+      "title": "Blue pottery jar",
+      "description": "blue pottery storage jar with lid, cobalt glaze",
+      "price": 1950,
+      "category": "pottery",
+      "subcategory": "pot",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-15"
+    },
+    {
+      "id": "sample-pot-6",
+      "title": "Ceramic decorative vase",
+      "description": "studio ceramic vase, matte glaze, decorative",
+      "price": 2600,
+      "category": "pottery",
+      "subcategory": "vase",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-11"
+    },
+    {
+      "id": "sample-pot-7",
+      "title": "Terracotta vase",
+      "description": "unglazed terracotta vase, hand thrown, natural finish",
+      "price": 1400,
+      "category": "pottery",
+      "subcategory": "vase",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-07-30"
+    },
+    {
+      "id": "sample-pot-8",
+      "title": "Painted pot",
+      "description": "small hand painted clay pot, decorative planter",
+      "price": 1250,
+      "category": "pottery",
+      "subcategory": "pot",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-07-14"
+    },
+    {
+      "id": "sample-tex-1",
+      "title": "Kantha hand embroidered silk saree",
+      "description": "kantha stitch hand embroidered silk saree from Bengal",
+      "price": 5800,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-29"
+    },
+    {
+      "id": "sample-tex-2",
+      "title": "Bengal kantha cotton saree",
+      "description": "hand embroidered kantha stitch cotton saree, Bengal handloom",
+      "price": 4200,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-25"
+    },
+    {
+      "id": "sample-tex-3",
+      "title": "Hand embroidered kantha saree",
+      "description": "kantha embroidery saree, hand stitched, cotton",
+      "price": 5100,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-21"
+    },
+    {
+      "id": "sample-tex-4",
+      "title": "Kantha stitch tussar saree",
+      "description": "tussar silk saree with kantha stitch hand embroidery",
+      "price": 6500,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-18"
+    },
+    {
+      "id": "sample-tex-5",
+      "title": "Handloom cotton saree, Bengal",
+      "description": "Bengal handloom cotton saree, woven, plain body",
+      "price": 3600,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-12"
+    },
+    {
+      "id": "sample-tex-6",
+      "title": "Bengal handloom saree",
+      "description": "handloom saree from Bengal, cotton weave",
+      "price": 3900,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-08-05"
+    },
+    {
+      "id": "sample-tex-7",
+      "title": "Embroidered silk saree",
+      "description": "silk saree with hand embroidery, festive wear",
+      "price": 7200,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-07-28"
+    },
+    {
+      "id": "sample-tex-8",
+      "title": "Cotton handloom saree",
+      "description": "plain cotton handloom saree, daily wear",
+      "price": 3200,
+      "category": "textiles",
+      "subcategory": "saree",
+      "has_gi_tag": false,
+      "source": "sample",
+      "observed_date": "2026-07-20"
+    }
+  ]
+}
