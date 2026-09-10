@@ -103,40 +103,106 @@ fixture values exactly.
 
 ## The catalogue is the real work
 
-`data/catalogue.sample.json` contains 16 invented listings. They exist to exercise the retrieval
-path and they are marked `"synthetic": true`. **They are not market data and must never price a
+`data/catalogue.sample.json` still contains 16 invented listings, marked `"synthetic": true`, kept
+only to exercise the retrieval path in tests. **They are not market data and must never price a
 real item.**
 
-A usable catalogue is `data/catalogue.json`, gitignored because it is scraped data, with this shape
-per row:
+`data/catalogue.json` is real: 4,223 genuine listings scraped from two sources, committed to the
+repo (not gitignored, since it is real data that took real effort to build, not a local artifact).
+Built by `scripts/build_catalogue.py`, which respects each source's own terms before touching it,
+documented in the next section.
+
+Row shape:
 
 ```json
 {
-  "id": "ondc-8842",
-  "image_url": "https://example.org/vase.jpg",
+  "id": "itokri-8256279904451",
+  "image_url": "https://cdn.shopify.com/s/files/.../vase.jpg",
   "title": "Jaipur blue pottery vase",
   "description": "hand painted cobalt floral vase, 8 inch",
   "price": 2800,
   "category": "pottery",
   "subcategory": "vase",
-  "has_gi_tag": true,
-  "source": "ondc",
-  "observed_date": "2026-08-30"
+  "has_gi_tag": false,
+  "source": "itokri",
+  "observed_date": "2026-09-11"
 }
 ```
 
 Required: `id`, `price`, `category`, `source`, `observed_date`, and at least one of `image_url` or
 `description`. Rows missing those, priced at or below zero, or duplicating an `id` are dropped at
-load with a count logged. Rejecting aggressively is correct here, because a row that survives is a
-row the model prices from.
+load with a count logged. All 4,223 rows currently pass validation.
 
-Target 1,500 to 3,000 rows with no category below roughly 100, from ONDC, GeM, Amazon and Flipkart
-handicraft categories, iTokri, Gaatha, and state emporium sites. Keep `observed_date` per row: the
-response exposes the catalogue's date range, so "current market trends" stays an honest claim
-rather than an implied live feed.
+### Sources, and why only two
 
-No scraper ships here. Writing one against sites nobody has inspected would be guesswork, and the
-sources differ enough that it is a real task rather than a utility.
+The specification's original wishlist was ONDC, GeM, Amazon, Flipkart, iTokri and Gaatha. Each was
+checked against its own `robots.txt` and Terms of Use before writing a line of scraper code:
+
+| Source | Verdict | Why |
+|---|---|---|
+| iTokri | Used | `robots.txt` permits crawling; exposes a public `/products.json` API, no HTML parsing needed |
+| Gaatha (`shop.gaatha.com`) | Used | `robots.txt` permissive; real priced listings, server-rendered HTML |
+| Amazon | Not used | Own Conditions of Use explicitly prohibit "robot, spider, scraper, or other automated means" |
+| Flipkart | Not used | Own Terms explicitly prohibit "deep-link, page-scrape, robot, spider..."; a bare `robots.txt` request was served an active reCAPTCHA challenge |
+| GeM | Not used | Could not locate GeM's own Terms text to verify against (search results were third-party scraper-vendor marketing, not GeM's own words); its listings are B2G procurement prices anyway, a questionable fit for retail pricing |
+| ONDC | Not applicable | Not a website. It is a network protocol; getting real listings means registering as a Seller or Buyer Network Participant, a business onboarding process, not a scraping target |
+
+Amazon and Flipkart are not "not yet done", they are excluded on principle. If that data is wanted,
+the legitimate path is their official affiliate programs (Amazon Associates → Product Advertising
+API, Flipkart Affiliate Program), which needs a human to sign up and hand over the resulting API
+keys, not a scraper.
+
+To rebuild the catalogue from scratch:
+
+```bash
+pip install requests beautifulsoup4
+python scripts/build_catalogue.py
+python embed_catalogue.py data/catalogue.json
+```
+
+Paces requests at one per second and is polite about it; a full run against both sources takes a
+few minutes. Re-running is safe and idempotent: it always starts from a fresh fetch rather than
+appending to the existing file.
+
+### Category balance took real correction, not just volume
+
+The first pass hit volume easily (4,227 rows) but was badly imbalanced by material: category pages
+on both sites group by room or use ("dining-kitchen", "home-decor"), not by material, so a "pottery"
+seed page returned genuine ceramics alongside brass spice boxes, silk stoles, and framed paintings.
+Trusting the seed page's label alone would have shipped a pottery category that was mostly not
+pottery.
+
+The fix: every row is reclassified by keywords actually present in its own title (`jewelry`,
+`textiles` checked first, since a fabric-and-wood earring is jewelry, not woodwork; then
+`pottery`/`woodwork`/`bamboo-cane` material words), with the few seed pages that are genuinely
+named after one craft (`buy-handmade-khurja-pottery`, `buy-etikoppaka-traditional-natural-product`,
+`Handmade-cane-Products`) trusted as a fallback only when nothing contradicts them. Two real bugs
+this caught, as examples: a "Kurta & Dupatta with Earrings" combo listing was landing in jewelry
+because of the bundled accessory mentioned in its own title, not because it was jewelry; a clay
+lamp was landing in bamboo-cane because it came from a shared "home decor" page, not because
+anything about it was bamboo or cane.
+
+Genuine items in the material the seller states as Kansa (bell-metal), brass, copper, or soapstone
+are deliberately left in `other`, since none of those are one of the six supported categories, and
+guessing a nearer category for them would be exactly the kind of fabricated input this project
+exists to avoid.
+
+Current distribution:
+
+| Category | Rows |
+|---|---|
+| textiles | 3,104 |
+| other | 554 |
+| jewelry | 314 |
+| woodwork | 117 |
+| pottery | 77 |
+| bamboo-cane | 57 |
+
+Pottery and bamboo-cane sit below the ~100-row target from section 7.1 of the specification, and
+that is reported honestly rather than papered over: once contamination was removed, these two
+sources genuinely do not carry deep inventory in those two materials. Closing that gap needs a
+third source with real pottery or bamboo-cane stock, not a looser keyword match on the two sources
+already in hand.
 
 ### Embedding
 
@@ -183,6 +249,8 @@ and ping `/` on the same schedule the craft classifier already uses.
 | `guards.py` | 11, guardrails and refusals |
 | `reliability.py` | 15, the reliability score |
 | `main.py` | 16, the end to end path |
+| `scripts/build_catalogue.py` | 7.1, builds `data/catalogue.json` from iTokri and Gaatha |
+| `embed_catalogue.py` | 7.2, embeds a catalogue file for retrieval |
 
 ## Node integration
 
@@ -200,11 +268,18 @@ overcharge auto-flag) needs to change. One field is deliberately not carried ove
 engine prices labour from real hours times a wage, not a fixed multiple of material cost, and the
 old field would be a fabricated number if backfilled from a coincidental ratio.
 
-**Do not point production at this service yet.** It is wired in and tested, but two things gate an
-actual deploy: `data/catalogue.json` does not exist yet, only the 16-row synthetic sample, so the
-market side would rarely have anything real to compare against; and the service will not fit
-Render's free tier as it stands (`requirements-model.txt` pulls in torch), so it needs either a
-paid instance or the ONNX conversion described below.
+**Not yet verified enough for production.** It is wired in, tested, and now has a real 4,223-row
+catalogue instead of the synthetic sample, but two things still gate an actual deploy:
+
+- The service will not fit Render's free tier as it stands (`requirements-model.txt` pulls in
+  torch), so it needs either a paid instance or the ONNX conversion described below.
+- `SIM_FLOOR = 0.60` was chosen for the specification's hand-written worked examples, where query
+  and catalogue wording were written to closely match. Real scraped listings use organic, marketing
+  voice, and a genuinely relevant real match can score in the 0.5 to 0.6 range, sometimes landing
+  the model on the wrong side of the floor for a query that should have found something. This is
+  not a bug to patch by lowering the constant on a hunch; it needs the held out evaluation from
+  specification section 7.5 before any threshold is retuned, so the number is chosen from evidence
+  rather than from one convenient test query.
 
 ## Known gaps
 
@@ -214,7 +289,15 @@ paid instance or the ONNX conversion described below.
   prices anything for a real artisan.
 - **The supervised regressor of specification 7.4 is not implemented.** Retrieval alone ships
   first, which the specification calls for. A regressor must beat the category median baseline on
-  held out MAPE before it earns its place, and there is no catalogue to measure that against yet.
+  held out MAPE before it earns its place; there is now a real catalogue to measure that against,
+  but the held out evaluation itself (specification 7.5) has not been run.
+- **Pottery (77 rows) and bamboo-cane (57 rows) sit below the ~100-row target.** See "The catalogue
+  is the real work" above. Needs a third source with real inventory in those two materials.
+- **Only text embeddings.** No product images were downloaded, so retrieval matches on title and
+  description text alone (`embedding_mode: "text"`). Image similarity, half of section 7.2's design,
+  is unused. `embed_catalogue.py --image-dir` supports it once images are downloaded locally.
+- **`SIM_FLOOR` is unvalidated against real data.** See "Not yet verified enough for production"
+  above.
 - **Channel fee percentages are unverified.** Check the four figures in `constants.py` against
   current published rate cards.
 - **GST and shipping are out of scope.** `take_home` is before both.
